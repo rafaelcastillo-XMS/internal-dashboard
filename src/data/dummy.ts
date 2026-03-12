@@ -1,0 +1,283 @@
+export interface Client {
+    id: string
+    name: string
+    industry: string
+    contact: string
+    role: string
+    email: string
+    location: string
+    avatar: string
+    initials: string
+    status: "active" | "inactive"
+    color: string
+    tagColor: string
+    note: string
+    // New fields
+    pocOwnerName: string
+    levelOfService: string
+    phone: string
+    website: string
+    geoTargets: string
+    nextInteraction: string
+    customersProLink: string
+}
+
+export const clients: Client[] = [
+    {
+        id: "coca-cola",
+        name: "Coca-Cola",
+        industry: "Beverages & FMCG",
+        contact: "Maria González",
+        role: "Marketing Director",
+        email: "m.gonzalez@coca-cola.com",
+        location: "Atlanta, USA",
+        avatar: "https://i.pravatar.cc/150?u=coca-cola",
+        initials: "CC",
+        status: "active",
+        color: "bg-red-500",
+        tagColor: "text-red-600 bg-red-50",
+        note: "Q2 summer campaign in progress. $250k budget approved for digital campaign.",
+        pocOwnerName: "Maria González & Chris",
+        levelOfService: "Business Plus",
+        phone: "+1 772 521 3568",
+        website: "https://coca-cola.com",
+        geoTargets: "Global",
+        nextInteraction: "2026-03-15",
+        customersProLink: "https://pro.xms.com/cc"
+    },
+    {
+        id: "ibm",
+        name: "IBM",
+        industry: "Technology & Consulting",
+        contact: "James Walker",
+        role: "VP Communications",
+        email: "j.walker@ibm.com",
+        location: "New York, USA",
+        avatar: "https://i.pravatar.cc/150?u=ibm",
+        initials: "IB",
+        status: "active",
+        color: "bg-blue-600",
+        tagColor: "text-blue-700 bg-blue-50",
+        note: "Conference materials for IBM Think 2025. B2B branding strategy under review.",
+        pocOwnerName: "James Walker",
+        levelOfService: "Business Advanced",
+        phone: "+1 772 334 8762",
+        website: "https://ibm.com",
+        geoTargets: "USA, Europe",
+        nextInteraction: "2026-03-12",
+        customersProLink: "https://pro.xms.com/ibm"
+    },
+    {
+        id: "mcdonalds",
+        name: "McDonald's",
+        industry: "Food & Beverage",
+        contact: "Sophie Martin",
+        role: "Brand Manager",
+        email: "s.martin@mcdonalds.com",
+        location: "Chicago, USA",
+        avatar: "https://i.pravatar.cc/150?u=mcdonalds",
+        initials: "MD",
+        status: "active",
+        color: "bg-yellow-500",
+        tagColor: "text-yellow-700 bg-yellow-50",
+        note: "McHappy Day campaign and new menu launch. Local brand identity review in progress.",
+        pocOwnerName: "Sophie Martin",
+        levelOfService: "Standard",
+        phone: "+1 402 239 3304",
+        website: "https://mcdonalds.com",
+        geoTargets: "Chicago Tri-state",
+        nextInteraction: "2026-03-20",
+        customersProLink: "https://pro.xms.com/mcd"
+    },
+    {
+        id: "chevrolet",
+        name: "Chevrolet",
+        industry: "Automotive",
+        contact: "Robert Torres",
+        role: "Marketing Manager",
+        email: "r.torres@chevrolet.com",
+        location: "Detroit, USA",
+        avatar: "https://i.pravatar.cc/150?u=chevrolet",
+        initials: "CH",
+        status: "inactive",
+        color: "bg-orange-500",
+        tagColor: "text-orange-700 bg-orange-50",
+        note: "EV 2025 launch campaign. Creative assets for Latam market pending approval.",
+        pocOwnerName: "Robert Torres",
+        levelOfService: "Business",
+        phone: "+1 772 464 9595",
+        website: "https://chevrolet.com",
+        geoTargets: "Latin America",
+        nextInteraction: "2026-04-01",
+        customersProLink: "https://pro.xms.com/chevy"
+    },
+    {
+        id: "ford",
+        name: "Ford Company",
+        industry: "Automotive",
+        contact: "Lisa Chang",
+        role: "Director of Brand",
+        email: "l.chang@ford.com",
+        location: "Dearborn, USA",
+        avatar: "https://i.pravatar.cc/150?u=ford",
+        initials: "FC",
+        status: "active",
+        color: "bg-slate-600",
+        tagColor: "text-slate-700 bg-slate-100",
+        note: "Q1 quarterly review completed. Content strategy for Ford Pro and electric vehicle line.",
+        pocOwnerName: "Lisa Chang",
+        levelOfService: "Business Advanced",
+        phone: "+1 772 877 3499",
+        website: "https://ford.com",
+        geoTargets: "Global",
+        nextInteraction: "2026-03-18",
+        customersProLink: "https://pro.xms.com/ford"
+    },
+]
+
+export type TaskStatus = "todo" | "in-progress" | "done"
+export type TaskPriority = "high" | "medium" | "low"
+
+export interface Task {
+    id: string
+    title: string
+    description: string
+    status: TaskStatus
+    priority: TaskPriority
+    client: string
+    clientId: string
+    assignee: string
+    dueDate: string
+    tags: string[]
+    subtasks?: { id: string; title: string; done: boolean }[]
+}
+
+export const tasks: Task[] = [
+    {
+        id: "t1",
+        title: "Review Q1 Marketing Report",
+        description: "Analyze the Q1 performance metrics, identify key wins and improvement areas across all client campaigns. Prepare executive summary for leadership.",
+        status: "in-progress",
+        priority: "high",
+        client: "IBM",
+        clientId: "ibm",
+        assignee: "Rafael A.",
+        dueDate: "2026-03-12",
+        tags: ["reporting", "analytics"],
+        subtasks: [
+            { id: "s1", title: "Gather campaign data", done: true },
+            { id: "s2", title: "Build performance charts", done: true },
+            { id: "s3", title: "Write executive summary", done: false },
+            { id: "s4", title: "Review with team", done: false },
+        ]
+    },
+    {
+        id: "t2",
+        title: "Social Media Campaign – Coca-Cola Summer",
+        description: "Design and schedule social media content for Coca-Cola's summer campaign. Includes Instagram, TikTok and X posts. Creative assets to be reviewed by client.",
+        status: "todo",
+        priority: "high",
+        client: "Coca-Cola",
+        clientId: "coca-cola",
+        assignee: "Rafael A.",
+        dueDate: "2026-03-20",
+        tags: ["social media", "creative"],
+        subtasks: [
+            { id: "s5", title: "Draft content calendar", done: false },
+            { id: "s6", title: "Create visual assets", done: false },
+            { id: "s7", title: "Client review", done: false },
+        ]
+    },
+    {
+        id: "t3",
+        title: "Brand Strategy Meeting Prep",
+        description: "Prepare presentation deck for brand strategy alignment meeting. Include competitive analysis, positioning map, and proposed messaging framework.",
+        status: "done",
+        priority: "medium",
+        client: "McDonald's",
+        clientId: "mcdonalds",
+        assignee: "Rafael A.",
+        dueDate: "2026-03-05",
+        tags: ["strategy", "branding"],
+        subtasks: [
+            { id: "s8", title: "Competitive analysis", done: true },
+            { id: "s9", title: "Positioning deck", done: true },
+            { id: "s10", title: "Present to client", done: true },
+        ]
+    },
+    {
+        id: "t4",
+        title: "IBM Think Conference Materials",
+        description: "Produce all print and digital materials for IBM Think 2025 conference. Includes booth design, digital signage, handouts and social media assets.",
+        status: "in-progress",
+        priority: "high",
+        client: "IBM",
+        clientId: "ibm",
+        assignee: "Rafael A.",
+        dueDate: "2026-03-18",
+        tags: ["event", "design"],
+        subtasks: [
+            { id: "s11", title: "Booth design concepts", done: true },
+            { id: "s12", title: "Digital signage", done: false },
+            { id: "s13", title: "Print materials", done: false },
+        ]
+    },
+    {
+        id: "t5",
+        title: "McDonald's McHappy Day Campaign",
+        description: "End-to-end campaign execution for McHappy Day 2026. Coordinate with media partners, influencers and McDonald's regional teams for maximum reach.",
+        status: "todo",
+        priority: "medium",
+        client: "McDonald's",
+        clientId: "mcdonalds",
+        assignee: "Rafael A.",
+        dueDate: "2026-04-01",
+        tags: ["campaign", "social media"],
+        subtasks: []
+    },
+    {
+        id: "t6",
+        title: "Chevrolet EV Launch – Latam Creatives",
+        description: "Develop creative assets for Chevrolet's electric vehicle launch in Latin America. Includes OOH, digital display and video storyboards.",
+        status: "todo",
+        priority: "low",
+        client: "Chevrolet",
+        clientId: "chevrolet",
+        assignee: "Rafael A.",
+        dueDate: "2026-04-10",
+        tags: ["creative", "video"],
+        subtasks: []
+    },
+    {
+        id: "t7",
+        title: "Ford Q1 Quarterly Review",
+        description: "Prepare quarterly business review deck for Ford. Summarize campaign performance, ROI analysis and roadmap for Q2 activities.",
+        status: "done",
+        priority: "medium",
+        client: "Ford Company",
+        clientId: "ford",
+        assignee: "Rafael A.",
+        dueDate: "2026-03-07",
+        tags: ["reporting", "client"],
+        subtasks: [
+            { id: "s14", title: "Data collection", done: true },
+            { id: "s15", title: "QBR deck", done: true },
+            { id: "s16", title: "Client meeting", done: true },
+        ]
+    },
+]
+
+export const calendarEvents = [
+    { id: "e1", date: "2026-03-09", time: "09:00", title: "Team Standup", type: "meeting", color: "bg-blue-500" },
+    { id: "e2", date: "2026-03-09", time: "14:00", title: "IBM Client Call", type: "client", color: "bg-purple-500" },
+    { id: "e3", date: "2026-03-10", time: "10:00", title: "Design Review – Coca-Cola", type: "review", color: "bg-red-500" },
+    { id: "e4", date: "2026-03-11", time: "11:00", title: "Coca-Cola Campaign Kickoff", type: "kickoff", color: "bg-red-500" },
+    { id: "e5", date: "2026-03-12", time: "15:00", title: "Ford Quarterly Review", type: "client", color: "bg-slate-500" },
+    { id: "e6", date: "2026-03-13", time: "09:30", title: "Weekly Strategy Sync", type: "meeting", color: "bg-blue-500" },
+    { id: "e7", date: "2026-03-14", time: "13:00", title: "McDonald's Brand Meeting", type: "client", color: "bg-yellow-500" },
+    { id: "e8", date: "2026-03-17", time: "10:00", title: "IBM Think Prep Call", type: "client", color: "bg-blue-600" },
+    { id: "e9", date: "2026-03-18", time: "16:00", title: "Chevrolet Creatives Review", type: "review", color: "bg-orange-500" },
+    { id: "e10", date: "2026-03-20", time: "09:00", title: "All-Hands Monthly Meeting", type: "meeting", color: "bg-green-500" },
+    { id: "e11", date: "2026-03-24", time: "14:00", title: "Social Media Strategy – Q2", type: "strategy", color: "bg-indigo-500" },
+    { id: "e12", date: "2026-03-26", time: "11:00", title: "Coca-Cola Assets Delivery", type: "deadline", color: "bg-red-600" },
+]

@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Google Service Account credentials — DO NOT COMMIT
+service-account.json
+*service-account*.json
+
+# Local app state and environment
+.env
+.env.*
+!.env.example
+.agent/
+.claude/
+
+# Local reports and screenshots
+opentestai-report*
+opentestai-screenshot*
+
+# Supabase local state
+supabase/.temp/
