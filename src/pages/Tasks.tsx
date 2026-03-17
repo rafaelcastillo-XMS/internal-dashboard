@@ -522,96 +522,94 @@ export function Tasks() {
                 {/* Main task list – always full width (panel overlays it) */}
                 <div className="w-full flex flex-col h-full overflow-hidden">
                     {/* Toolbar */}
-                    <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-between shrink-0">
-                        <div>
-                            <h1 className="text-xl font-bold text-slate-900 dark:text-white">Tasks</h1>
-                            <p className="text-xs text-slate-400 mt-0.5">
-                                {taskList.length} tasks · {taskList.filter(t => t.status === "in-progress").length} in progress
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
-                                {[{ val: "all" as const, label: "All" }, ...columns.map(c => ({ val: c.status, label: c.label }))].map(opt => (
-                                    <button
-                                        key={opt.val}
-                                        onClick={() => setFilter(opt.val)}
-                                        className={`text-xs px-3 py-1.5 rounded-md font-medium transition-all ${filter === opt.val
-                                                ? "bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm"
-                                                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                                            }`}
-                                    >
-                                        {opt.label}
-                                    </button>
-                                ))}
+                    <div className="border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
+                        <div className="mx-auto max-w-screen-2xl flex items-center justify-between gap-4 p-6">
+                            <div>
+                                <h1 className="text-xl font-bold text-slate-900 dark:text-white">Tasks</h1>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                    {taskList.length} tasks · {taskList.filter(t => t.status === "in-progress").length} in progress
+                                </p>
                             </div>
-                            <button
-                                onClick={() => setCreateOpen(true)}
-                                className="flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm"
-                            >
-                                <Plus className="w-4 h-4" /> New Task
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
+                                    {[{ val: "all" as const, label: "All" }, ...columns.map(c => ({ val: c.status, label: c.label }))].map(opt => (
+                                        <button
+                                            key={opt.val}
+                                            onClick={() => setFilter(opt.val)}
+                                            className={`text-xs px-3 py-1.5 rounded-md font-medium transition-all ${filter === opt.val
+                                                    ? "bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm"
+                                                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                                                }`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-auto p-5 custom-scrollbar">
-                        {filter === "all" ? (
-                            /* Kanban */
-                            <div className="flex gap-5 h-full min-w-max pb-4">
-                                {columns.map(col => {
-                                    const colTasks = taskList.filter(t => t.status === col.status)
-                                    const cfg = statusConfig[col.status]
-                                    const isDragTarget = dragOverCol === col.status
-                                    return (
-                                        <div
-                                            key={col.status}
-                                            className="w-[280px] xl:w-auto xl:flex-1 flex flex-col shrink-0"
-                                            onDragOver={e => { e.preventDefault(); setDragOverCol(col.status) }}
-                                            onDragLeave={() => setDragOverCol(null)}
-                                            onDrop={() => handleDrop(col.status)}
-                                        >
-                                            <div className="flex items-center gap-2 mb-3 shrink-0">
-                                                <cfg.icon className={`w-4 h-4 ${cfg.color}`} />
-                                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{col.label}</span>
-                                                <span className="ml-auto text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">{colTasks.length}</span>
-                                            </div>
+                    <div className="flex-1 overflow-auto custom-scrollbar">
+                        <div className="mx-auto max-w-screen-2xl p-6">
+                            {filter === "all" ? (
+                                /* Kanban */
+                                <div className="flex gap-5 h-full min-w-max pb-4">
+                                    {columns.map(col => {
+                                        const colTasks = taskList.filter(t => t.status === col.status)
+                                        const cfg = statusConfig[col.status]
+                                        const isDragTarget = dragOverCol === col.status
+                                        return (
                                             <div
-                                                className={`flex-1 overflow-y-auto overflow-x-hidden space-y-2.5 pb-4 rounded-xl transition-colors min-h-[80px] p-1 custom-scrollbar ${isDragTarget ? "bg-blue-50 dark:bg-blue-900/10 ring-2 ring-blue-300 dark:ring-blue-700 ring-inset" : ""}`}
+                                                key={col.status}
+                                                className="w-[280px] xl:w-auto xl:flex-1 flex flex-col shrink-0"
+                                                onDragOver={e => { e.preventDefault(); setDragOverCol(col.status) }}
+                                                onDragLeave={() => setDragOverCol(null)}
+                                                onDrop={() => handleDrop(col.status)}
                                             >
-                                                {colTasks.map(task => (
-                                                    <TaskCard
-                                                        key={task.id}
-                                                        task={task}
-                                                        onClick={() => setSelectedId(task.id === selectedId ? null : task.id)}
-                                                        isSelected={selectedId === task.id}
-                                                        onDragStart={() => handleDragStart(task.id)}
-                                                        onDragEnd={() => { dragTaskId.current = null; setDragOverCol(null) }}
-                                                    />
-                                                ))}
-                                                {colTasks.length === 0 && (
-                                                    <div className={`h-16 flex items-center justify-center rounded-xl border-2 border-dashed ${isDragTarget ? "border-blue-400 text-blue-400" : "border-slate-200 dark:border-slate-700 text-slate-300 dark:text-slate-600"} text-xs font-medium transition-colors`}>
-                                                        Drop here
-                                                    </div>
-                                                )}
+                                                <div className="flex items-center gap-2 mb-3 shrink-0">
+                                                    <cfg.icon className={`w-4 h-4 ${cfg.color}`} />
+                                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{col.label}</span>
+                                                    <span className="ml-auto text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">{colTasks.length}</span>
+                                                </div>
+                                                <div
+                                                    className={`flex-1 overflow-y-auto overflow-x-hidden space-y-2.5 pb-4 rounded-xl transition-colors min-h-[80px] p-1 custom-scrollbar ${isDragTarget ? "bg-blue-50 dark:bg-blue-900/10 ring-2 ring-blue-300 dark:ring-blue-700 ring-inset" : ""}`}
+                                                >
+                                                    {colTasks.map(task => (
+                                                        <TaskCard
+                                                            key={task.id}
+                                                            task={task}
+                                                            onClick={() => setSelectedId(task.id === selectedId ? null : task.id)}
+                                                            isSelected={selectedId === task.id}
+                                                            onDragStart={() => handleDragStart(task.id)}
+                                                            onDragEnd={() => { dragTaskId.current = null; setDragOverCol(null) }}
+                                                        />
+                                                    ))}
+                                                    {colTasks.length === 0 && (
+                                                        <div className={`h-16 flex items-center justify-center rounded-xl border-2 border-dashed ${isDragTarget ? "border-blue-400 text-blue-400" : "border-slate-200 dark:border-slate-700 text-slate-300 dark:text-slate-600"} text-xs font-medium transition-colors`}>
+                                                            Drop here
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        ) : (
-                            /* Filtered list */
-                            <div className="max-w-2xl space-y-2.5">
-                                {filteredTasks.map(task => (
-                                    <TaskCard
-                                        key={task.id}
-                                        task={task}
-                                        onClick={() => setSelectedId(task.id === selectedId ? null : task.id)}
-                                        isSelected={selectedId === task.id}
-                                        onDragStart={() => { }}
-                                        onDragEnd={() => { }}
-                                    />
-                                ))}
-                            </div>
-                        )}
+                                        )
+                                    })}
+                                </div>
+                            ) : (
+                                /* Filtered list */
+                                <div className="max-w-2xl space-y-2.5">
+                                    {filteredTasks.map(task => (
+                                        <TaskCard
+                                            key={task.id}
+                                            task={task}
+                                            onClick={() => setSelectedId(task.id === selectedId ? null : task.id)}
+                                            isSelected={selectedId === task.id}
+                                            onDragStart={() => { }}
+                                            onDragEnd={() => { }}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 

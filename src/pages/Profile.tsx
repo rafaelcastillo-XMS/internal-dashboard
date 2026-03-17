@@ -85,8 +85,8 @@ export function Profile() {
     }
 
     return (
-        <div className="h-full overflow-auto bg-slate-50 dark:bg-slate-900 p-6">
-            <div className="max-w-5xl mx-auto space-y-6">
+        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">
+            <div className="mx-auto max-w-screen-2xl p-6 space-y-6">
 
                 {/* Cover + Avatar */}
                 <motion.div

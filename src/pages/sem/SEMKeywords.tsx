@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
+import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
+import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
 import { useSEMDashboardState, SEM_API, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
@@ -103,8 +105,15 @@ export function SEMKeywords() {
       : <svg className="h-3 w-3 text-[#16a34a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
   }
 
+  const isDark = document.documentElement.classList.contains('dark')
+
   return (
-    <div className="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10">
+    <SkeletonTheme
+      baseColor={isDark ? '#1e293b' : '#f1f5f9'}
+      highlightColor={isDark ? '#334155' : '#e2e8f0'}
+      borderRadius={8}
+    >
+    <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-black dark:text-white">Keywords</h1>
@@ -140,14 +149,29 @@ export function SEMKeywords() {
             <h3 className="font-semibold text-black dark:text-white">Top Keywords</h3>
             <p className="mt-0.5 text-xs text-body dark:text-bodydark">Top 100 by spend · Click column headers to sort</p>
           </div>
-          {keywords.length > 0 && (
+          {!state.loading && keywords.length > 0 && (
             <span className="rounded-full bg-stroke/50 px-2.5 py-1 text-xs font-semibold text-body dark:text-bodydark dark:bg-strokedark">
               {keywords.length} keywords
             </span>
           )}
         </div>
 
-        {sorted.length === 0 ? (
+        {state.loading ? (
+          <div className="px-6 py-4 space-y-3">
+            {[...Array(10)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton width="25%" height={16} />
+                <Skeleton width={55} height={20} borderRadius={4} />
+                <Skeleton width={35} height={16} />
+                <Skeleton width={70} height={16} />
+                <Skeleton width={50} height={16} />
+                <Skeleton width={50} height={16} />
+                <Skeleton width={60} height={16} />
+                <Skeleton width={70} height={16} />
+              </div>
+            ))}
+          </div>
+        ) : sorted.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <p className="text-sm text-body dark:text-bodydark">
               {state.selectedAccountId ? 'No keyword data for this period.' : 'Select an account and click Refresh.'}
@@ -193,5 +217,6 @@ export function SEMKeywords() {
         )}
       </div>
     </div>
+    </SkeletonTheme>
   )
 }

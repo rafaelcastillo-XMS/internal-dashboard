@@ -141,14 +141,14 @@ export function Header() {
 
     return (
         <>
-            <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md flex items-center px-6 justify-between shrink-0 shadow-sm z-[100] sticky top-0">
+            <header className="h-16 border-b border-[var(--sidebar-border)] bg-[var(--bg-surface)]/90 backdrop-blur-md flex items-center px-6 justify-between shrink-0 shadow-sm z-[100] sticky top-0">
                 <div className="flex items-center gap-2">
                     {/* Sidebar toggle - Mobile (hidden on SEO routes) */}
                     {!isSEO && (
                         <button
                             onClick={toggleMobile}
                             aria-label="Toggle mobile sidebar"
-                            className="lg:hidden p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            className="lg:hidden p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
                             <PanelLeft className="w-5 h-5" />
                         </button>
@@ -159,7 +159,7 @@ export function Header() {
                         <button
                             onClick={toggleSidebar}
                             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                            className="hidden lg:flex p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            className="hidden lg:flex p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
                             <PanelLeft className="w-5 h-5" />
                         </button>
@@ -168,11 +168,11 @@ export function Header() {
                     {/* AI Assistant button */}
                     <button
                         onClick={openAI}
-                        className="flex items-center gap-2.5 pl-3.5 pr-4 py-2 rounded-full bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-900/20 dark:to-violet-900/20 border border-blue-100 dark:border-blue-800/50 text-slate-500 dark:text-slate-400 hover:border-blue-300 dark:hover:border-blue-600 hover:text-blue-600 dark:hover:text-blue-400 transition-all group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="flex h-10 items-center gap-2.5 rounded-full border border-blue-100 bg-gradient-to-r from-blue-50 to-violet-50 pl-3.5 pr-4 text-[var(--text-muted)] transition-all group hover:border-[var(--accent-subtle-border)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-blue-800/50 dark:from-blue-900/20 dark:to-violet-900/20"
                         aria-label="Ask AI"
                     >
                         <Sparkles className="w-4 h-4 text-blue-500 group-hover:text-blue-600 transition-colors" />
-                        <span className="text-sm text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Ask AI anything...</span>
+                        <span className="text-sm text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors">Ask AI anything...</span>
                         <span className="hidden sm:inline-flex items-center gap-1 ml-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-500 dark:text-blue-400">⌘K</span>
                     </button>
                 </div>
@@ -184,7 +184,7 @@ export function Header() {
                         <button
                             onClick={toggleTheme}
                             aria-label="Toggle dark mode"
-                            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            className="p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
                             {theme === "dark" ? (
                                 <Sun className="w-5 h-5 text-amber-400" />
@@ -198,13 +198,13 @@ export function Header() {
                             <button
                                 onClick={() => setBugOpen(true)}
                                 aria-label="Report a bug"
-                                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                className="p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
                                 <Bug className="w-5 h-5" />
                             </button>
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2.5 py-1 bg-slate-800 dark:bg-slate-700 text-white text-[11px] font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-lg z-50">
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2.5 py-1 bg-[var(--text-primary)] text-[var(--bg-surface)] text-[11px] font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-lg z-50">
                                 Report a bug
-                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 dark:bg-slate-700 rotate-45" />
+                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[var(--text-primary)] rotate-45" />
                             </div>
                         </div>
                     </div>
@@ -214,7 +214,7 @@ export function Header() {
                         <button
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                             aria-label="More options"
-                            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            className="p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
                             <MoreVertical className="w-5 h-5" />
                         </button>
@@ -226,12 +226,12 @@ export function Header() {
                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                                     transition={{ duration: 0.15 }}
-                                    className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 overflow-hidden z-50"
+                                    className="absolute right-0 top-full mt-2 w-48 bg-[var(--bg-raised)] rounded-xl shadow-lg border border-[var(--border)] overflow-hidden z-50"
                                 >
                                     <div className="py-1">
                                         <button
                                             onClick={() => { toggleTheme(); setMobileMenuOpen(false); }}
-                                            className="w-full px-4 py-2.5 text-sm text-left flex items-center justify-between text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                                            className="w-full px-4 py-2.5 text-sm text-left flex items-center justify-between text-[var(--text-secondary)] hover:bg-[var(--hover-bg)]"
                                         >
                                             <span className="flex items-center gap-2">
                                                 {theme === "dark" ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
@@ -240,7 +240,7 @@ export function Header() {
                                         </button>
                                         <button
                                             onClick={() => { setBugOpen(true); setMobileMenuOpen(false); }}
-                                            className="w-full px-4 py-2.5 text-sm text-left flex items-center gap-2 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                                            className="w-full px-4 py-2.5 text-sm text-left flex items-center gap-2 text-[var(--text-secondary)] hover:bg-[var(--hover-bg)]"
                                         >
                                             <Bug className="w-4 h-4" />
                                             Report a bug
@@ -255,17 +255,17 @@ export function Header() {
                     <div className="relative ml-1" ref={dropdownRef}>
                         <button
                             onClick={() => setDropdownOpen(o => !o)}
-                            className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            className="flex h-10 items-center gap-2.5 rounded-full pl-2 pr-3 transition-colors hover:bg-[var(--hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
                             <Avatar className="w-8 h-8 ring-2 ring-transparent hover:ring-blue-200 dark:hover:ring-blue-800 transition-all">
                                 <AvatarImage src={userAvatar} referrerPolicy="no-referrer" />
                                 <AvatarFallback className="bg-blue-600 text-white text-xs font-semibold">{userInitials}</AvatarFallback>
                             </Avatar>
                             <div className="hidden md:flex flex-col items-start leading-tight">
-                                <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{userName}</span>
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500">Marketing Strategist</span>
+                                <span className="text-sm font-semibold text-[var(--text-primary)]">{userName}</span>
+                                <span className="text-[10px] text-[var(--text-muted)]">Marketing Strategist</span>
                             </div>
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden md:block" />
+                            <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] hidden md:block" />
                         </button>
 
                         <AnimatePresence>
@@ -277,16 +277,16 @@ export function Header() {
                                     transition={{ duration: 0.15 }}
                                     role="menu"
                                     aria-label="User menu"
-                                    className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50"
+                                    className="absolute right-0 top-full mt-2 w-48 bg-[var(--bg-raised)] rounded-xl shadow-xl border border-[var(--border)] overflow-hidden z-50"
                                 >
                                     <button
                                         role="menuitem"
                                         onClick={() => { navigate("/profile"); setDropdownOpen(false) }}
-                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
+                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] transition-colors text-left"
                                     >
-                                        <User className="w-4 h-4 text-slate-400" aria-hidden="true" /> Edit Profile
+                                        <User className="w-4 h-4 text-[var(--text-muted)]" aria-hidden="true" /> Edit Profile
                                     </button>
-                                    <div className="border-t border-slate-100 dark:border-slate-700" />
+                                    <div className="border-t border-[var(--border)]" />
                                     <button
                                         role="menuitem"
                                         onClick={async () => {
@@ -294,7 +294,7 @@ export function Header() {
                                             await supabase.auth.signOut()
                                             navigate("/login")
                                         }}
-                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left"
+                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--error)] hover:bg-[var(--error-bg)] transition-colors text-left"
                                     >
                                         <LogOut className="w-4 h-4" aria-hidden="true" /> Sign Out
                                     </button>
@@ -324,22 +324,22 @@ export function Header() {
                                 role="dialog"
                                 aria-modal="true"
                                 aria-label="AI Assistant"
-                                className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-100 dark:border-slate-700 overflow-hidden"
+                                className="bg-[var(--bg-raised)] rounded-2xl shadow-2xl w-full max-w-lg border border-[var(--border)] overflow-hidden"
                             >
                                 {/* Header */}
-                                <div className="px-5 pt-5 pb-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                                <div className="px-5 pt-5 pb-4 border-b border-[var(--border)] flex items-center justify-between">
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center shadow-sm">
                                             <Sparkles className="w-4 h-4 text-white" />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-semibold text-slate-900 dark:text-white">XMS AI Assistant <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">(Demo)</span></p>
-                                            <p className="text-[10px] text-slate-400">Ask anything about your campaigns, tasks or clients</p>
+                                            <p className="text-sm font-semibold text-[var(--text-primary)]">XMS AI Assistant <span className="text-[10px] font-normal text-[var(--text-muted)]">(Demo)</span></p>
+                                            <p className="text-[10px] text-[var(--text-muted)]">Ask anything about your campaigns, tasks or clients</p>
                                         </div>
                                     </div>
                                     <button
                                         onClick={() => setAiOpen(false)}
-                                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 transition-colors"
+                                        className="p-1.5 rounded-lg hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors"
                                     >
                                         <X className="w-4 h-4" />
                                     </button>
@@ -348,7 +348,7 @@ export function Header() {
                                 {/* Response area */}
                                 <div className="px-5 py-4 min-h-[100px]">
                                     {aiLoading ? (
-                                        <div className="flex items-center gap-2 text-sm text-slate-400">
+                                        <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
                                             <motion.div
                                                 animate={{ opacity: [0.4, 1, 0.4] }}
                                                 transition={{ duration: 1.2, repeat: Infinity }}
@@ -370,7 +370,7 @@ export function Header() {
                                             <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center shrink-0 mt-0.5">
                                                 <Sparkles className="w-3.5 h-3.5 text-white" />
                                             </div>
-                                            <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">{aiResponse}</p>
+                                            <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{aiResponse}</p>
                                         </motion.div>
                                     ) : (
                                         <div className="flex flex-wrap gap-2">
@@ -378,7 +378,7 @@ export function Header() {
                                                 <button
                                                     key={suggestion}
                                                     onClick={() => { setAiQuery(suggestion); aiInputRef.current?.focus() }}
-                                                    className="text-xs px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-blue-300 dark:hover:border-blue-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"
+                                                    className="text-xs px-3 py-1.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent-subtle-border)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all"
                                                 >
                                                     {suggestion}
                                                 </button>
@@ -389,7 +389,7 @@ export function Header() {
 
                                 {/* Input */}
                                 <div className="px-4 pb-4">
-                                    <div className="flex items-end gap-2 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600 focus-within:border-blue-400 dark:focus-within:border-blue-500 transition-colors px-3 py-2.5">
+                                    <div className="flex items-end gap-2 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border)] focus-within:border-[var(--accent)] transition-colors px-3 py-2.5">
                                         <textarea
                                             ref={aiInputRef}
                                             value={aiQuery}
@@ -397,7 +397,7 @@ export function Header() {
                                             onKeyDown={handleAiKeyDown}
                                             placeholder="Ask anything..."
                                             rows={1}
-                                            className="flex-1 bg-transparent text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none leading-relaxed"
+                                            className="flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none resize-none leading-relaxed"
                                             style={{ maxHeight: 96 }}
                                         />
                                         <button
@@ -408,7 +408,7 @@ export function Header() {
                                             <ArrowUp className="w-3.5 h-3.5" />
                                         </button>
                                     </div>
-                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 text-center">Press Enter to send · Shift+Enter for new line</p>
+                                    <p className="text-[10px] text-[var(--text-muted)] mt-1.5 text-center">Press Enter to send · Shift+Enter for new line</p>
                                 </div>
                             </motion.div>
                         </motion.div>
@@ -435,22 +435,22 @@ export function Header() {
                                 role="dialog"
                                 aria-modal="true"
                                 aria-label="Report a bug"
-                                className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700 overflow-hidden"
+                                className="bg-[var(--bg-raised)] rounded-2xl shadow-2xl w-full max-w-md border border-[var(--border)] overflow-hidden"
                             >
                                 <div className="p-6">
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2.5">
-                                            <div className="w-9 h-9 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center">
-                                                <Bug className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                            <div className="w-9 h-9 bg-[var(--accent-subtle)] rounded-xl flex items-center justify-center">
+                                                <Bug className="w-5 h-5 text-[var(--accent)]" />
                                             </div>
                                             <div>
-                                                <h2 className="font-semibold text-slate-900 dark:text-white text-sm">Report a Bug</h2>
-                                                <p className="text-[11px] text-slate-400">Help us improve XMS</p>
+                                                <h2 className="font-semibold text-[var(--text-primary)] text-sm">Report a Bug</h2>
+                                                <p className="text-[11px] text-[var(--text-muted)]">Help us improve XMS</p>
                                             </div>
                                         </div>
                                         <button
                                             onClick={() => setBugOpen(false)}
-                                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 transition-colors"
+                                            className="p-1.5 rounded-lg hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors"
                                         >
                                             <X className="w-4 h-4" />
                                         </button>
@@ -462,17 +462,17 @@ export function Header() {
                                             animate={{ opacity: 1, y: 0 }}
                                             className="py-8 text-center"
                                         >
-                                            <div className="w-14 h-14 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                                                <svg className="w-7 h-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <div className="w-14 h-14 bg-[var(--success-bg)] rounded-full flex items-center justify-center mx-auto mb-3">
+                                                <svg className="w-7 h-7 text-[var(--success)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                                 </svg>
                                             </div>
-                                            <p className="font-semibold text-slate-800 dark:text-white text-sm">Report sent!</p>
-                                            <p className="text-xs text-slate-400 mt-1">Our support team will review it shortly.</p>
+                                            <p className="font-semibold text-[var(--text-primary)] text-sm">Report sent!</p>
+                                            <p className="text-xs text-[var(--text-muted)] mt-1">Our support team will review it shortly.</p>
                                         </motion.div>
                                     ) : (
                                         <>
-                                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                                            <p className="text-sm text-[var(--text-muted)] mb-4">
                                                 Describe the issue you encountered and our support team will work on a fix.
                                             </p>
                                             <textarea
@@ -481,7 +481,7 @@ export function Header() {
                                                 onChange={e => setBugText(e.target.value)}
                                                 placeholder="What went wrong? What did you expect to happen?"
                                                 rows={5}
-                                                className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4 placeholder:text-slate-400"
+                                                className="w-full text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-primary)] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4 placeholder:text-[var(--text-muted)]"
                                             />
                                             <div className="flex gap-2">
                                                 <button
@@ -493,7 +493,7 @@ export function Header() {
                                                 </button>
                                                 <button
                                                     onClick={() => setBugOpen(false)}
-                                                    className="px-4 py-2.5 rounded-xl text-sm font-medium border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                                                    className="px-4 py-2.5 rounded-xl text-sm font-medium border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] transition-colors"
                                                 >
                                                     Cancel
                                                 </button>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTrackPageLoading } from '@/context/PageLoadingContext'
 
 export const DATE_PRESETS = [
   { label: 'Last 7 Days',  days: 7  },
@@ -47,6 +48,9 @@ export function useSEMDashboardState(defaultPreset = 1) {
   const [loading,        setLoading]        = useState(false)
   const [lastUpdated,    setLastUpdated]    = useState<Date | null>(null)
   const [accountsError,  setAccountsError]  = useState<string | null>(null)
+  const [accountsLoading, setAccountsLoading] = useState(true)
+
+  useTrackPageLoading(loading || accountsLoading, 'sem-data')
 
   const [accounts, setAccounts] = useState<AdsAccount[]>(() => {
     return ssGet(ACCOUNTS_KEY) || []
@@ -61,6 +65,7 @@ export function useSEMDashboardState(defaultPreset = 1) {
 
   // Load account list on mount
   useEffect(() => {
+    setAccountsLoading(true)
     fetch(`${SEM_API}/accounts`)
       .then((r) => r.json())
       .then((d) => {
@@ -71,6 +76,7 @@ export function useSEMDashboardState(defaultPreset = 1) {
         setSelectedAccountIdRaw((prev) => prev || list[0]?.id || '')
       })
       .catch((err: Error) => setAccountsError(err.message))
+      .finally(() => setAccountsLoading(false))
   }, [])
 
   // Persist selection + notify sidebar

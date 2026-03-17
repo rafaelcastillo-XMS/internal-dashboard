@@ -7,19 +7,20 @@ import { getNotebookIntegrationBadge } from "@/features/clients/integrations"
 export function AllClients() {
     const navigate = useNavigate()
     const clients = getClients()
+    const cardClass = "rounded-xl border border-stroke bg-white shadow-default transition-all duration-200 hover:border-[#1A72D9]/25 hover:shadow-xms-glow dark:border-strokedark dark:bg-boxdark"
 
     return (
-        <div className="flex h-full bg-slate-50 dark:bg-slate-900 overflow-hidden relative">
+        <div className="flex h-full bg-[var(--bg-app)] overflow-hidden relative">
             <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
                 {/* Header */}
-                <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl shrink-0 sticky top-0 z-20">
-                    <div className="flex items-center gap-3">
+                <div className="border-b border-[var(--border)] bg-[var(--bg-surface)]/90 backdrop-blur-xl shrink-0 sticky top-0 z-20">
+                    <div className="mx-auto max-w-screen-2xl p-6 flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-blue-600/10 flex items-center justify-center">
                             <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold text-slate-900 dark:text-white">All Clients</h1>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)]">All Clients</h1>
+                            <p className="text-xs text-[var(--text-muted)] mt-0.5">
                                 {clients.length} total clients · {clients.filter(c => c.status === "active").length} active
                             </p>
                         </div>
@@ -27,8 +28,9 @@ export function AllClients() {
                 </div>
 
                 {/* Grid */}
-                <div className="flex-1 overflow-auto p-5 custom-scrollbar">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="flex-1 overflow-auto custom-scrollbar">
+                    <div className="mx-auto max-w-screen-2xl p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {clients.map((client, i) => {
                             const notebookConnected = getNotebookIntegrationBadge(client.id)
 
@@ -38,7 +40,7 @@ export function AllClients() {
                                     initial={{ opacity: 0, y: 16 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ duration: 0.4, delay: i * 0.05 }}
-                                    className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-blue-200 dark:hover:border-slate-600 transition-all text-left flex flex-col group relative overflow-hidden h-full"
+                                    className={`${cardClass} text-left flex flex-col group relative overflow-hidden h-full p-4`}
                                 >
                                     <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity translate-x-4 group-hover:translate-x-0">
                                         <ArrowRight className="w-4 h-4 text-blue-500" />
@@ -47,7 +49,7 @@ export function AllClients() {
                                     <div className="mb-4 flex items-center justify-between gap-2">
                                         <div className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${notebookConnected
                                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                            : "bg-slate-100 text-slate-500 dark:bg-slate-700/80 dark:text-slate-300"
+                                            : "bg-[var(--bg-subtle)] text-[var(--text-muted)]"
                                             }`}>
                                             <Sparkles className="h-3.5 w-3.5" />
                                             {notebookConnected ? "NotebookLM Ready" : "No live integrations"}
@@ -56,7 +58,7 @@ export function AllClients() {
                                             type="button"
                                             aria-label={`Configure ${client.name}`}
                                             onClick={() => navigate(`/clients/${client.id}/integrations`)}
-                                            className="relative z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-800 dark:hover:text-blue-300"
+                                            className="relative z-10 flex h-10 w-10 items-center justify-center rounded-lg border border-stroke bg-white text-body transition-colors hover:border-[#1A72D9]/25 hover:text-[#1A72D9] dark:border-strokedark dark:bg-boxdark dark:text-bodydark"
                                         >
                                             <Settings2 className="h-4 w-4" />
                                         </button>
@@ -72,28 +74,28 @@ export function AllClients() {
                                             {client.initials}
                                         </div>
                                         <div className="pt-1 flex-1 min-w-0 pr-6">
-                                            <h3 className="font-semibold text-slate-900 dark:text-white truncate">{client.name}</h3>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{client.industry}</p>
+                                            <h3 className="font-semibold text-[var(--text-primary)] truncate">{client.name}</h3>
+                                            <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">{client.industry}</p>
                                         </div>
                                     </div>
 
-                                    <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 dark:border-slate-700/50">
+                                    <div className="mt-auto flex items-center justify-between pt-4 border-t border-[var(--border)]">
                                         <div className="flex flex-col gap-1">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                            <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
                                                 Status
                                             </span>
                                             <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wider w-fit ${client.status === "active"
-                                                ? "bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20"
-                                                : "bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20"
+                                                ? "bg-[var(--success-bg)] text-[var(--success)] border border-[var(--success-border)]"
+                                                : "bg-[var(--bg-subtle)] text-[var(--text-muted)] border border-[var(--border)]"
                                                 }`}>
                                                 {client.status === "active" ? "Active" : "Inactive"}
                                             </div>
                                         </div>
                                         <div className="flex flex-col gap-1 items-end">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">
+                                            <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest text-right">
                                                 Level of Service
                                             </span>
-                                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-800/50">
+                                            <span className="text-xs font-semibold text-[var(--accent)] bg-[var(--accent-subtle)] px-2 py-0.5 rounded-md border border-[var(--accent-subtle-border)]">
                                                 {client.levelOfService}
                                             </span>
                                         </div>
@@ -102,6 +104,7 @@ export function AllClients() {
                                 </motion.div>
                             )
                         })}
+                        </div>
                     </div>
                 </div>
             </div>

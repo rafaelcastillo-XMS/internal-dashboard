@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
+import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
+import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
 import { useSEMDashboardState, SEM_API, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
@@ -95,9 +97,15 @@ export function SEMDashboard() {
 
   const s = data.summary
   const topCampaigns = [...data.campaigns].slice(0, 8)
+  const isDark = document.documentElement.classList.contains('dark')
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10">
+    <SkeletonTheme
+      baseColor={isDark ? '#1e293b' : '#f1f5f9'}
+      highlightColor={isDark ? '#334155' : '#e2e8f0'}
+      borderRadius={8}
+    >
+    <div className="mx-auto max-w-screen-2xl p-6">
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -121,13 +129,24 @@ export function SEMDashboard() {
 
       {/* Summary cards */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-7">
-        <MetricCard label="Impressions"   value={fmt(s.impressions)} />
-        <MetricCard label="Clicks"        value={fmt(s.clicks)} />
-        <MetricCard label="CTR"           value={`${fmt(s.ctr, 2)}%`} />
-        <MetricCard label="Avg CPC"       value={fmtCurrency(s.avg_cpc)} />
-        <MetricCard label="Total Spend"   value={fmtCurrency(s.cost)} />
-        <MetricCard label="Conversions"   value={fmt(s.conversions, 1)} />
-        <MetricCard label="Cost / Conv."  value={s.conversions > 0 ? fmtCurrency(s.cost_per_conversion) : '—'} />
+        {state.loading ? (
+          [...Array(7)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-stroke bg-white px-5 py-4 dark:border-strokedark dark:bg-boxdark">
+              <Skeleton width={80} height={12} className="mb-2" />
+              <Skeleton width={60} height={28} />
+            </div>
+          ))
+        ) : (
+          <>
+            <MetricCard label="Impressions"   value={fmt(s.impressions)} />
+            <MetricCard label="Clicks"        value={fmt(s.clicks)} />
+            <MetricCard label="CTR"           value={`${fmt(s.ctr, 2)}%`} />
+            <MetricCard label="Avg CPC"       value={fmtCurrency(s.avg_cpc)} />
+            <MetricCard label="Total Spend"   value={fmtCurrency(s.cost)} />
+            <MetricCard label="Conversions"   value={fmt(s.conversions, 1)} />
+            <MetricCard label="Cost / Conv."  value={s.conversions > 0 ? fmtCurrency(s.cost_per_conversion) : '—'} />
+          </>
+        )}
       </div>
 
       {/* Campaigns table */}
@@ -137,14 +156,28 @@ export function SEMDashboard() {
             <h3 className="font-semibold text-black dark:text-white">Top Campaigns</h3>
             <p className="mt-0.5 text-xs text-body dark:text-bodydark">Sorted by spend — {state.dateRange.startDate ? formatDateLabel(state.dateRange.startDate, state.dateRange.endDate) : '—'}</p>
           </div>
-          {data.campaigns.length > 0 && (
+          {!state.loading && data.campaigns.length > 0 && (
             <span className="rounded-full bg-stroke/50 px-2.5 py-1 text-xs font-semibold text-body dark:text-bodydark dark:bg-strokedark">
               {data.campaigns.length} campaigns
             </span>
           )}
         </div>
 
-        {topCampaigns.length === 0 ? (
+        {state.loading ? (
+          <div className="px-6 py-4 space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton width="35%" height={16} />
+                <Skeleton width={60} height={20} borderRadius={20} />
+                <Skeleton width={70} height={16} />
+                <Skeleton width={50} height={16} />
+                <Skeleton width={50} height={16} />
+                <Skeleton width={60} height={16} />
+                <Skeleton width={70} height={16} />
+              </div>
+            ))}
+          </div>
+        ) : topCampaigns.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <p className="text-sm text-body dark:text-bodydark">
               {state.selectedAccountId ? 'No campaign data for this period.' : 'Select an account and click Refresh to load data.'}
@@ -184,5 +217,6 @@ export function SEMDashboard() {
         )}
       </div>
     </div>
+    </SkeletonTheme>
   )
 }

@@ -1,18 +1,19 @@
 import { useState, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
-import { NavLink, useNavigate } from "react-router-dom"
+import { NavLink } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import {
     LayoutDashboard, Users, CheckSquare, Calendar,
-    ChevronDown, MessageSquare, Search as SearchIcon,
+    ChevronDown, Search as SearchIcon,
     BarChart2, Share2, Palette, User, FileText
 } from "lucide-react"
 import { XMSLogo } from "@/components/ui/XMSLogo"
 import { useSidebar } from "@/context/useSidebar"
+import { useTheme } from "@/context/useTheme"
 import { getClients } from "@/features/clients/repository"
 
-const activeClass = "bg-blue-600/15 text-blue-400 border border-blue-500/20"
-const inactiveClass = "text-slate-400 hover:bg-white/5 hover:text-slate-100 border border-transparent"
+const activeClass = "bg-slate-700 text-white border border-slate-700 shadow-sm dark:bg-slate-600 dark:text-white dark:border-slate-500"
+const inactiveClass = "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-item-hover)] hover:text-[var(--text-primary)] border border-transparent"
 
 function Tooltip({ label }: { label: string }) {
     const ref = useRef<HTMLDivElement>(null)
@@ -56,19 +57,19 @@ function Tooltip({ label }: { label: string }) {
 }
 
 function SectionLabel({ label, collapsed }: { label: string; collapsed: boolean }) {
-    if (collapsed) return <div className="mx-3 my-2 h-px bg-slate-800/80" />
+    if (collapsed) return <div className="mx-3 my-2 h-px bg-[var(--border)]" />
     return (
         <div className="flex items-center gap-2 px-3 pt-5 pb-1.5">
-            <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">{label}</h2>
-            <div className="flex-1 h-px bg-slate-800/80" aria-hidden="true" />
+            <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--sidebar-section-label)]">{label}</h2>
+            <div className="flex-1 h-px bg-[var(--border)]" aria-hidden="true" />
         </div>
     )
 }
 
 export function Sidebar() {
     const [clientsOpen, setClientsOpen] = useState(false)
-    const navigate = useNavigate()
     const { collapsed, isMobileOpen, closeMobile } = useSidebar()
+    const { theme } = useTheme()
     const clients = getClients()
 
     const navItemClass = collapsed
@@ -91,18 +92,22 @@ export function Sidebar() {
             </AnimatePresence>
 
             <aside
-                className={`fixed inset-y-0 left-0 z-50 flex flex-col h-screen border-r border-slate-800/60 shrink-0 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 overflow-x-visible ${isMobileOpen ? "translate-x-0" : "-translate-x-full"
-                    }`}
-                style={{ background: "#0d0d12", width: collapsed ? 64 : 288 }}
+                className={`fixed inset-y-0 left-0 z-50 flex flex-col h-screen border-r shrink-0 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 overflow-x-visible bg-[var(--sidebar-bg)] border-[var(--sidebar-border)] ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+                style={{ width: collapsed ? 64 : 288 }}
             >
                 {/* Logo */}
-                <div className={`border-b border-slate-800/60 flex items-center transition-all duration-200 ${collapsed ? "justify-center px-3 py-4" : "px-5 py-5 justify-between"}`}>
+                <div className={`h-16 border-b border-[var(--sidebar-border)] flex items-center transition-all duration-200 ${collapsed ? "justify-center px-3" : "px-5 justify-between"}`}>
                     {collapsed ? (
-                        <div className="w-8 h-8 bg-blue-600 rounded-full shrink-0" />
+                        <img
+                            src="/xms-isotipo.png"
+                            alt="XMS"
+                            className="h-9 w-9 rounded-xl object-contain shrink-0"
+                            draggable={false}
+                        />
                     ) : (
                         <>
-                            <XMSLogo mode="dark" height={50} />
-                            <span className="text-[9px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full tracking-widest uppercase shrink-0">Beta</span>
+                            <XMSLogo mode={theme === "dark" ? "dark" : "light"} height={55} className="max-w-[170px]" />
+                            <span className="text-[9px] font-bold text-[var(--accent)] bg-[var(--accent-subtle)] border border-[var(--accent-subtle-border)] px-1.5 py-0.5 rounded-full tracking-widest uppercase shrink-0">Beta</span>
                         </>
                     )}
                 </div>
@@ -161,7 +166,7 @@ export function Sidebar() {
                                         transition={{ duration: 0.22, ease: "easeInOut" }}
                                         className="overflow-hidden"
                                     >
-                                        <ul className="ml-4 mt-1 space-y-0.5 border-l border-slate-800 pl-3 pb-1">
+                                        <ul className="ml-4 mt-1 space-y-0.5 border-l border-[var(--border)] pl-3 pb-1">
                                             <li>
                                                 <NavLink
                                                     to="/clients"
@@ -169,12 +174,12 @@ export function Sidebar() {
                                                     onClick={closeMobile}
                                                     className={({ isActive }) =>
                                                         `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all ${isActive
-                                                            ? "text-blue-400 bg-blue-600/10"
-                                                            : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                                                            ? "text-[var(--sidebar-item-active-text)] bg-[var(--sidebar-item-active-bg)]"
+                                                            : "text-[var(--sidebar-item-text)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
                                                         }`
                                                     }
                                                 >
-                                                    <div className="w-6 h-6 rounded-md bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+                                                    <div className="w-6 h-6 rounded-md bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-muted)] shrink-0">
                                                         <Users className="w-3.5 h-3.5" />
                                                     </div>
                                                     <span className="truncate font-medium">All Clients</span>
@@ -187,8 +192,8 @@ export function Sidebar() {
                                                         onClick={closeMobile}
                                                         className={({ isActive }) =>
                                                             `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all ${isActive
-                                                                ? "text-blue-400 bg-blue-600/10"
-                                                                : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                                                                ? "text-[var(--sidebar-item-active-text)] bg-[var(--sidebar-item-active-bg)]"
+                                                                : "text-[var(--sidebar-item-text)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
                                                             }`
                                                         }
                                                     >
@@ -200,15 +205,6 @@ export function Sidebar() {
                                                     </NavLink>
                                                 </li>
                                             ))}
-                                            <li>
-                                                <button
-                                                    onClick={() => { navigate("/clients/coca-cola"); closeMobile(); }}
-                                                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-slate-600 hover:text-slate-400 transition-colors"
-                                                >
-                                                    <MessageSquare className="w-3.5 h-3.5" />
-                                                    All conversations
-                                                </button>
-                                            </li>
                                         </ul>
                                     </motion.div>
                                 )}
@@ -274,17 +270,17 @@ export function Sidebar() {
                     </div>
 
                     <div className="relative group">
-                        <button className={`${navItemClass} ${inactiveClass} opacity-80`} onClick={() => alert("This app is coming soon!")}>
+                        <button className={`${navItemClass} ${inactiveClass} opacity-70`} onClick={() => alert("This app is coming soon!")}>
                             <Share2 className="w-4 h-4 shrink-0" />
-                            {!collapsed && <>Social Media <span className="ml-auto text-[9px] font-semibold text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-full">Soon</span></>}
+                            {!collapsed && <>Social Media <span className="ml-auto text-[9px] font-semibold text-[var(--text-muted)] bg-[var(--bg-subtle)] px-1.5 py-0.5 rounded-full">Soon</span></>}
                         </button>
                         {collapsed && <Tooltip label="Social Media – Coming soon" />}
                     </div>
 
                     <div className="relative group">
-                        <button className={`${navItemClass} ${inactiveClass} opacity-80`} onClick={() => alert("This app is coming soon!")}>
+                        <button className={`${navItemClass} ${inactiveClass} opacity-70`} onClick={() => alert("This app is coming soon!")}>
                             <Palette className="w-4 h-4 shrink-0" />
-                            {!collapsed && <>Design <span className="ml-auto text-[9px] font-semibold text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-full">Soon</span></>}
+                            {!collapsed && <>Design <span className="ml-auto text-[9px] font-semibold text-[var(--text-muted)] bg-[var(--bg-subtle)] px-1.5 py-0.5 rounded-full">Soon</span></>}
                         </button>
                         {collapsed && <Tooltip label="Design – Coming soon" />}
                     </div>
@@ -292,7 +288,7 @@ export function Sidebar() {
                 </nav>
 
                 {/* Bottom: Profile + Settings */}
-                <div className={`${collapsed ? "px-0 py-3" : "px-3 pb-4 pt-3"} border-t border-slate-800/60 space-y-0.5`}>
+                <div className={`${collapsed ? "px-0 py-3" : "px-3 pb-4 pt-3"} border-t border-[var(--sidebar-border)] space-y-0.5`}>
                     <div className="relative group">
                         <NavLink
                             to="/profile"
@@ -304,7 +300,6 @@ export function Sidebar() {
                         </NavLink>
                         {collapsed && <Tooltip label="My Profile" />}
                     </div>
-
                 </div>
             </aside>
         </>

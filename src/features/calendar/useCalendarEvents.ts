@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { endOfMonth, mapGoogleCalendarEvent, startOfMonth } from "./model"
 import type { CalendarEvent, GoogleCalendarResponse } from "./types"
+import { useTrackPageLoading } from "@/context/PageLoadingContext"
 
 type UseCalendarEventsOptions = {
     monthDate: Date
@@ -12,6 +13,9 @@ export function useCalendarEvents({ monthDate, monthSpan = 1 }: UseCalendarEvent
     const [events, setEvents] = useState<CalendarEvent[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const monthKey = `${monthDate.getFullYear()}-${monthDate.getMonth()}-${monthSpan}`
+
+    useTrackPageLoading(loading, `calendar:${monthKey}`)
 
     useEffect(() => {
         let cancelled = false
@@ -72,7 +76,7 @@ export function useCalendarEvents({ monthDate, monthSpan = 1 }: UseCalendarEvent
         return () => {
             cancelled = true
         }
-    }, [monthDate, monthSpan])
+    }, [monthDate.getFullYear(), monthDate.getMonth(), monthSpan])
 
     return { events, loading, error }
 }

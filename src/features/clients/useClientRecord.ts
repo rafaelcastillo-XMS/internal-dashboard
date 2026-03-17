@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react"
 import { getClientById } from "@/features/clients/repository"
 import { fetchClientProfile, mergeClientWithProfile, type ClientProfileRow } from "./profiles"
+import { useTrackPageLoading } from "@/context/PageLoadingContext"
 
 export function useClientRecord(clientId?: string) {
     const baseClient = getClientById(clientId)
     const [profile, setProfile] = useState<ClientProfileRow | null | undefined>(undefined)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+
+    useTrackPageLoading(loading, `client-record:${baseClient.id}`)
 
     useEffect(() => {
         let active = true

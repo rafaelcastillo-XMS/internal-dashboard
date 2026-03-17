@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-
 const SELECTED_KEY = 'xms_sem_selected'
 const ACCOUNTS_KEY = 'xms_sem_accounts'
 
@@ -65,7 +64,6 @@ export function SEMSidebar({ sidebarOpen, setSidebarOpen }: SEMSidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const sidebarRef = useRef<HTMLElement>(null)
-
   const [activeAccount, setActiveAccount] = useState<string>(() => {
     try {
       const sel = JSON.parse(sessionStorage.getItem(SELECTED_KEY) || 'null')
@@ -104,18 +102,18 @@ export function SEMSidebar({ sidebarOpen, setSidebarOpen }: SEMSidebarProps) {
       {/* Sidebar panel */}
       <aside
         ref={sidebarRef}
-        className={`fixed left-0 top-0 z-50 flex h-screen w-[288px] flex-col
-                    bg-[#071a0e] transition-transform duration-300 ease-in-out
+        className={`fixed left-0 top-0 z-50 flex h-screen w-[288px] flex-col border-r transition-transform duration-300 ease-in-out
                     lg:translate-x-0 lg:static lg:z-auto
+                    bg-[var(--sidebar-bg)] border-[var(--sidebar-border)]
                     ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* ── Back to Dashboard ── */}
-        <div className="border-b border-white/5 px-4 py-3">
+        <div className="flex h-16 items-center border-b border-slate-200/70 px-4 dark:border-white/10">
           <button
             onClick={() => navigate('/')}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5
-                       text-sm font-medium text-white/60 transition-all duration-150
-                       hover:bg-white/5 hover:text-white"
+            className="flex h-10 w-full items-center gap-3 rounded-lg px-3
+                       text-sm font-medium transition-all duration-150
+                       text-[var(--text-muted)] hover:bg-[var(--hover-bg)] hover:text-[var(--text-primary)]"
           >
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -125,12 +123,12 @@ export function SEMSidebar({ sidebarOpen, setSidebarOpen }: SEMSidebarProps) {
         </div>
 
         {/* ── Active account badge ── */}
-        <div className="border-b border-white/5 px-4 py-4">
-          <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/25">
+        <div className="border-b border-slate-200/70 px-4 py-4 dark:border-white/10">
+          <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-section-label)]">
             Active Account
           </p>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
-            <p className="truncate text-sm font-semibold text-white leading-tight">
+          <div className="rounded-lg border border-slate-200/70 bg-[var(--bg-surface)] px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.03]">
+            <p className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
               {activeAccount || 'XMS'}
             </p>
             {activeAccount && (
@@ -142,12 +140,11 @@ export function SEMSidebar({ sidebarOpen, setSidebarOpen }: SEMSidebarProps) {
         </div>
 
         {/* ── Navigation ── */}
-        <nav className="flex-1 overflow-y-auto px-4 py-5">
+        <nav className="custom-scrollbar flex-1 overflow-y-auto px-4 py-5">
           {NAV_GROUPS.map((group, gi) => (
             <div key={gi} className={gi > 0 ? 'mt-6' : ''}>
               {group.section && (
-                <p className="mb-2 px-3 text-[10px] font-semibold uppercase
-                               tracking-[0.15em] text-white/25">
+                <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--sidebar-section-label)]">
                   {group.section}
                 </p>
               )}
@@ -162,11 +159,11 @@ export function SEMSidebar({ sidebarOpen, setSidebarOpen }: SEMSidebarProps) {
                         className={`flex items-center gap-3 rounded-lg px-3 py-2.5
                                     text-sm font-medium transition-all duration-150
                                     ${active
-                                      ? 'bg-[#16a34a]/15 text-[#16a34a] border border-[#16a34a]/20'
-                                      : 'text-white/45 hover:bg-white/5 hover:text-white/80'
+                                      ? 'bg-[#15803D] text-white border border-[#15803D] shadow-sm dark:bg-[#16A34A] dark:text-white dark:border-[#16A34A]'
+                                      : 'text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-item-hover)] hover:text-[var(--text-primary)] border border-transparent'
                                     }`}
                       >
-                        <span className={`shrink-0 ${active ? 'text-[#16a34a]' : ''}`}>
+                        <span className={`shrink-0 ${active ? 'text-white' : ''}`}>
                           {item.icon}
                         </span>
                         <span className="flex-1 truncate">{item.label}</span>
@@ -186,10 +183,10 @@ export function SEMSidebar({ sidebarOpen, setSidebarOpen }: SEMSidebarProps) {
         </nav>
 
         {/* ── Live data indicator ── */}
-        <div className="border-t border-white/5 px-6 py-4">
+        <div className="border-t border-slate-200/70 px-6 py-4 dark:border-white/10">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs text-white/25">Google Ads API</span>
+            <span className="text-xs text-[var(--sidebar-section-label)]">Google Ads API</span>
           </div>
         </div>
       </aside>

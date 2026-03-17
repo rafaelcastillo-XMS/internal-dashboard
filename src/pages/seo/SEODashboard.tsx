@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CardDataStats }      from '@/features/seo/components/CardDataStats'
 import { ChartVisibility }    from '@/features/seo/components/ChartVisibility'
 import { QueryRankingsTable } from '@/features/seo/components/QueryRankingsTable'
@@ -39,6 +40,7 @@ const EMPTY_DATA = {
 
 export function SEODashboard() {
   const state = useSEODashboardState()
+  const navigate = useNavigate()
   const [data, setData] = useState(EMPTY_DATA)
   const [isDark, setIsDark] = useState(false)
 
@@ -89,7 +91,7 @@ export function SEODashboard() {
   const dateRangeLabel = formatDateLabel(state.dateRange.startDate, state.dateRange.endDate)
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10">
+    <div className="mx-auto max-w-screen-2xl p-6">
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -107,7 +109,7 @@ export function SEODashboard() {
                     className="rounded-lg border border-stroke bg-white py-1.5 pl-3 pr-8 text-xs font-medium text-black
                                focus:border-[#1A72D9] focus:outline-none disabled:opacity-50
                                dark:border-strokedark dark:bg-boxdark dark:text-white max-w-[220px]">
-              <option value="">{state.gscOptions.length === 0 ? 'Loading…' : 'Select property…'}</option>
+              <option value="">{!state.propertiesLoaded ? 'Loading…' : state.gscOptions.length === 0 ? 'No properties' : 'Select property…'}</option>
               {state.gscOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
@@ -118,7 +120,7 @@ export function SEODashboard() {
                     className="rounded-lg border border-stroke bg-white py-1.5 pl-3 pr-8 text-xs font-medium text-black
                                focus:border-[#1A72D9] focus:outline-none disabled:opacity-50
                                dark:border-strokedark dark:bg-boxdark dark:text-white max-w-[220px]">
-              <option value="">{state.ga4Options.length === 0 ? 'Loading…' : 'Select property…'}</option>
+              <option value="">{!state.propertiesLoaded ? 'Loading…' : state.ga4Options.length === 0 ? 'No properties' : 'Select property…'}</option>
               {state.ga4Options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
@@ -143,6 +145,28 @@ export function SEODashboard() {
           </button>
         </div>
       </div>
+
+      {/* No-properties banner */}
+      {state.propertiesLoaded && state.gscOptions.length === 0 && state.ga4Options.length === 0 && (
+        <div className="mb-6 flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 dark:border-amber-800/40 dark:bg-amber-900/20">
+          <svg className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">No Google properties found</p>
+            <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+              The connected Google account has no Search Console sites or GA4 properties.
+              Connect with the correct account from a client's integrations page.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/clients')}
+            className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 transition-colors"
+          >
+            Go to Clients
+          </button>
+        </div>
+      )}
 
       {/* Stat cards */}
       <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

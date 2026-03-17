@@ -58,7 +58,7 @@ export function SEOKeywords() {
   const top3Count = gsc.queries.filter((q) => q.position <= 3).length
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10">
+    <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-black dark:text-white">

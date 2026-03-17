@@ -152,7 +152,8 @@ export function CalendarPage() {
         .slice(0, 6)
 
     return (
-        <div className="flex flex-col xl:flex-row h-full bg-slate-50 dark:bg-slate-900 overflow-hidden p-5 gap-5 min-h-full xl:h-full overflow-y-auto xl:overflow-hidden">
+        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">
+            <div className="mx-auto flex min-h-full max-w-screen-2xl flex-col gap-5 p-6 xl:h-full xl:flex-row xl:overflow-hidden">
             {/* GCal error banner */}
             {gcalError && (
                 <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] max-w-lg w-full mx-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm rounded-xl px-4 py-3 shadow-lg">
@@ -273,6 +274,7 @@ export function CalendarPage() {
                         })}
                     </div>
                 </div>
+            </div>
             </div>
         </div>
     )

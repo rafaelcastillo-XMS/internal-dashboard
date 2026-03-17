@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTrackPageLoading } from '@/context/PageLoadingContext'
 
 function normalizeDomain(str: string): string {
   return str
@@ -64,6 +65,10 @@ export function useSEODashboardState(defaultPreset = 1) {
   const [loading,        setLoading]        = useState(false)
   const [lastUpdated,    setLastUpdated]    = useState<Date | null>(null)
   const [propertiesError, setPropertiesError] = useState<string | null>(null)
+  const [propertiesLoaded, setPropertiesLoaded] = useState(false)
+  const [propertiesLoading, setPropertiesLoading] = useState(true)
+
+  useTrackPageLoading(loading || propertiesLoading, 'seo-data')
 
   const [properties, setProperties] = useState<{ gscSites: { url: string }[]; ga4Properties: { id: string; name?: string }[] }>(() => {
     return ssGet(PROPS_KEY) || { gscSites: [], ga4Properties: [] }
@@ -84,16 +89,19 @@ export function useSEODashboardState(defaultPreset = 1) {
   })
 
   useEffect(() => {
+    setPropertiesLoading(true)
     fetch(`${SEO_API}/properties`)
       .then((r) => r.json())
       .then((d) => {
-        if (d.error) { setPropertiesError(d.error); return }
+        if (d.error) { setPropertiesError(d.error); setPropertiesLoaded(true); return }
         setProperties(d)
         ssSet(PROPS_KEY, d)
         setSelectedGscSite((prev) => prev || d.gscSites?.[0]?.url || '')
         setSelectedGa4Id((prev)   => prev || d.ga4Properties?.[0]?.id || '')
+        setPropertiesLoaded(true)
       })
-      .catch((err: Error) => setPropertiesError(err.message))
+      .catch((err: Error) => { setPropertiesError(err.message); setPropertiesLoaded(true) })
+      .finally(() => setPropertiesLoading(false))
   }, [])
 
   useEffect(() => {
@@ -138,6 +146,7 @@ export function useSEODashboardState(defaultPreset = 1) {
     loading, setLoading,
     lastUpdated, setLastUpdated,
     propertiesError,
+    propertiesLoaded,
     selectedGscSite, setSelectedGscSite: selectGscSite,
     selectedGa4Id,   setSelectedGa4Id,
     gscOptions, ga4Options,

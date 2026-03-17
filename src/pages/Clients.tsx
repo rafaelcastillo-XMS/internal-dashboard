@@ -26,7 +26,6 @@ type Message = {
 function ChatArea({ client }: { client: Client }) {
     const navigate = useNavigate()
     const integration = getClientIntegrationConfig(client.id)
-    const hasCustomLogo = Boolean(client.avatar && !client.avatar.includes("pravatar.cc"))
     const [messages, setMessages] = useState<Message[]>([
         {
             id: "1",
@@ -112,27 +111,21 @@ function ChatArea({ client }: { client: Client }) {
     }, [messages, isTyping])
 
     return (
-        <div className="flex-1 flex flex-col h-full border-r border-slate-100 dark:border-slate-800">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10">
-                {hasCustomLogo ? (
-                    <div className="h-10 w-10 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                        <img src={client.avatar} alt={`${client.name} logo`} className="h-full w-full object-cover" />
-                    </div>
-                ) : (
-                    <Avatar className="w-10 h-10 border border-slate-200 dark:border-slate-700 shadow-sm">
-                        <AvatarFallback className={`${client.color} text-white font-bold`}>{client.initials}</AvatarFallback>
-                    </Avatar>
-                )}
+        <div className="flex-1 flex flex-col h-full border-r border-slate-200/70 dark:border-white/10">
+            <div className="p-5 border-b border-slate-200/70 dark:border-white/10 flex items-center gap-3 bg-[var(--bg-surface)]/90 backdrop-blur-md sticky top-0 z-10">
+                <Avatar className="w-10 h-10 border border-slate-200/70 dark:border-white/10 shadow-sm">
+                    <AvatarFallback className={`${client.color} text-white font-bold`}>{client.initials}</AvatarFallback>
+                </Avatar>
                 <div>
-                    <h2 className="font-semibold text-slate-800 dark:text-white">Chat – {client.contact}</h2>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <h2 className="font-semibold tracking-tight text-[var(--text-primary)]">Chat – {client.contact}</h2>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                         <span className="flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.7)]" />
                             {client.name} · Online
                         </span>
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${integration.notebooklm.enabled && integration.notebooklm.notebookId
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                            : "bg-[var(--bg-subtle)] text-[var(--text-muted)]"
                             }`}>
                             <Bot className="h-3 w-3" />
                             {integration.notebooklm.enabled && integration.notebooklm.notebookId ? "NotebookLM live" : "Demo mode"}
@@ -141,7 +134,7 @@ function ChatArea({ client }: { client: Client }) {
                 </div>
                 <Button
                     variant="outline"
-                    className="ml-auto rounded-xl border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70"
+                    className="ml-auto rounded-xl border-[var(--border)] bg-[var(--bg-surface)]/80"
                     onClick={() => navigate(`/clients/${client.id}/integrations`)}
                 >
                     <Settings2 className="h-4 w-4" />
@@ -162,22 +155,16 @@ function ChatArea({ client }: { client: Client }) {
                             >
                                 <div className={`flex items-end max-w-[78%] gap-2 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
                                     {msg.sender === "client" && (
-                                        hasCustomLogo ? (
-                                            <div className="mb-1 h-7 w-7 overflow-hidden rounded-full border border-slate-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                                                <img src={client.avatar} alt={`${client.name} logo`} className="h-full w-full object-cover" />
-                                            </div>
-                                        ) : (
-                                            <Avatar className="w-7 h-7 mb-1 border border-slate-100 dark:border-slate-700 shadow-sm">
-                                                <AvatarFallback className="text-xs">{client.initials}</AvatarFallback>
-                                            </Avatar>
-                                        )
+                                        <Avatar className="w-7 h-7 mb-1 border border-slate-200/70 dark:border-white/10 shadow-sm">
+                                            <AvatarFallback className={`${client.color} text-white text-xs font-bold`}>{client.initials}</AvatarFallback>
+                                        </Avatar>
                                     )}
                                     <div className={`px-4 py-2.5 rounded-2xl shadow-sm text-[14px] leading-relaxed ${msg.sender === "user"
                                         ? "bg-blue-600 text-white rounded-br-sm"
-                                        : "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-sm"
+                                        : "bg-[var(--bg-subtle)] text-[var(--text-primary)] rounded-bl-sm"
                                         }`}>
                                         {msg.text}
-                                        <div className={`text-[10px] mt-1 ${msg.sender === "user" ? "text-blue-100/80 text-right" : "text-slate-400"}`}>
+                                        <div className={`text-[10px] mt-1 ${msg.sender === "user" ? "text-blue-100/80 text-right" : "text-[var(--text-muted)]"}`}>
                                             {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                         </div>
                                     </div>
@@ -191,10 +178,10 @@ function ChatArea({ client }: { client: Client }) {
                                 className="flex justify-start"
                             >
                                 <div className="flex items-end gap-2">
-                                    <Avatar className="w-7 h-7 mb-1 border border-slate-100 dark:border-slate-700 shadow-sm">
+                                    <Avatar className="w-7 h-7 mb-1 border border-slate-200/70 dark:border-white/10 shadow-sm">
                                         <AvatarFallback className="text-xs">{client.initials}</AvatarFallback>
                                     </Avatar>
-                                    <div className="bg-slate-100 dark:bg-slate-800 px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1.5 items-center h-11">
+                                    <div className="bg-[var(--bg-subtle)] px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1.5 items-center h-11">
                                         {[0, 0.2, 0.4].map(delay => (
                                             <motion.div key={delay} animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay }} className="w-1.5 h-1.5 bg-slate-400/80 rounded-full" />
                                         ))}
@@ -206,8 +193,8 @@ function ChatArea({ client }: { client: Client }) {
                 </div>
             </ScrollArea>
 
-            <div className="p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-slate-100 dark:border-slate-800">
-                <div className="max-w-2xl mx-auto flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-2 rounded-full border border-slate-200 dark:border-slate-700 focus-within:bg-white dark:focus-within:bg-slate-800 transition-all">
+            <div className="p-4 bg-[var(--bg-surface)]/90 backdrop-blur-md border-t border-slate-200/70 dark:border-white/10">
+                <div className="max-w-2xl mx-auto flex items-center gap-2 bg-[var(--bg-subtle)] p-2 rounded-full border border-slate-200/70 dark:border-white/10 focus-within:bg-[var(--bg-surface)] transition-all">
                     <Input
                         value={inputValue}
                         onChange={e => setInputValue(e.target.value)}
@@ -228,21 +215,15 @@ function ChatArea({ client }: { client: Client }) {
 
 function SidebarInfo({ client }: { client: Client }) {
     return (
-        <div className="w-[320px] bg-white dark:bg-slate-900 h-full shrink-0 overflow-hidden hidden lg:flex flex-col">
-            <div className="p-6 flex flex-col items-center border-b border-slate-100 dark:border-slate-800">
-                <div className="mb-4 h-24 w-24 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                    {client.avatar ? (
-                        <img src={client.avatar} alt={`${client.name} logo`} className="h-full w-full object-cover" />
-                    ) : (
-                        <div className={`flex h-full w-full items-center justify-center ${client.color} text-3xl font-bold text-white`}>
-                            {client.initials}
-                        </div>
-                    )}
+        <div className="w-[320px] bg-[var(--bg-surface)] h-full shrink-0 overflow-hidden hidden lg:flex flex-col">
+            <div className="p-6 flex flex-col items-center border-b border-slate-200/70 dark:border-white/10">
+                <div className={`mb-4 h-24 w-24 rounded-3xl shadow-xl flex items-center justify-center ${client.color} text-3xl font-bold text-white`}>
+                    {client.initials}
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1">{client.name}</h3>
+                <h3 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] mb-1">{client.name}</h3>
                 <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${client.status === "active"
-                    ? "bg-green-500/10 text-green-600 border-green-200 dark:text-green-400 dark:border-green-800/50"
-                    : "bg-slate-500/10 text-slate-500 border-slate-200 dark:text-slate-400 dark:border-slate-800"
+                    ? "bg-[var(--success-bg)] text-[var(--success)] border-[var(--success-border)]"
+                    : "bg-[var(--bg-subtle)] text-[var(--text-muted)] border-[var(--border)]"
                     }`}>
                     {client.status === "active" ? "Active" : "Inactive"}
                 </div>
@@ -251,7 +232,7 @@ function SidebarInfo({ client }: { client: Client }) {
             <ScrollArea className="flex-1 p-6">
                 <div className="space-y-6">
                     <section>
-                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Client Information</h4>
+                        <h4 className="text-[10px] font-bold text-[var(--sidebar-section-label)] uppercase tracking-widest mb-4">Client Information</h4>
                         <div className="grid gap-4">
                             <InfoItem icon={User} label="POC - Owner Name" value={client.pocOwnerName} />
                             <InfoItem icon={Activity} label="Level of Service" value={client.levelOfService} badge />
@@ -260,10 +241,10 @@ function SidebarInfo({ client }: { client: Client }) {
                         </div>
                     </section>
 
-                    <Separator className="bg-slate-100 dark:bg-slate-800" />
+                    <Separator className="bg-[var(--border)]" />
 
                     <section>
-                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Contact & Media</h4>
+                        <h4 className="text-[10px] font-bold text-[var(--sidebar-section-label)] uppercase tracking-widest mb-4">Contact & Media</h4>
                         <div className="grid gap-4">
                             <InfoItem icon={Phone} label="Phone" value={client.phone} />
                             <InfoItem icon={Mail} label="Email" value={client.email} />
@@ -279,13 +260,13 @@ function SidebarInfo({ client }: { client: Client }) {
 function InfoItem({ icon: Icon, label, value, isLink, linkUrl, badge }: { icon: React.ElementType, label: string, value: string, isLink?: boolean, linkUrl?: string, badge?: boolean }) {
     return (
         <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-700">
-                <Icon className="w-4 h-4 text-slate-400" />
+            <div className="w-8 h-8 rounded-lg bg-[var(--bg-subtle)] flex items-center justify-center shrink-0 border border-slate-200/70 dark:border-white/10">
+                <Icon className="w-4 h-4 text-[var(--text-muted)]" />
             </div>
             <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
+                <p className="text-[10px] font-bold text-[var(--sidebar-section-label)] uppercase tracking-wider mb-0.5">{label}</p>
                 {badge ? (
-                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800">
+                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[var(--accent-subtle)] text-[var(--accent)] border border-[var(--accent-subtle-border)]">
                         {value}
                     </span>
                 ) : isLink ? (
@@ -298,7 +279,7 @@ function InfoItem({ icon: Icon, label, value, isLink, linkUrl, badge }: { icon: 
                         {value} <ExternalLink className="w-3 h-3" />
                     </a>
                 ) : (
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{value}</p>
+                    <p className="text-sm font-semibold text-[var(--text-secondary)] truncate">{value}</p>
                 )}
             </div>
         </div>
@@ -310,9 +291,13 @@ export function Clients() {
     const { client } = useClientRecord(clientId)
 
     return (
-        <div className="flex h-full w-full bg-slate-50 dark:bg-slate-950 overflow-hidden">
-            <ChatArea client={client} />
-            <SidebarInfo client={client} />
+        <div className="h-full overflow-y-auto bg-[var(--bg-app)] custom-scrollbar">
+            <div className="mx-auto max-w-screen-2xl p-6 h-full">
+                <div className="flex h-full w-full overflow-hidden rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+                    <ChatArea client={client} />
+                    <SidebarInfo client={client} />
+                </div>
+            </div>
         </div>
     )
 }

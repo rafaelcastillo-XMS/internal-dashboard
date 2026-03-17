@@ -1,4 +1,5 @@
 import path from "path"
+import fs from "fs"
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "child_process"
 import { promisify } from "util"
 import { config as loadDotenv } from "dotenv"
@@ -170,6 +171,141 @@ function notebooklmDevPlugin() {
   }
 }
 
+// ─── Google OAuth one-click auth ────────────────────────────────────────────
+function googleAuthPlugin() {
+  const API_SCOPES = [
+    "https://www.googleapis.com/auth/webmasters.readonly",
+    "https://www.googleapis.com/auth/analytics.readonly",
+    "https://www.googleapis.com/auth/adwords",
+  ]
+  const REDIRECT_URI = "http://localhost:5173/api/auth/google/callback"
+  const TOKEN_PATH = path.resolve(__dirname, "token.json")
+  const CREDS_PATH = path.resolve(__dirname, "credentials.json")
+
+  function getClientCreds() {
+    const raw = JSON.parse(fs.readFileSync(CREDS_PATH, "utf-8"))
+    const d = raw.installed || raw.web
+    return { client_id: d.client_id as string, client_secret: d.client_secret as string }
+  }
+
+  function readTokenStatus(): { connected: boolean; email: string | null } {
+    try {
+      const t = JSON.parse(fs.readFileSync(TOKEN_PATH, "utf-8"))
+      return { connected: !!t.refresh_token, email: (t._connected_email as string) || null }
+    } catch {
+      return { connected: false, email: null }
+    }
+  }
+
+  return {
+    name: "google-auth",
+    configureServer(server: { middlewares: { use: (fn: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/api/auth/google/")) { next(); return }
+
+        const url = new URL(req.url, "http://localhost")
+
+        // ── Status ──────────────────────────────────────────────────────────
+        if (url.pathname === "/api/auth/google/status") {
+          sendJson(res, 200, readTokenStatus())
+          return
+        }
+
+        // ── Start OAuth flow ─────────────────────────────────────────────────
+        if (url.pathname === "/api/auth/google/start") {
+          const { client_id } = getClientCreds()
+          // Encode return URL in the OAuth state param so callback knows where to redirect
+          const returnPath = url.searchParams.get("return") || "/settings"
+          const state = Buffer.from(JSON.stringify({ returnPath })).toString("base64url")
+          const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
+          authUrl.searchParams.set("client_id", client_id)
+          authUrl.searchParams.set("redirect_uri", REDIRECT_URI)
+          authUrl.searchParams.set("response_type", "code")
+          authUrl.searchParams.set("scope", [...API_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
+          authUrl.searchParams.set("access_type", "offline")
+          authUrl.searchParams.set("prompt", "consent")
+          authUrl.searchParams.set("state", state)
+          res.writeHead(302, { Location: authUrl.toString() })
+          res.end()
+          return
+        }
+
+        // ── OAuth callback ───────────────────────────────────────────────────
+        if (url.pathname === "/api/auth/google/callback") {
+          const code = url.searchParams.get("code")
+          const oauthError = url.searchParams.get("error")
+          const stateParam = url.searchParams.get("state") || ""
+          let returnPath = "/settings"
+          try {
+            const decoded = JSON.parse(Buffer.from(stateParam, "base64url").toString())
+            if (typeof decoded.returnPath === "string") returnPath = decoded.returnPath
+          } catch { /* use default */ }
+
+          if (oauthError || !code) {
+            console.error("[google-auth] callback error:", oauthError)
+            res.writeHead(302, { Location: `${returnPath}?auth=error` })
+            res.end()
+            return
+          }
+
+          try {
+            const { client_id, client_secret } = getClientCreds()
+
+            // Exchange code → tokens
+            const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }).toString(),
+            })
+            const tokenData = await tokenResp.json() as Record<string, string>
+
+            if (tokenData.error) {
+              console.error("[google-auth] token exchange error:", tokenData)
+              res.writeHead(302, { Location: `${returnPath}?auth=error` })
+              res.end()
+              return
+            }
+
+            // Fetch connected account email
+            let email: string | null = null
+            try {
+              const infoResp = await fetch("https://www.googleapis.com/oauth2/v1/userinfo", {
+                headers: { Authorization: `Bearer ${tokenData.access_token}` },
+              })
+              const info = await infoResp.json() as { email?: string }
+              email = info.email ?? null
+            } catch { /* non-critical */ }
+
+            // Save token.json in google-auth (Python) format
+            const tokenJson: Record<string, unknown> = {
+              token: tokenData.access_token,
+              refresh_token: tokenData.refresh_token,
+              token_uri: "https://oauth2.googleapis.com/token",
+              client_id,
+              client_secret,
+              scopes: API_SCOPES,
+            }
+            if (email) tokenJson._connected_email = email
+
+            fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokenJson, null, 2))
+            console.log("[google-auth] ✓ token.json saved for", email ?? "unknown user")
+
+            res.writeHead(302, { Location: `${returnPath}?auth=success` })
+            res.end()
+          } catch (err) {
+            console.error("[google-auth]", err)
+            res.writeHead(302, { Location: `${returnPath}?auth=error` })
+            res.end()
+          }
+          return
+        }
+
+        next()
+      })
+    },
+  }
+}
+
 function seoDevPlugin() {
   return {
     name: "seo-api",
@@ -314,7 +450,7 @@ function semDevPlugin() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), notebooklmDevPlugin(), seoDevPlugin(), semDevPlugin()],
+  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin()],
   server: {},
   build: {
     rollupOptions: {

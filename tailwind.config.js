@@ -16,6 +16,9 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+      },
       colors: {
         // ── XMS Brand (SEO Dashboard) ──────────────────────────────────
         'xms-blue':        '#1A72D9',
