@@ -23,9 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
-# Google Service Account credentials — DO NOT COMMIT
+# Google credentials — DO NOT COMMIT
 service-account.json
 *service-account*.json
+credentials.json
+token.json
 
 # Local app state and environment
 .env

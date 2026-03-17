@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Sparkles, Moon, Sun, ChevronDown, Bug, X, LogOut, User, ArrowUp, PanelLeft, MoreVertical } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useTheme } from "@/context/useTheme"
 import { useSidebar } from "@/context/useSidebar"
@@ -28,6 +28,8 @@ export function Header() {
     const { theme, toggleTheme } = useTheme()
     const { collapsed, toggle: toggleSidebar, toggleMobile } = useSidebar()
     const navigate = useNavigate()
+    const { pathname } = useLocation()
+    const isSEO = pathname.startsWith('/seo') || pathname.startsWith('/sem')
 
     const [userName, setUserName] = useState("Rafael A.")
     const [userAvatar, setUserAvatar] = useState("")
@@ -141,23 +143,27 @@ export function Header() {
         <>
             <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md flex items-center px-6 justify-between shrink-0 shadow-sm z-[100] sticky top-0">
                 <div className="flex items-center gap-2">
-                    {/* Sidebar toggle - Mobile */}
-                    <button
-                        onClick={toggleMobile}
-                        aria-label="Toggle mobile sidebar"
-                        className="lg:hidden p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    >
-                        <PanelLeft className="w-5 h-5" />
-                    </button>
+                    {/* Sidebar toggle - Mobile (hidden on SEO routes) */}
+                    {!isSEO && (
+                        <button
+                            onClick={toggleMobile}
+                            aria-label="Toggle mobile sidebar"
+                            className="lg:hidden p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        >
+                            <PanelLeft className="w-5 h-5" />
+                        </button>
+                    )}
 
-                    {/* Sidebar toggle - Desktop */}
-                    <button
-                        onClick={toggleSidebar}
-                        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        className="hidden lg:flex p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    >
-                        <PanelLeft className="w-5 h-5" />
-                    </button>
+                    {/* Sidebar toggle - Desktop (hidden on SEO routes) */}
+                    {!isSEO && (
+                        <button
+                            onClick={toggleSidebar}
+                            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                            className="hidden lg:flex p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        >
+                            <PanelLeft className="w-5 h-5" />
+                        </button>
+                    )}
 
                     {/* AI Assistant button */}
                     <button

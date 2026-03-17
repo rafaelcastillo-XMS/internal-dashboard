@@ -258,19 +258,19 @@ export function Sidebar() {
                     <SectionLabel label="Apps" collapsed={collapsed} />
 
                     <div className="relative group">
-                        <button className={`${navItemClass} ${inactiveClass} opacity-80`} onClick={() => alert("This app is coming soon!")}>
+                        <NavLink to="/seo" className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
                             <SearchIcon className="w-4 h-4 shrink-0" />
-                            {!collapsed && <>SEO <span className="ml-auto text-[9px] font-semibold text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-full">Soon</span></>}
-                        </button>
-                        {collapsed && <Tooltip label="SEO – Coming soon" />}
+                            {!collapsed && <span>SEO Intelligence</span>}
+                        </NavLink>
+                        {collapsed && <Tooltip label="SEO Intelligence" />}
                     </div>
 
                     <div className="relative group">
-                        <button className={`${navItemClass} ${inactiveClass} opacity-80`} onClick={() => alert("This app is coming soon!")}>
+                        <NavLink to="/sem" className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
                             <BarChart2 className="w-4 h-4 shrink-0" />
-                            {!collapsed && <>SEM <span className="ml-auto text-[9px] font-semibold text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-full">Soon</span></>}
-                        </button>
-                        {collapsed && <Tooltip label="SEM – Coming soon" />}
+                            {!collapsed && <span>SEM Intelligence</span>}
+                        </NavLink>
+                        {collapsed && <Tooltip label="SEM Intelligence" />}
                     </div>
 
                     <div className="relative group">

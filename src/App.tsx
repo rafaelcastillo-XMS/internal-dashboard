@@ -15,6 +15,22 @@ const CalendarPage = lazy(() => import("./pages/Calendar").then(module => ({ def
 const Profile = lazy(() => import("./pages/Profile").then(module => ({ default: module.Profile })))
 const Login = lazy(() => import("./pages/Login").then(module => ({ default: module.Login })))
 
+// SEO Intelligence
+const SEOLayout = lazy(() => import("./features/seo/layout/SEOLayout").then(module => ({ default: module.SEOLayout })))
+const SEODashboard = lazy(() => import("./pages/seo/SEODashboard").then(module => ({ default: module.SEODashboard })))
+const SEOVisibility = lazy(() => import("./pages/seo/SEOVisibility").then(module => ({ default: module.SEOVisibility })))
+const SEOKeywords = lazy(() => import("./pages/seo/SEOKeywords").then(module => ({ default: module.SEOKeywords })))
+const SEOEngagement = lazy(() => import("./pages/seo/SEOEngagement").then(module => ({ default: module.SEOEngagement })))
+const SEOTraffic = lazy(() => import("./pages/seo/SEOTraffic").then(module => ({ default: module.SEOTraffic })))
+const SEOCoreWebVitals = lazy(() => import("./pages/seo/SEOCoreWebVitals").then(module => ({ default: module.SEOCoreWebVitals })))
+const SEOMobile = lazy(() => import("./pages/seo/SEOMobile").then(module => ({ default: module.SEOMobile })))
+
+// SEM Intelligence
+const SEMLayout = lazy(() => import("./features/sem/layout/SEMLayout").then(module => ({ default: module.SEMLayout })))
+const SEMDashboard = lazy(() => import("./pages/sem/SEMDashboard").then(module => ({ default: module.SEMDashboard })))
+const SEMCampaigns = lazy(() => import("./pages/sem/SEMCampaigns").then(module => ({ default: module.SEMCampaigns })))
+const SEMKeywords = lazy(() => import("./pages/sem/SEMKeywords").then(module => ({ default: module.SEMKeywords })))
+
 function AppLayout() {
     return (
         <MainLayout>
@@ -26,6 +42,16 @@ function AppLayout() {
 function ProtectedLayout({ session }: { session: Session | null }) {
     if (!session) return <Navigate to="/login" replace />
     return <AppLayout />
+}
+
+function SEOProtectedLayout({ session }: { session: Session | null }) {
+    if (!session) return <Navigate to="/login" replace />
+    return <SEOLayout />
+}
+
+function SEMProtectedLayout({ session }: { session: Session | null }) {
+    if (!session) return <Navigate to="/login" replace />
+    return <SEMLayout />
 }
 
 function App() {
@@ -55,6 +81,20 @@ function App() {
                             <Route path="/calendar" element={<CalendarPage />} />
                             <Route path="/profile" element={<Profile />} />
                             <Route path="*" element={<Navigate to="/" replace />} />
+                        </Route>
+                        <Route element={<SEOProtectedLayout session={session} />}>
+                            <Route path="/seo" element={<SEODashboard />} />
+                            <Route path="/seo/visibility" element={<SEOVisibility />} />
+                            <Route path="/seo/keywords" element={<SEOKeywords />} />
+                            <Route path="/seo/engagement" element={<SEOEngagement />} />
+                            <Route path="/seo/traffic" element={<SEOTraffic />} />
+                            <Route path="/seo/cwv" element={<SEOCoreWebVitals />} />
+                            <Route path="/seo/mobile" element={<SEOMobile />} />
+                        </Route>
+                        <Route element={<SEMProtectedLayout session={session} />}>
+                            <Route path="/sem" element={<SEMDashboard />} />
+                            <Route path="/sem/campaigns" element={<SEMCampaigns />} />
+                            <Route path="/sem/keywords" element={<SEMKeywords />} />
                         </Route>
                     </Routes>
                 </Suspense>

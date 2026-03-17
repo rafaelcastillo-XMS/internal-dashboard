@@ -1,0 +1,198 @@
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+
+const SELECTED_KEY = 'xms_sem_selected'
+const ACCOUNTS_KEY = 'xms_sem_accounts'
+
+function formatAccountName(id: string): string {
+  try {
+    const accounts = JSON.parse(sessionStorage.getItem(ACCOUNTS_KEY) || '[]')
+    const found = accounts.find((a: { id: string; name: string }) => a.id === id)
+    return found?.name || id
+  } catch { return id }
+}
+
+const NAV_GROUPS = [
+  {
+    section: null,
+    items: [
+      {
+        label: 'Overview',
+        href: '/sem',
+        icon: (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
+    section: 'PERFORMANCE',
+    items: [
+      {
+        label: 'Campaigns',
+        href: '/sem/campaigns',
+        icon: (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+          </svg>
+        ),
+      },
+      {
+        label: 'Keywords',
+        href: '/sem/keywords',
+        badge: { text: 'Ads', color: 'bg-[#16a34a]/20 text-[#16a34a]' },
+        icon: (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M15.75 15.75l-2.489-2.489m0 0a3.375 3.375 0 10-4.773-4.773 3.375 3.375 0 004.774 4.774zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ),
+      },
+    ],
+  },
+]
+
+interface SEMSidebarProps {
+  sidebarOpen: boolean
+  setSidebarOpen: (open: boolean) => void
+}
+
+export function SEMSidebar({ sidebarOpen, setSidebarOpen }: SEMSidebarProps) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const sidebarRef = useRef<HTMLElement>(null)
+
+  const [activeAccount, setActiveAccount] = useState<string>(() => {
+    try {
+      const sel = JSON.parse(sessionStorage.getItem(SELECTED_KEY) || 'null')
+      return sel?.accountId ? formatAccountName(sel.accountId) : ''
+    } catch { return '' }
+  })
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ accountId: string; name?: string }>).detail
+      if (detail?.accountId) setActiveAccount(detail.name || formatAccountName(detail.accountId))
+    }
+    window.addEventListener('sem:account-changed', handler)
+    return () => window.removeEventListener('sem:account-changed', handler)
+  }, [])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
+        setSidebarOpen(false)
+      }
+    }
+    if (sidebarOpen) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [sidebarOpen, setSidebarOpen])
+
+  return (
+    <>
+      {/* Mobile backdrop */}
+      <div
+        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 lg:hidden
+                    ${sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
+      {/* Sidebar panel */}
+      <aside
+        ref={sidebarRef}
+        className={`fixed left-0 top-0 z-50 flex h-screen w-[288px] flex-col
+                    bg-[#071a0e] transition-transform duration-300 ease-in-out
+                    lg:translate-x-0 lg:static lg:z-auto
+                    ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
+        {/* ── Back to Dashboard ── */}
+        <div className="border-b border-white/5 px-4 py-3">
+          <button
+            onClick={() => navigate('/')}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5
+                       text-sm font-medium text-white/60 transition-all duration-150
+                       hover:bg-white/5 hover:text-white"
+          >
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            <span>Back to Dashboard</span>
+          </button>
+        </div>
+
+        {/* ── Active account badge ── */}
+        <div className="border-b border-white/5 px-4 py-4">
+          <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/25">
+            Active Account
+          </p>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+            <p className="truncate text-sm font-semibold text-white leading-tight">
+              {activeAccount || 'XMS'}
+            </p>
+            {activeAccount && (
+              <p className="mt-0.5 text-[10px] text-[#16a34a]/70 truncate">
+                SEM Intelligence
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ── Navigation ── */}
+        <nav className="flex-1 overflow-y-auto px-4 py-5">
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={gi} className={gi > 0 ? 'mt-6' : ''}>
+              {group.section && (
+                <p className="mb-2 px-3 text-[10px] font-semibold uppercase
+                               tracking-[0.15em] text-white/25">
+                  {group.section}
+                </p>
+              )}
+              <ul className="space-y-0.5">
+                {group.items.map((item) => {
+                  const active = location.pathname === item.href
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        to={item.href}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2.5
+                                    text-sm font-medium transition-all duration-150
+                                    ${active
+                                      ? 'bg-[#16a34a]/15 text-[#16a34a] border border-[#16a34a]/20'
+                                      : 'text-white/45 hover:bg-white/5 hover:text-white/80'
+                                    }`}
+                      >
+                        <span className={`shrink-0 ${active ? 'text-[#16a34a]' : ''}`}>
+                          {item.icon}
+                        </span>
+                        <span className="flex-1 truncate">{item.label}</span>
+                        {'badge' in item && item.badge && (
+                          <span className={`shrink-0 rounded px-1.5 py-0.5
+                                            text-[10px] font-bold ${item.badge.color}`}>
+                            {item.badge.text}
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        {/* ── Live data indicator ── */}
+        <div className="border-t border-white/5 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs text-white/25">Google Ads API</span>
+          </div>
+        </div>
+      </aside>
+    </>
+  )
+}
