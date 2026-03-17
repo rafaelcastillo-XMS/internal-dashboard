@@ -9,6 +9,7 @@ import type { Session } from "@supabase/supabase-js"
 const Dashboard = lazy(() => import("./pages/Dashboard").then(module => ({ default: module.Dashboard })))
 const AllClients = lazy(() => import("./pages/AllClients").then(module => ({ default: module.AllClients })))
 const Clients = lazy(() => import("./pages/Clients").then(module => ({ default: module.Clients })))
+const ClientIntegrations = lazy(() => import("./pages/ClientIntegrations").then(module => ({ default: module.ClientIntegrations })))
 const Tasks = lazy(() => import("./pages/Tasks").then(module => ({ default: module.Tasks })))
 const CalendarPage = lazy(() => import("./pages/Calendar").then(module => ({ default: module.CalendarPage })))
 const Profile = lazy(() => import("./pages/Profile").then(module => ({ default: module.Profile })))
@@ -48,6 +49,7 @@ function App() {
                         <Route element={<ProtectedLayout session={session} />}>
                             <Route path="/" element={<Dashboard />} />
                             <Route path="/clients" element={<AllClients />} />
+                            <Route path="/clients/:clientId/integrations" element={<ClientIntegrations />} />
                             <Route path="/clients/:clientId" element={<Clients />} />
                             <Route path="/tasks" element={<Tasks />} />
                             <Route path="/calendar" element={<CalendarPage />} />

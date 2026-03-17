@@ -1,7 +1,8 @@
 import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
-import { Users, ArrowRight } from "lucide-react"
+import { Users, ArrowRight, Settings2, Sparkles } from "lucide-react"
 import { getClients } from "@/features/clients/repository"
+import { getNotebookIntegrationBadge } from "@/features/clients/integrations"
 
 export function AllClients() {
     const navigate = useNavigate()
@@ -29,10 +30,11 @@ export function AllClients() {
                 <div className="flex-1 overflow-auto p-5 custom-scrollbar">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {clients.map((client, i) => {
+                            const notebookConnected = getNotebookIntegrationBadge(client.id)
+
                             return (
-                                <motion.button
+                                <motion.div
                                     key={client.id}
-                                    onClick={() => navigate(`/clients/${client.id}`)}
                                     initial={{ opacity: 0, y: 16 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ duration: 0.4, delay: i * 0.05 }}
@@ -42,6 +44,29 @@ export function AllClients() {
                                         <ArrowRight className="w-4 h-4 text-blue-500" />
                                     </div>
 
+                                    <div className="mb-4 flex items-center justify-between gap-2">
+                                        <div className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${notebookConnected
+                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                            : "bg-slate-100 text-slate-500 dark:bg-slate-700/80 dark:text-slate-300"
+                                            }`}>
+                                            <Sparkles className="h-3.5 w-3.5" />
+                                            {notebookConnected ? "NotebookLM Ready" : "No live integrations"}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            aria-label={`Configure ${client.name}`}
+                                            onClick={() => navigate(`/clients/${client.id}/integrations`)}
+                                            className="relative z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-800 dark:hover:text-blue-300"
+                                        >
+                                            <Settings2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(`/clients/${client.id}`)}
+                                        className="flex h-full flex-col text-left"
+                                    >
                                     <div className="flex items-start gap-4 mb-4">
                                         <div className={`w-12 h-12 rounded-xl ${client.color} flex items-center justify-center text-white font-bold text-lg shrink-0 shadow-sm`}>
                                             {client.initials}
@@ -73,7 +98,8 @@ export function AllClients() {
                                             </span>
                                         </div>
                                     </div>
-                                </motion.button>
+                                    </button>
+                                </motion.div>
                             )
                         })}
                     </div>

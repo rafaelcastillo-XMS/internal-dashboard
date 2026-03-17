@@ -24,6 +24,28 @@ export interface Client {
 
 export const clients: Client[] = [
     {
+        id: "holts-garage",
+        name: "Holt's Garage",
+        industry: "Automotive Repair & Service",
+        contact: "Eric Holt",
+        role: "Owner",
+        email: "eric@holtsgarage.com",
+        location: "Austin, USA",
+        avatar: "https://i.pravatar.cc/150?u=holts-garage",
+        initials: "HG",
+        status: "active",
+        color: "bg-emerald-600",
+        tagColor: "text-emerald-700 bg-emerald-50",
+        note: "Pilot client for the live data layer. NotebookLM is the first connected integration and will power the client chat with real workshop knowledge.",
+        pocOwnerName: "Eric Holt & Rafael",
+        levelOfService: "Pilot Integration",
+        phone: "+1 512 555 0197",
+        website: "https://holtsgarage.com",
+        geoTargets: "Austin Metro",
+        nextInteraction: "2026-03-18",
+        customersProLink: "https://pro.xms.com/holts-garage"
+    },
+    {
         id: "coca-cola",
         name: "Coca-Cola",
         industry: "Beverages & FMCG",
