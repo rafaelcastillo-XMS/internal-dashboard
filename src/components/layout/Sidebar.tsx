@@ -270,11 +270,11 @@ export function Sidebar() {
                     </div>
 
                     <div className="relative group">
-                        <button className={`${navItemClass} ${inactiveClass} opacity-70`} onClick={() => alert("This app is coming soon!")}>
+                        <NavLink to="/social" className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
                             <Share2 className="w-4 h-4 shrink-0" />
-                            {!collapsed && <>Social Media <span className="ml-auto text-[9px] font-semibold text-[var(--text-muted)] bg-[var(--bg-subtle)] px-1.5 py-0.5 rounded-full">Soon</span></>}
-                        </button>
-                        {collapsed && <Tooltip label="Social Media – Coming soon" />}
+                            {!collapsed && <span>Social Media</span>}
+                        </NavLink>
+                        {collapsed && <Tooltip label="Social Media" />}
                     </div>
 
                     <div className="relative group">

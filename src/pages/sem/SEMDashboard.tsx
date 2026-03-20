@@ -110,8 +110,8 @@ export function SEMDashboard() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-black dark:text-white">
-            SEM Overview
-            <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#16a34a]/20 text-[#16a34a] align-middle">Ads</span>
+            SEM
+            <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#16a34a]/20 text-[#16a34a] align-middle">Intelligence</span>
           </h1>
           <p className="text-sm text-body dark:text-bodydark">
             Google Ads · {state.dateRange.startDate

@@ -29,7 +29,7 @@ export function Header() {
     const { collapsed, toggle: toggleSidebar, toggleMobile } = useSidebar()
     const navigate = useNavigate()
     const { pathname } = useLocation()
-    const isSEO = pathname.startsWith('/seo') || pathname.startsWith('/sem')
+    const isSEO = pathname.startsWith('/seo') || pathname.startsWith('/sem') || pathname.startsWith('/social')
 
     const [userName, setUserName] = useState("Rafael A.")
     const [userAvatar, setUserAvatar] = useState("")

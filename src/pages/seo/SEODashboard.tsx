@@ -95,7 +95,12 @@ export function SEODashboard() {
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">SEO Intelligence Dashboard</h1>
+          <h1 className="text-2xl font-bold text-black dark:text-white">
+            SEO
+            <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#1A72D9]/20 text-[#1A72D9] align-middle">
+              Intelligence
+            </span>
+          </h1>
           <p className="text-sm text-body dark:text-bodydark">
             Xperience Ai Marketing Solutions ·{' '}
             {state.lastUpdated ? `Updated ${state.lastUpdated.toLocaleTimeString()}` : 'Loading data…'}

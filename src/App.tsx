@@ -34,6 +34,13 @@ const SEMDashboard = lazy(() => import("./pages/sem/SEMDashboard").then(module =
 const SEMCampaigns = lazy(() => import("./pages/sem/SEMCampaigns").then(module => ({ default: module.SEMCampaigns })))
 const SEMKeywords = lazy(() => import("./pages/sem/SEMKeywords").then(module => ({ default: module.SEMKeywords })))
 
+// Social Media Intelligence
+const SocialLayout = lazy(() => import("./features/social/layout/SocialLayout").then(module => ({ default: module.SocialLayout })))
+const SocialDashboard = lazy(() => import("./pages/social/SocialDashboard").then(module => ({ default: module.SocialDashboard })))
+const InstagramDashboard = lazy(() => import("./pages/social/instagram/InstagramDashboard").then(module => ({ default: module.InstagramDashboard })))
+const YouTubeDashboard = lazy(() => import("./pages/social/youtube/YouTubeDashboard").then(module => ({ default: module.YouTubeDashboard })))
+const FacebookDashboard = lazy(() => import("./pages/social/facebook/FacebookDashboard").then(module => ({ default: module.FacebookDashboard })))
+
 function AppLayout() {
     return (
         <MainLayout>
@@ -55,6 +62,11 @@ function SEOProtectedLayout({ session }: { session: Session | null }) {
 function SEMProtectedLayout({ session }: { session: Session | null }) {
     if (!session) return <Navigate to="/login" replace />
     return <SEMLayout />
+}
+
+function SocialProtectedLayout({ session }: { session: Session | null }) {
+    if (!session) return <Navigate to="/login" replace />
+    return <SocialLayout />
 }
 
 function App() {
@@ -101,6 +113,12 @@ function App() {
                                 <Route path="/sem" element={<SEMDashboard />} />
                                 <Route path="/sem/campaigns" element={<SEMCampaigns />} />
                                 <Route path="/sem/keywords" element={<SEMKeywords />} />
+                            </Route>
+                            <Route element={<SocialProtectedLayout session={session} />}>
+                                <Route path="/social" element={<SocialDashboard />} />
+                                <Route path="/social/instagram" element={<InstagramDashboard />} />
+                                <Route path="/social/youtube" element={<YouTubeDashboard />} />
+                                <Route path="/social/facebook" element={<FacebookDashboard />} />
                             </Route>
                         </Routes>
                     </Suspense>
