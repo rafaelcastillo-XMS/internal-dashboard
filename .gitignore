@@ -42,3 +42,4 @@ opentestai-screenshot*
 
 # Supabase local state
 supabase/.temp/
+.pdf-export-*
