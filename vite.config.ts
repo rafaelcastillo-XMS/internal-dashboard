@@ -448,9 +448,59 @@ function semDevPlugin() {
   }
 }
 
+function pdfExportDevPlugin() {
+  return {
+    name: "pdf-export-api",
+    configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.url !== "/api/export/pdf") {
+          next()
+          return
+        }
+
+        if (req.method !== "POST") {
+          sendJson(res, 405, { error: "Method not allowed" })
+          return
+        }
+
+        try {
+          const body = await readJsonBody(req) as {
+            filename?: string
+            payload?: Record<string, unknown>
+          }
+
+          if (!body.payload) {
+            sendJson(res, 400, { error: "payload is required" })
+            return
+          }
+
+          const toolsDir = path.resolve(__dirname, "tools")
+          const tmpDir = fs.mkdtempSync(path.join(process.cwd(), ".pdf-export-"))
+          const inputPath = path.join(tmpDir, "payload.json")
+          const outputPath = path.join(tmpDir, "report.pdf")
+          fs.writeFileSync(inputPath, JSON.stringify(body.payload, null, 2))
+
+          await execFileAsync("python3", [path.join(toolsDir, "pdf_export.py"), "--input", inputPath, "--output", outputPath], {
+            cwd: __dirname,
+            timeout: 60_000,
+          })
+
+          const pdfBuffer = fs.readFileSync(outputPath)
+          sendPdf(res, body.filename || "xms-report.pdf", pdfBuffer)
+          fs.rmSync(tmpDir, { recursive: true, force: true })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "PDF export error"
+          console.error("[pdf-export]", message)
+          sendJson(res, 500, { error: message })
+        }
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin()],
+  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin()],
   server: {},
   build: {
     rollupOptions: {
