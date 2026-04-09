@@ -121,6 +121,13 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown) {
   res.end(JSON.stringify(payload))
 }
 
+function sendPdf(res: ServerResponse, filename: string, payload: Buffer) {
+  res.statusCode = 200
+  res.setHeader("Content-Type", "application/pdf")
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+  res.end(payload)
+}
+
 function notebooklmDevPlugin() {
   return {
     name: "notebooklm-dev-api",
