@@ -195,36 +195,74 @@ async function exportViaBackend(payload: PdfPayload, filename: string): Promise<
 // ─── Fallback: screenshot PDF ─────────────────────────────────────────────────
 
 async function exportViaScreenshot(title: string, filename: string): Promise<void> {
-  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+  const [h2cMod, jspdfMod] = await Promise.all([
     import('html2canvas'),
     import('jspdf'),
   ])
 
-  const element = document.querySelector('main')
+  const html2canvas = h2cMod.default || (h2cMod as any)
+  const jsPDF = jspdfMod.jsPDF || jspdfMod.default || (jspdfMod as any)
+
+  const element = document.querySelector('main') || document.body
   if (!element) return
 
-  const canvas = await html2canvas(element as HTMLElement, {
-    scale: 2,
-    useCORS: true,
-    backgroundColor: '#0F1117',
-    scrollY: -window.scrollY,
-    windowWidth: element.scrollWidth,
-    windowHeight: element.scrollHeight,
-  })
+  const originalScrollY = window.scrollY
+  window.scrollTo(0, 0)
 
-  const imgData = canvas.toDataURL('image/png')
-  const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: 'a4' })
-  const pdfW = pdf.internal.pageSize.getWidth()
-  const pdfH = pdf.internal.pageSize.getHeight()
-  const ratio = Math.min(pdfW / canvas.width, pdfH / canvas.height)
-  const pages = Math.ceil((canvas.height * ratio) / pdfH)
+  try {
+    const canvas = await html2canvas(element as HTMLElement, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#0F1117',
+      logging: false,
+      windowWidth: element.scrollWidth,
+      windowHeight: element.scrollHeight,
+    })
 
-  for (let i = 0; i < pages; i++) {
-    if (i > 0) pdf.addPage()
-    pdf.addImage(imgData, 'PNG', 0, -(i * pdfH), canvas.width * ratio, canvas.height * ratio)
+    const imgData = canvas.toDataURL('image/png')
+    const pdf = new jsPDF({
+      orientation: 'landscape',
+      unit: 'px',
+      format: 'a4',
+      hotfixes: ['px_scaling']
+    })
+
+    pdf.setProperties({
+      title: title,
+      subject: 'XMS Intelligence Report',
+      author: 'XMS Ai Platform',
+      creator: 'XMS Ai Dashboard'
+    })
+
+    const pdfW = pdf.internal.pageSize.getWidth()
+    const pdfH = pdf.internal.pageSize.getHeight()
+
+    // Fit to width, let height spill over multiple pages
+    const ratio = pdfW / canvas.width
+    const canvasImgHeightInPdfUnits = canvas.height * ratio
+    const pages = Math.ceil(canvasImgHeightInPdfUnits / pdfH)
+
+    for (let i = 0; i < pages; i++) {
+      if (i > 0) pdf.addPage()
+      const yOffset = -(i * pdfH)
+      pdf.addImage(
+        imgData,
+        'PNG',
+        0,
+        yOffset,
+        canvas.width * ratio,
+        canvas.height * ratio,
+        undefined,
+        'FAST'
+      )
+    }
+
+    pdf.save(filename)
+  } catch (err) {
+    console.error('[exportPdf] Screenshot export failed:', err)
+  } finally {
+    window.scrollTo(0, originalScrollY)
   }
-
-  pdf.save(filename)
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
