@@ -171,7 +171,7 @@ export function Dashboard() {
                 return (
                   <div
                     key={i}
-                    className="flex flex-col border-r border-stroke last:border-r-0 dark:border-strokedark"
+                    className="flex min-h-0 flex-col border-r border-stroke last:border-r-0 dark:border-strokedark"
                   >
                     <div className="border-b border-stroke p-3 text-center dark:border-strokedark">
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-body dark:text-bodydark">
@@ -187,7 +187,7 @@ export function Dashboard() {
                         {startOfWeek.getDate()}
                       </p>
                     </div>
-                    <div className="flex-1 space-y-2 overflow-y-auto p-2 custom-scrollbar">
+                    <div className="max-h-[180px] space-y-2 overflow-y-auto p-2 custom-scrollbar">
                       {dayEvents.map((event) => (
                         <div
                           key={event.id}
