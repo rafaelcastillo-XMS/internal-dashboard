@@ -46,8 +46,7 @@ export function formatDateLabel(startDate: string, endDate: string) {
   return `${s} – ${e}`
 }
 
-// All API calls go through /api/seo/* which Vite proxies to the Next.js server on port 3000
-export const SEO_API = '/api/seo'
+export const SEO_API = 'https://sjpvyxdyleebhqlmqscy.supabase.co/functions/v1/seo'
 
 const PROPS_KEY    = 'xms_properties'
 const SELECTED_KEY = 'xms_selected'

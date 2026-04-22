@@ -22,7 +22,7 @@ export function formatDateLabel(startDate: string, endDate: string) {
   return `${s} – ${e}`
 }
 
-export const SEM_API = '/api/sem'
+export const SEM_API = 'https://sjpvyxdyleebhqlmqscy.supabase.co/functions/v1/sem'
 
 const ACCOUNTS_KEY = 'xms_sem_accounts'
 const SELECTED_KEY = 'xms_sem_selected'
