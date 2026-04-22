@@ -1,3 +1,4 @@
+import { edgeFetch } from '@/lib/edgeFetch'
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CardDataStats }      from '@/features/seo/components/CardDataStats'
@@ -64,13 +65,13 @@ export function SEODashboard() {
 
       const [gscData, ga4Data, psiData] = await Promise.all([
         state.selectedGscSite
-          ? fetch(`${SEO_API}/gsc?${new URLSearchParams({ ...base, siteUrl: state.selectedGscSite })}`).then((r) => r.json())
+          ? edgeFetch(`${SEO_API}/gsc?${new URLSearchParams({ ...base, siteUrl: state.selectedGscSite })}`).then((r) => r.json())
           : Promise.resolve(EMPTY_DATA.gsc),
         state.selectedGa4Id
-          ? fetch(`${SEO_API}/ga4?${new URLSearchParams({ ...base, propertyId: state.selectedGa4Id })}`).then((r) => r.json())
+          ? edgeFetch(`${SEO_API}/ga4?${new URLSearchParams({ ...base, propertyId: state.selectedGa4Id })}`).then((r) => r.json())
           : Promise.resolve(EMPTY_DATA.ga4),
         state.selectedGscSite
-          ? fetch(`${SEO_API}/psi?${new URLSearchParams({ url: state.selectedGscSite })}`).then((r) => r.json())
+          ? edgeFetch(`${SEO_API}/psi?${new URLSearchParams({ url: state.selectedGscSite })}`).then((r) => r.json())
           : Promise.resolve(EMPTY_DATA.psi),
       ])
 

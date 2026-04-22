@@ -1,3 +1,4 @@
+import { edgeFetch } from '@/lib/edgeFetch'
 import { useState, useEffect, useCallback } from 'react'
 import { CardDataStats }      from '@/features/seo/components/CardDataStats'
 import { QueryRankingsTable } from '@/features/seo/components/QueryRankingsTable'
@@ -44,7 +45,7 @@ export function SEOKeywords() {
     state.setLoading(true)
     try {
       const params = new URLSearchParams({ siteUrl: state.selectedGscSite, startDate: state.dateRange.startDate, endDate: state.dateRange.endDate })
-      const data = await fetch(`${SEO_API}/gsc?${params}`).then((r) => r.json())
+      const data = await edgeFetch(`${SEO_API}/gsc?${params}`).then((r) => r.json())
       const updated = new Date()
       setGsc({ ...EMPTY, ...data })
       cacheSet(cacheKey, { data, lastUpdated: updated.toISOString() })

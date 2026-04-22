@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTrackPageLoading } from '@/context/PageLoadingContext'
+import { edgeFetch } from '@/lib/edgeFetch'
 
 function normalizeDomain(str: string): string {
   return str
@@ -89,7 +90,7 @@ export function useSEODashboardState(defaultPreset = 1) {
 
   useEffect(() => {
     setPropertiesLoading(true)
-    fetch(`${SEO_API}/properties`)
+    edgeFetch(`${SEO_API}/properties`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) { setPropertiesError(d.error); setPropertiesLoaded(true); return }

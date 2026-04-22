@@ -1,3 +1,4 @@
+import { edgeFetch } from '@/lib/edgeFetch'
 import { useState, useCallback, useEffect } from 'react'
 import { CardDataStats }    from '@/features/seo/components/CardDataStats'
 import { DashboardControls } from '@/features/seo/components/DashboardControls'
@@ -128,7 +129,7 @@ export function SEOTraffic() {
     state.setLoading(true)
     try {
       const params = new URLSearchParams({ propertyId: state.selectedGa4Id, startDate: state.dateRange.startDate, endDate: state.dateRange.endDate })
-      const data = await fetch(`${SEO_API}/ga4?${params}`).then((r) => r.json())
+      const data = await edgeFetch(`${SEO_API}/ga4?${params}`).then((r) => r.json())
       const updated = new Date()
       setGa4({ ...EMPTY, ...data })
       cacheSet(cacheKey, { data, lastUpdated: updated.toISOString() })

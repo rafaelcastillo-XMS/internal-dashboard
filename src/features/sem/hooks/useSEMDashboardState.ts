@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTrackPageLoading } from '@/context/PageLoadingContext'
+import { edgeFetch } from '@/lib/edgeFetch'
 
 export const DATE_PRESETS = [
   { label: 'Last 7 Days',  days: 7  },
@@ -66,7 +67,7 @@ export function useSEMDashboardState(defaultPreset = 1) {
   // Load account list on mount
   useEffect(() => {
     setAccountsLoading(true)
-    fetch(`${SEM_API}/accounts`)
+    edgeFetch(`${SEM_API}/accounts`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) { setAccountsError(d.error); return }

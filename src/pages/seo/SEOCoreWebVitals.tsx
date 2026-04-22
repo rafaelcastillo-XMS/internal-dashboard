@@ -1,3 +1,4 @@
+import { edgeFetch } from '@/lib/edgeFetch'
 import { useState, useCallback, useEffect } from 'react'
 import { CoreWebVitals }    from '@/features/seo/components/CoreWebVitals'
 import { DashboardControls } from '@/features/seo/components/DashboardControls'
@@ -49,7 +50,7 @@ export function SEOCoreWebVitals() {
     state.setLoading(true)
     try {
       const params = new URLSearchParams({ url: state.selectedGscSite })
-      const data = await fetch(`${SEO_API}/psi?${params}`).then((r) => r.json())
+      const data = await edgeFetch(`${SEO_API}/psi?${params}`).then((r) => r.json())
       if (data.error) { console.error('[CWV]', data.error); return }
       const updated = new Date()
       setPsi({ ...EMPTY, ...data })

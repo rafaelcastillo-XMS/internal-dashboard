@@ -1,3 +1,4 @@
+import { edgeFetch } from '@/lib/edgeFetch'
 import { useState, useCallback, useEffect } from 'react'
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
 import 'react-loading-skeleton/dist/skeleton.css'
@@ -84,7 +85,7 @@ export function SEMDashboard() {
     state.setLoading(true)
     try {
       const params = new URLSearchParams({ customerId: state.selectedAccountId, start: startDate, end: endDate })
-      const d = await fetch(`${SEM_API}/performance?${params}`).then((r) => r.json())
+      const d = await edgeFetch(`${SEM_API}/performance?${params}`).then((r) => r.json())
       if (d.error) { console.error('[SEM]', d.error); return }
       const updated = new Date()
       setData(d)

@@ -1,3 +1,4 @@
+import { edgeFetch } from '@/lib/edgeFetch'
 import { useState, useCallback, useEffect } from 'react'
 import { DashboardControls } from '@/features/seo/components/DashboardControls'
 import { useSEODashboardState, SEO_API } from '@/features/seo/hooks/useSEODashboardState'
@@ -36,7 +37,7 @@ export function SEOMobile() {
     state.setLoading(true)
     try {
       const params = new URLSearchParams({ url: state.selectedGscSite })
-      const data = await fetch(`${SEO_API}/psi?${params}`).then((r) => r.json())
+      const data = await edgeFetch(`${SEO_API}/psi?${params}`).then((r) => r.json())
       if (data.error) { console.error('[Mobile]', data.error); return }
       const updated = new Date()
       setPsi({ ...EMPTY, ...data })
