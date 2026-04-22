@@ -159,53 +159,51 @@ export function Dashboard() {
                 <ChevronRight className="h-3 w-3" />
               </button>
             </div>
-            <div className="flex min-h-0 flex-1 grid-cols-7 border-t border-stroke dark:border-strokedark sm:grid">
+            {/* Day headers — fixed, not scrollable */}
+            <div className="grid grid-cols-7 border-t border-stroke dark:border-strokedark">
+              {Array.from({ length: 7 }).map((_, i) => {
+                const currentDayOfWeek = today.getDay()
+                const startOfWeek = new Date(today)
+                startOfWeek.setDate(today.getDate() - currentDayOfWeek + i)
+                const dateStr = formatIsoDate(startOfWeek)
+                const isCurrentDay = dateStr === todayStr
+                return (
+                  <div key={i} className="border-b border-r border-stroke p-3 text-center last:border-r-0 dark:border-strokedark">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-body dark:text-bodydark">
+                      {new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(startOfWeek)}
+                    </p>
+                    <p className={`mx-auto mt-1 flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${isCurrentDay ? "bg-[#1A72D9] text-white shadow-card" : "text-black dark:text-white"}`}>
+                      {startOfWeek.getDate()}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Events area — single shared scrollbar for all days */}
+            <div className="grid max-h-[180px] grid-cols-7 overflow-y-auto custom-scrollbar">
               {Array.from({ length: 7 }).map((_, i) => {
                 const currentDayOfWeek = today.getDay()
                 const startOfWeek = new Date(today)
                 startOfWeek.setDate(today.getDate() - currentDayOfWeek + i)
                 const dateStr = formatIsoDate(startOfWeek)
                 const dayEvents = events.filter((e) => e.date === dateStr)
-                const isCurrentDay = dateStr === todayStr
-
                 return (
-                  <div
-                    key={i}
-                    className="flex min-h-0 flex-col border-r border-stroke last:border-r-0 dark:border-strokedark"
-                  >
-                    <div className="border-b border-stroke p-3 text-center dark:border-strokedark">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-body dark:text-bodydark">
-                        {new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(startOfWeek)}
-                      </p>
-                      <p
-                        className={`mx-auto mt-1 flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
-                          isCurrentDay
-                            ? "bg-[#1A72D9] text-white shadow-card"
-                            : "text-black dark:text-white"
-                        }`}
+                  <div key={i} className="space-y-2 border-r border-stroke p-2 last:border-r-0 dark:border-strokedark">
+                    {dayEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        className={`${surfaceClass} group relative cursor-pointer overflow-hidden p-2 text-xs transition-colors hover:bg-gray dark:hover:bg-meta-4/60`}
                       >
-                        {startOfWeek.getDate()}
-                      </p>
-                    </div>
-                    <div className="max-h-[180px] space-y-2 overflow-y-auto p-2 custom-scrollbar">
-                      {dayEvents.map((event) => (
-                        <div
-                          key={event.id}
-                          className={`${surfaceClass} group relative cursor-pointer overflow-hidden p-2 text-xs transition-colors hover:bg-gray dark:hover:bg-meta-4/60`}
-                        >
-                          <div className={`absolute bottom-0 left-0 top-0 w-[3px] ${event.color || "bg-[#1A72D9]"}`} />
-                          <div className="pl-1">
-                            <p className="truncate font-semibold text-black dark:text-white">
-                              {event.title}
-                            </p>
-                            <p className="mt-1 flex items-center gap-1 text-[10px] text-body dark:text-bodydark">
-                              <Clock className="h-3 w-3 shrink-0" />
-                              {event.time}
-                            </p>
-                          </div>
+                        <div className={`absolute bottom-0 left-0 top-0 w-[3px] ${event.color || "bg-[#1A72D9]"}`} />
+                        <div className="pl-1">
+                          <p className="truncate font-semibold text-black dark:text-white">{event.title}</p>
+                          <p className="mt-1 flex items-center gap-1 text-[10px] text-body dark:text-bodydark">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            {event.time}
+                          </p>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
                 )
               })}
