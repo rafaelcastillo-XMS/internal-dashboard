@@ -65,11 +65,12 @@ export function useSEMDashboardState(defaultPreset = 1) {
   // Load account list from Supabase table on mount
   useEffect(() => {
     setAccountsLoading(true)
-    supabase
-      .from('sem_accounts')
-      .select('id, name, currency, timezone, status')
-      .order('name')
-      .then(({ data, error }) => {
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('sem_accounts')
+          .select('id, name, currency, timezone, status')
+          .order('name')
         if (error) { setAccountsError(error.message); return }
         const list: AdsAccount[] = data || []
         setAccounts(list)
@@ -77,9 +78,12 @@ export function useSEMDashboardState(defaultPreset = 1) {
         const enabled = list.filter((a) => a.status === 'ENABLED')
         const fallback = enabled[0]?.id || list[0]?.id || ''
         setSelectedAccountIdRaw((prev) => list.some((a) => a.id === prev) ? prev : fallback)
-      })
-      .catch((err: Error) => setAccountsError(err.message))
-      .finally(() => setAccountsLoading(false))
+      } catch (err) {
+        setAccountsError((err as Error).message)
+      } finally {
+        setAccountsLoading(false)
+      }
+    })()
   }, [])
 
   // Persist selection + notify sidebar
