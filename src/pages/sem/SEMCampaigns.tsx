@@ -1,10 +1,10 @@
-import { edgeFetch } from '@/lib/edgeFetch'
 import { useState, useCallback, useEffect } from 'react'
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
 import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
-import { useSEMDashboardState, SEM_API, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
+import { useSEMDashboardState, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
+import { supabase } from '@/lib/supabase'
 
 interface Campaign {
   id:                  string
@@ -61,23 +61,39 @@ export function SEMCampaigns() {
 
   const fetchData = useCallback(async (force = false) => {
     if (!state.selectedAccountId) return
-    const { startDate, endDate } = state.dateRange
-    const cacheKey = `campaigns:${state.selectedAccountId}:${startDate}:${endDate}`
+    const cacheKey = `campaigns:${state.selectedAccountId}:${state.rangeKey}`
     if (!force) {
       const cached = cacheGet<{ data: Campaign[]; lastUpdated: string }>(cacheKey)
       if (cached) { setCampaigns(cached.data); state.setLastUpdated(new Date(cached.lastUpdated)); return }
     }
     state.setLoading(true)
     try {
-      const params = new URLSearchParams({ customerId: state.selectedAccountId, start: startDate, end: endDate })
-      const d = await edgeFetch(`${SEM_API}/performance?${params}`).then((r) => r.json())
-      if (d.error) { console.error('[SEM Campaigns]', d.error); return }
+      const { data, error } = await supabase
+        .from('sem_campaigns')
+        .select('campaign_id,campaign_name,status,impressions,clicks,cost,ctr,avg_cpc,conversions,cost_per_conversion')
+        .eq('account_id', state.selectedAccountId)
+        .eq('date_range', state.rangeKey)
+        .order('cost', { ascending: false })
+        .limit(100)
+      if (error) { console.error('[SEM Campaigns]', error.message); return }
+      const rows: Campaign[] = (data || []).map((r) => ({
+        id: r.campaign_id,
+        name: r.campaign_name,
+        status: r.status,
+        impressions: r.impressions,
+        clicks: r.clicks,
+        cost: r.cost,
+        ctr: r.ctr,
+        avg_cpc: r.avg_cpc,
+        conversions: r.conversions,
+        cost_per_conversion: r.cost_per_conversion,
+      }))
       const updated = new Date()
-      setCampaigns(d.campaigns || [])
-      cacheSet(cacheKey, { data: d.campaigns || [], lastUpdated: updated.toISOString() })
+      setCampaigns(rows)
+      cacheSet(cacheKey, { data: rows, lastUpdated: updated.toISOString() })
       state.setLastUpdated(updated)
     } catch (err) { console.error('[SEM Campaigns]', err) } finally { state.setLoading(false) }
-  }, [state.selectedAccountId, state.dateRange])
+  }, [state.selectedAccountId, state.rangeKey])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -151,7 +167,7 @@ export function SEMCampaigns() {
         ) : sorted.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <p className="text-sm text-body dark:text-bodydark">
-              {state.selectedAccountId ? 'No campaign data for this period.' : 'Select an account and click Refresh.'}
+              {state.selectedAccountId ? 'No campaign data for this period. Make sure the sync script has run.' : 'Select an account to load data.'}
             </p>
           </div>
         ) : (

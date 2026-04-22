@@ -72,7 +72,7 @@ def fetch_accounts(ga_service, mcc_id):
           customer_client.level,
           customer_client.manager
         FROM customer_client
-        WHERE customer_client.level = 1
+        WHERE customer_client.level <= 1
           AND customer_client.manager = false
     """
     accounts = []
@@ -206,7 +206,14 @@ def main():
                 print(f"    Saved {len(campaigns)} campaigns")
 
             if keywords:
-                rows = [{"account_id": cid, "date_range": range_label, **k} for k in keywords]
+                seen = set()
+                deduped = []
+                for k in keywords:
+                    key = (k["keyword_text"], k["match_type"])
+                    if key not in seen:
+                        seen.add(key)
+                        deduped.append(k)
+                rows = [{"account_id": cid, "date_range": range_label, **k} for k in deduped]
                 sb.table("sem_keywords").upsert(rows).execute()
                 print(f"    Saved {len(keywords)} keywords")
 

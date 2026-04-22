@@ -1,20 +1,10 @@
-import { edgeFetch } from '@/lib/edgeFetch'
 import { useState, useCallback, useEffect } from 'react'
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
 import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
-import { useSEMDashboardState, SEM_API, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
+import { useSEMDashboardState, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
-
-interface Summary {
-  impressions:         number
-  clicks:              number
-  cost:                number
-  ctr:                 number
-  avg_cpc:             number
-  conversions:         number
-  cost_per_conversion: number
-}
+import { supabase } from '@/lib/supabase'
 
 interface Campaign {
   id:                  string
@@ -29,17 +19,17 @@ interface Campaign {
   cost_per_conversion: number
 }
 
-interface AdsData {
-  summary:   Summary
-  campaigns: Campaign[]
-  dateRange: { start: string; end: string }
+interface Summary {
+  impressions:         number
+  clicks:              number
+  cost:                number
+  ctr:                 number
+  avg_cpc:             number
+  conversions:         number
+  cost_per_conversion: number
 }
 
-const EMPTY: AdsData = {
-  summary: { impressions: 0, clicks: 0, cost: 0, ctr: 0, avg_cpc: 0, conversions: 0, cost_per_conversion: 0 },
-  campaigns: [],
-  dateRange: { start: '', end: '' },
-}
+const EMPTY_SUMMARY: Summary = { impressions: 0, clicks: 0, cost: 0, ctr: 0, avg_cpc: 0, conversions: 0, cost_per_conversion: 0 }
 
 function fmt(n: number, decimals = 0) {
   return n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
@@ -70,34 +60,61 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+function summarize(campaigns: Campaign[]): Summary {
+  const impressions = campaigns.reduce((s, c) => s + c.impressions, 0)
+  const clicks = campaigns.reduce((s, c) => s + c.clicks, 0)
+  const cost = Math.round(campaigns.reduce((s, c) => s + c.cost, 0) * 100) / 100
+  const conversions = Math.round(campaigns.reduce((s, c) => s + c.conversions, 0) * 10) / 10
+  const ctr = impressions > 0 ? Math.round((clicks / impressions) * 10000) / 100 : 0
+  const avg_cpc = clicks > 0 ? Math.round((cost / clicks) * 100) / 100 : 0
+  const cost_per_conversion = conversions > 0 ? Math.round((cost / conversions) * 100) / 100 : 0
+  return { impressions, clicks, cost, ctr, avg_cpc, conversions, cost_per_conversion }
+}
+
 export function SEMDashboard() {
   const state = useSEMDashboardState()
-  const [data, setData] = useState<AdsData>(EMPTY)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
 
   const fetchData = useCallback(async (force = false) => {
     if (!state.selectedAccountId) return
-    const { startDate, endDate } = state.dateRange
-    const cacheKey = `dashboard:${state.selectedAccountId}:${startDate}:${endDate}`
+    const cacheKey = `dashboard:${state.selectedAccountId}:${state.rangeKey}`
     if (!force) {
-      const cached = cacheGet<{ data: AdsData; lastUpdated: string }>(cacheKey)
-      if (cached) { setData(cached.data); state.setLastUpdated(new Date(cached.lastUpdated)); return }
+      const cached = cacheGet<{ data: Campaign[]; lastUpdated: string }>(cacheKey)
+      if (cached) { setCampaigns(cached.data); state.setLastUpdated(new Date(cached.lastUpdated)); return }
     }
     state.setLoading(true)
     try {
-      const params = new URLSearchParams({ customerId: state.selectedAccountId, start: startDate, end: endDate })
-      const d = await edgeFetch(`${SEM_API}/performance?${params}`).then((r) => r.json())
-      if (d.error) { console.error('[SEM]', d.error); return }
+      const { data, error } = await supabase
+        .from('sem_campaigns')
+        .select('campaign_id,campaign_name,status,impressions,clicks,cost,ctr,avg_cpc,conversions,cost_per_conversion')
+        .eq('account_id', state.selectedAccountId)
+        .eq('date_range', state.rangeKey)
+        .order('cost', { ascending: false })
+        .limit(100)
+      if (error) { console.error('[SEM]', error.message); return }
+      const rows: Campaign[] = (data || []).map((r) => ({
+        id: r.campaign_id,
+        name: r.campaign_name,
+        status: r.status,
+        impressions: r.impressions,
+        clicks: r.clicks,
+        cost: r.cost,
+        ctr: r.ctr,
+        avg_cpc: r.avg_cpc,
+        conversions: r.conversions,
+        cost_per_conversion: r.cost_per_conversion,
+      }))
       const updated = new Date()
-      setData(d)
-      cacheSet(cacheKey, { data: d, lastUpdated: updated.toISOString() })
+      setCampaigns(rows)
+      cacheSet(cacheKey, { data: rows, lastUpdated: updated.toISOString() })
       state.setLastUpdated(updated)
     } catch (err) { console.error('[SEM]', err) } finally { state.setLoading(false) }
-  }, [state.selectedAccountId, state.dateRange])
+  }, [state.selectedAccountId, state.rangeKey])
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const s = data.summary
-  const topCampaigns = [...data.campaigns].slice(0, 8)
+  const summary = summarize(campaigns)
+  const topCampaigns = campaigns.slice(0, 8)
   const isDark = document.documentElement.classList.contains('dark')
 
   return (
@@ -107,7 +124,6 @@ export function SEMDashboard() {
       borderRadius={8}
     >
     <div className="mx-auto max-w-screen-2xl p-6">
-      {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-black dark:text-white">
@@ -128,7 +144,6 @@ export function SEMDashboard() {
         />
       </div>
 
-      {/* Summary cards */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-7">
         {state.loading ? (
           [...Array(7)].map((_, i) => (
@@ -139,27 +154,26 @@ export function SEMDashboard() {
           ))
         ) : (
           <>
-            <MetricCard label="Impressions"   value={fmt(s.impressions)} />
-            <MetricCard label="Clicks"        value={fmt(s.clicks)} />
-            <MetricCard label="CTR"           value={`${fmt(s.ctr, 2)}%`} />
-            <MetricCard label="Avg CPC"       value={fmtCurrency(s.avg_cpc)} />
-            <MetricCard label="Total Spend"   value={fmtCurrency(s.cost)} />
-            <MetricCard label="Conversions"   value={fmt(s.conversions, 1)} />
-            <MetricCard label="Cost / Conv."  value={s.conversions > 0 ? fmtCurrency(s.cost_per_conversion) : '—'} />
+            <MetricCard label="Impressions"   value={fmt(summary.impressions)} />
+            <MetricCard label="Clicks"        value={fmt(summary.clicks)} />
+            <MetricCard label="CTR"           value={`${fmt(summary.ctr, 2)}%`} />
+            <MetricCard label="Avg CPC"       value={fmtCurrency(summary.avg_cpc)} />
+            <MetricCard label="Total Spend"   value={fmtCurrency(summary.cost)} />
+            <MetricCard label="Conversions"   value={fmt(summary.conversions, 1)} />
+            <MetricCard label="Cost / Conv."  value={summary.conversions > 0 ? fmtCurrency(summary.cost_per_conversion) : '—'} />
           </>
         )}
       </div>
 
-      {/* Campaigns table */}
       <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
         <div className="border-b border-stroke px-6 py-5 dark:border-strokedark flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-black dark:text-white">Top Campaigns</h3>
             <p className="mt-0.5 text-xs text-body dark:text-bodydark">Sorted by spend — {state.dateRange.startDate ? formatDateLabel(state.dateRange.startDate, state.dateRange.endDate) : '—'}</p>
           </div>
-          {!state.loading && data.campaigns.length > 0 && (
+          {!state.loading && campaigns.length > 0 && (
             <span className="rounded-full bg-stroke/50 px-2.5 py-1 text-xs font-semibold text-body dark:text-bodydark dark:bg-strokedark">
-              {data.campaigns.length} campaigns
+              {campaigns.length} campaigns
             </span>
           )}
         </div>
@@ -181,7 +195,7 @@ export function SEMDashboard() {
         ) : topCampaigns.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <p className="text-sm text-body dark:text-bodydark">
-              {state.selectedAccountId ? 'No campaign data for this period.' : 'Select an account and click Refresh to load data.'}
+              {state.selectedAccountId ? 'No campaign data for this period. Make sure the sync script has run.' : 'Select an account to load data.'}
             </p>
           </div>
         ) : (

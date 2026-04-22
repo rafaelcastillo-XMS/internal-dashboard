@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useTrackPageLoading } from '@/context/PageLoadingContext'
-import { edgeFetch } from '@/lib/edgeFetch'
+import { supabase } from '@/lib/supabase'
 
 export const DATE_PRESETS = [
-  { label: 'Last 7 Days',  days: 7  },
-  { label: 'Last 30 Days', days: 30 },
-  { label: 'Last 90 Days', days: 90 },
+  { label: 'Last 7 Days',  days: 7,  rangeKey: 'last_7'  },
+  { label: 'Last 30 Days', days: 30, rangeKey: 'last_30' },
+  { label: 'Last 90 Days', days: 90, rangeKey: 'last_90' },
 ]
 
 export function getDateRange(days: number) {
@@ -22,8 +22,6 @@ export function formatDateLabel(startDate: string, endDate: string) {
   const e = new Date(endDate).toLocaleDateString('en-US', opts)
   return `${s} – ${e}`
 }
-
-export const SEM_API = 'https://sjpvyxdyleebhqlmqscy.supabase.co/functions/v1/sem'
 
 const ACCOUNTS_KEY = 'xms_sem_accounts'
 const SELECTED_KEY = 'xms_sem_selected'
@@ -64,14 +62,16 @@ export function useSEMDashboardState(defaultPreset = 1) {
     return cached[0]?.id || ''
   })
 
-  // Load account list on mount
+  // Load account list from Supabase table on mount
   useEffect(() => {
     setAccountsLoading(true)
-    edgeFetch(`${SEM_API}/accounts`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) { setAccountsError(d.error); return }
-        const list: AdsAccount[] = d.accounts || []
+    supabase
+      .from('sem_accounts')
+      .select('id, name, currency, timezone, status')
+      .order('name')
+      .then(({ data, error }) => {
+        if (error) { setAccountsError(error.message); return }
+        const list: AdsAccount[] = data || []
         setAccounts(list)
         ssSet(ACCOUNTS_KEY, list)
         const enabled = list.filter((a) => a.status === 'ENABLED')
@@ -107,9 +107,12 @@ export function useSEMDashboardState(defaultPreset = 1) {
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null
 
+  const rangeKey = DATE_PRESETS[selectedPreset].rangeKey
+
   return {
     selectedPreset,
     dateRange,
+    rangeKey,
     loading, setLoading,
     lastUpdated, setLastUpdated,
     accountsError,

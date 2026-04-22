@@ -1,10 +1,10 @@
-import { edgeFetch } from '@/lib/edgeFetch'
 import { useState, useCallback, useEffect } from 'react'
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
 import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
-import { useSEMDashboardState, SEM_API, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
+import { useSEMDashboardState, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
+import { supabase } from '@/lib/supabase'
 
 interface Keyword {
   text:          string
@@ -68,23 +68,38 @@ export function SEMKeywords() {
 
   const fetchData = useCallback(async (force = false) => {
     if (!state.selectedAccountId) return
-    const { startDate, endDate } = state.dateRange
-    const cacheKey = `keywords:${state.selectedAccountId}:${startDate}:${endDate}`
+    const cacheKey = `keywords:${state.selectedAccountId}:${state.rangeKey}`
     if (!force) {
       const cached = cacheGet<{ data: Keyword[]; lastUpdated: string }>(cacheKey)
       if (cached) { setKeywords(cached.data); state.setLastUpdated(new Date(cached.lastUpdated)); return }
     }
     state.setLoading(true)
     try {
-      const params = new URLSearchParams({ customerId: state.selectedAccountId, start: startDate, end: endDate })
-      const d = await edgeFetch(`${SEM_API}/performance?${params}`).then((r) => r.json())
-      if (d.error) { console.error('[SEM Keywords]', d.error); return }
+      const { data, error } = await supabase
+        .from('sem_keywords')
+        .select('keyword_text,match_type,quality_score,impressions,clicks,cost,ctr,avg_cpc,conversions')
+        .eq('account_id', state.selectedAccountId)
+        .eq('date_range', state.rangeKey)
+        .order('cost', { ascending: false })
+        .limit(100)
+      if (error) { console.error('[SEM Keywords]', error.message); return }
+      const rows: Keyword[] = (data || []).map((r) => ({
+        text: r.keyword_text,
+        match_type: r.match_type,
+        quality_score: r.quality_score,
+        impressions: r.impressions,
+        clicks: r.clicks,
+        cost: r.cost,
+        ctr: r.ctr,
+        avg_cpc: r.avg_cpc,
+        conversions: r.conversions,
+      }))
       const updated = new Date()
-      setKeywords(d.keywords || [])
-      cacheSet(cacheKey, { data: d.keywords || [], lastUpdated: updated.toISOString() })
+      setKeywords(rows)
+      cacheSet(cacheKey, { data: rows, lastUpdated: updated.toISOString() })
       state.setLastUpdated(updated)
     } catch (err) { console.error('[SEM Keywords]', err) } finally { state.setLoading(false) }
-  }, [state.selectedAccountId, state.dateRange])
+  }, [state.selectedAccountId, state.rangeKey])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -128,7 +143,6 @@ export function SEMKeywords() {
         <DashboardControls {...state} onRefresh={() => fetchData(true)} pageTitle="SEM-Keywords" />
       </div>
 
-      {/* Quality score legend */}
       <div className="mb-4 flex flex-wrap gap-3">
         {[{ label: 'Good (7–10)', color: 'text-meta-3' }, { label: 'Fair (5–6)', color: 'text-warning' }, { label: 'Poor (1–4)', color: 'text-danger' }].map((item) => (
           <div key={item.label} className="flex items-center gap-1.5 text-xs text-body dark:text-bodydark">
@@ -175,7 +189,7 @@ export function SEMKeywords() {
         ) : sorted.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <p className="text-sm text-body dark:text-bodydark">
-              {state.selectedAccountId ? 'No keyword data for this period.' : 'Select an account and click Refresh.'}
+              {state.selectedAccountId ? 'No keyword data for this period. Make sure the sync script has run.' : 'Select an account to load data.'}
             </p>
           </div>
         ) : (
