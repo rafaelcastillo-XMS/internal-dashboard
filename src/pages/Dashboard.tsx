@@ -180,7 +180,7 @@ export function Dashboard() {
               })}
             </div>
             {/* Events area — single shared scrollbar for all days */}
-            <div className="grid max-h-[180px] grid-cols-7 overflow-y-auto custom-scrollbar">
+            <div className="grid grid-cols-7 overflow-y-auto custom-scrollbar">
               {Array.from({ length: 7 }).map((_, i) => {
                 const currentDayOfWeek = today.getDay()
                 const startOfWeek = new Date(today)
@@ -212,152 +212,149 @@ export function Dashboard() {
         </div>
 
         <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-4">
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.28 }}
-          className={`${panelClass} xl:col-span-2`}
-          aria-label="My tasks"
-        >
-          <div className={panelHeaderClass}>
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
-                <CheckSquare className="h-4 w-4 text-[#1A72D9]" />
-                My Tasks
-              </h2>
-              <p className="mt-0.5 text-xs text-body dark:text-bodydark">Task execution and completion rhythm</p>
-            </div>
-            <button
-              onClick={() => navigate("/tasks")}
-              className="flex items-center gap-1 text-xs font-medium text-body transition-colors hover:text-[#1A72D9] dark:text-bodydark dark:hover:text-white"
-            >
-              View all
-              <ChevronRight className="h-3 w-3" />
-            </button>
-          </div>
-
-          <div className={panelBodyClass}>
-            <div className={`${surfaceClass} mb-4 p-4`}>
-              <div className="mb-2 flex items-center justify-between text-xs text-body dark:text-bodydark">
-                <span>
-                  {doneTasks} of {totalTasks} tasks done
-                </span>
-                <span className="font-semibold tabular-nums text-black dark:text-white">{completionRate}%</span>
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.28 }}
+            className={`${panelClass} xl:col-span-2`}
+            aria-label="My tasks"
+          >
+            <div className={panelHeaderClass}>
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
+                  <CheckSquare className="h-4 w-4 text-[#1A72D9]" />
+                  My Tasks
+                </h2>
+                <p className="mt-0.5 text-xs text-body dark:text-bodydark">Task execution and completion rhythm</p>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-stroke dark:bg-strokedark">
-                <div
-                  className="h-full rounded-full bg-[#1A72D9] transition-all"
-                  style={{ width: `${completionRate}%` }}
-                />
+              <button
+                onClick={() => navigate("/tasks")}
+                className="flex items-center gap-1 text-xs font-medium text-body transition-colors hover:text-[#1A72D9] dark:text-bodydark dark:hover:text-white"
+              >
+                View all
+                <ChevronRight className="h-3 w-3" />
+              </button>
+            </div>
+
+            <div className={panelBodyClass}>
+              <div className={`${surfaceClass} mb-4 p-4`}>
+                <div className="mb-2 flex items-center justify-between text-xs text-body dark:text-bodydark">
+                  <span>
+                    {doneTasks} of {totalTasks} tasks done
+                  </span>
+                  <span className="font-semibold tabular-nums text-black dark:text-white">{completionRate}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-stroke dark:bg-strokedark">
+                  <div
+                    className="h-full rounded-full bg-[#1A72D9] transition-all"
+                    style={{ width: `${completionRate}%` }}
+                  />
+                </div>
               </div>
-            </div>
 
-            <ul className="space-y-2">
-              {tasks.slice(0, 5).map((task) => (
-                <li key={task.id}>
-                  <button
-                    onClick={() => navigate("/tasks")}
-                    className={`${surfaceClass} flex w-full items-center gap-3 p-4 text-left transition-colors hover:border-[#1A72D9]/30 hover:bg-gray dark:hover:bg-meta-4/60`}
-                  >
-                    <div
-                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                        task.status === "done"
-                          ? "bg-meta-3"
-                          : task.status === "in-progress"
-                            ? "bg-warning"
-                            : "bg-body"
-                      }`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={`truncate text-sm font-semibold ${
-                          task.status === "done"
-                            ? "text-body line-through dark:text-bodydark"
-                            : "text-black dark:text-white"
-                        }`}
-                      >
-                        {task.title}
-                      </p>
-                      <p className="mt-1 text-xs text-body dark:text-bodydark">{task.client}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                          task.priority === "high"
-                            ? "bg-danger/10 text-danger"
-                            : task.priority === "medium"
-                              ? "bg-warning/10 text-warning"
-                              : "bg-stroke/50 text-body dark:bg-strokedark dark:text-bodydark"
-                        }`}
-                      >
-                        {task.priority}
-                      </span>
-                      {task.status === "done" ? (
-                        <CheckCircle2 className="h-4 w-4 text-meta-3" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-body dark:text-bodydark" />
-                      )}
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </motion.section>
-
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.33 }}
-          className={`${panelClass} xl:col-span-2`}
-          aria-label="Weekly performance"
-        >
-          <div className={panelHeaderClass}>
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
-                <BarChart2 className="h-4 w-4 text-[#1A72D9]" />
-                Weekly Performance
-              </h2>
-              <p className="mt-0.5 text-xs text-body dark:text-bodydark">Task activity distribution across the week</p>
-            </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-meta-3/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-meta-3">
-              <TrendingUp className="h-3 w-3" />
-              +18%
-            </span>
-          </div>
-
-          <div className={panelBodyClass}>
-            <div className={`${surfaceClass} p-4`}>
-              <div className="flex h-64 items-end gap-3">
-                {weeklyData.map((value, index) => (
-                  <div key={weekDays[index]} className="group flex flex-1 flex-col items-center gap-2">
-                    <span className="text-[10px] font-semibold text-body opacity-0 transition-opacity group-hover:opacity-100 dark:text-bodydark">
-                      {value}%
-                    </span>
-                    <div className="flex h-[180px] w-full items-end justify-center rounded-lg bg-white px-2 py-2 dark:bg-boxdark-2">
+              <ul className="space-y-2">
+                {tasks.slice(0, 5).map((task) => (
+                  <li key={task.id}>
+                    <button
+                      onClick={() => navigate("/tasks")}
+                      className={`${surfaceClass} flex w-full items-center gap-3 p-4 text-left transition-colors hover:border-[#1A72D9]/30 hover:bg-gray dark:hover:bg-meta-4/60`}
+                    >
                       <div
-                        className="w-full rounded-t-lg bg-[#1A72D9]/80 transition-colors group-hover:bg-[#1A72D9]"
-                        style={{ height: `${(value / maxVal) * 100}%` }}
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${task.status === "done"
+                            ? "bg-meta-3"
+                            : task.status === "in-progress"
+                              ? "bg-warning"
+                              : "bg-body"
+                          }`}
                       />
-                    </div>
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-body dark:text-bodydark">
-                      {weekDays[index]}
-                    </span>
-                  </div>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`truncate text-sm font-semibold ${task.status === "done"
+                              ? "text-body line-through dark:text-bodydark"
+                              : "text-black dark:text-white"
+                            }`}
+                        >
+                          {task.title}
+                        </p>
+                        <p className="mt-1 text-xs text-body dark:text-bodydark">{task.client}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${task.priority === "high"
+                              ? "bg-danger/10 text-danger"
+                              : task.priority === "medium"
+                                ? "bg-warning/10 text-warning"
+                                : "bg-stroke/50 text-body dark:bg-strokedark dark:text-bodydark"
+                            }`}
+                        >
+                          {task.priority}
+                        </span>
+                        {task.status === "done" ? (
+                          <CheckCircle2 className="h-4 w-4 text-meta-3" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-body dark:text-bodydark" />
+                        )}
+                      </div>
+                    </button>
+                  </li>
                 ))}
+              </ul>
+            </div>
+          </motion.section>
+
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.33 }}
+            className={`${panelClass} xl:col-span-2`}
+            aria-label="Weekly performance"
+          >
+            <div className={panelHeaderClass}>
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
+                  <BarChart2 className="h-4 w-4 text-[#1A72D9]" />
+                  Weekly Performance
+                </h2>
+                <p className="mt-0.5 text-xs text-body dark:text-bodydark">Task activity distribution across the week</p>
               </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-meta-3/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-meta-3">
+                <TrendingUp className="h-3 w-3" />
+                +18%
+              </span>
             </div>
 
-            <div className="mt-4 flex items-center justify-between border-t border-stroke pt-4 text-xs text-body dark:border-strokedark dark:text-bodydark">
-              <span>
-                Avg: <strong className="tabular-nums text-black dark:text-white">{weeklyAverage}%</strong>
-              </span>
-              <span>
-                Peak: <strong className="tabular-nums text-[#1A72D9]">{maxVal}%</strong>
-              </span>
+            <div className={panelBodyClass}>
+              <div className={`${surfaceClass} p-4`}>
+                <div className="flex h-64 items-end gap-3">
+                  {weeklyData.map((value, index) => (
+                    <div key={weekDays[index]} className="group flex flex-1 flex-col items-center gap-2">
+                      <span className="text-[10px] font-semibold text-body opacity-0 transition-opacity group-hover:opacity-100 dark:text-bodydark">
+                        {value}%
+                      </span>
+                      <div className="flex h-[180px] w-full items-end justify-center rounded-lg bg-white px-2 py-2 dark:bg-boxdark-2">
+                        <div
+                          className="w-full rounded-t-lg bg-[#1A72D9]/80 transition-colors group-hover:bg-[#1A72D9]"
+                          style={{ height: `${(value / maxVal) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-body dark:text-bodydark">
+                        {weekDays[index]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-stroke pt-4 text-xs text-body dark:border-strokedark dark:text-bodydark">
+                <span>
+                  Avg: <strong className="tabular-nums text-black dark:text-white">{weeklyAverage}%</strong>
+                </span>
+                <span>
+                  Peak: <strong className="tabular-nums text-[#1A72D9]">{maxVal}%</strong>
+                </span>
+              </div>
             </div>
-          </div>
-        </motion.section>
+          </motion.section>
         </div>
 
       </div>
