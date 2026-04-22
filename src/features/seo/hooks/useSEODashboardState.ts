@@ -94,10 +94,14 @@ export function useSEODashboardState(defaultPreset = 1) {
       .then((r) => r.json())
       .then((d) => {
         if (d.error) { setPropertiesError(d.error); setPropertiesLoaded(true); return }
-        setProperties(d)
-        ssSet(PROPS_KEY, d)
-        setSelectedGscSite((prev) => prev || d.gscSites?.[0]?.url || '')
-        setSelectedGa4Id((prev)   => prev || d.ga4Properties?.[0]?.id || '')
+        const next = {
+          gscSites: Array.isArray(d.gscSites) ? d.gscSites : [],
+          ga4Properties: Array.isArray(d.ga4Properties) ? d.ga4Properties : [],
+        }
+        setProperties(next)
+        ssSet(PROPS_KEY, next)
+        setSelectedGscSite((prev) => next.gscSites.some((s: { url: string }) => s.url === prev) ? prev : next.gscSites[0]?.url || '')
+        setSelectedGa4Id((prev)   => next.ga4Properties.some((p: { id: string }) => p.id === prev) ? prev : next.ga4Properties[0]?.id || '')
         setPropertiesLoaded(true)
       })
       .catch((err: Error) => { setPropertiesError(err.message); setPropertiesLoaded(true) })
@@ -115,7 +119,7 @@ export function useSEODashboardState(defaultPreset = 1) {
   useEffect(() => {
     if (!selectedGscSite || !properties.ga4Properties.length) return
     const saved = ssGet(SELECTED_KEY)
-    if (saved?.ga4) return // respect saved preference
+    if (saved?.ga4 && properties.ga4Properties.some((p) => p.id === saved.ga4)) return // respect valid saved preference
     const match = findBestGa4Match(selectedGscSite, properties.ga4Properties)
     if (match) setSelectedGa4Id(match)
   }, [properties.ga4Properties]) // eslint-disable-line react-hooks/exhaustive-deps

@@ -128,6 +128,174 @@ function sendPdf(res: ServerResponse, filename: string, payload: Buffer) {
   res.end(payload)
 }
 
+type GoogleTokenStatus = {
+  connected: boolean
+  email: string | null
+  requiredEmail: string
+  allowed: boolean
+}
+
+const GOOGLE_API_SCOPES = [
+  "https://www.googleapis.com/auth/webmasters.readonly",
+  "https://www.googleapis.com/auth/analytics.readonly",
+  "https://www.googleapis.com/auth/adwords",
+]
+const GOOGLE_REDIRECT_URI = "http://localhost:5173/api/auth/google/callback"
+const GOOGLE_TOKEN_PATH = path.resolve(__dirname, "token.json")
+const GOOGLE_CREDS_PATH = path.resolve(__dirname, "credentials.json")
+function normalizeGoogleEmail(input: string) {
+  const email = input.trim().toLowerCase()
+  return email.endsWith("@xperienceusa") ? `${email}.com` : email
+}
+
+const REQUIRED_GOOGLE_EMAIL = normalizeGoogleEmail(process.env.GOOGLE_REQUIRED_EMAIL ?? "eva@xperienceusa.com")
+const TOKEN_STATUS_CACHE_TTL_MS = 30_000
+let tokenStatusCache: { at: number; status: GoogleTokenStatus } | null = null
+
+function appendAuthResult(returnPath: string, authResult: string) {
+  const separator = returnPath.includes("?") ? "&" : "?"
+  return `${returnPath}${separator}auth=${authResult}`
+}
+
+function getClientCreds() {
+  const raw = JSON.parse(fs.readFileSync(GOOGLE_CREDS_PATH, "utf-8"))
+  const data = raw.installed || raw.web
+  return { client_id: data.client_id as string, client_secret: data.client_secret as string }
+}
+
+function readStoredToken(): Record<string, unknown> | null {
+  try {
+    return JSON.parse(fs.readFileSync(GOOGLE_TOKEN_PATH, "utf-8")) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function writeStoredToken(token: Record<string, unknown>) {
+  fs.writeFileSync(GOOGLE_TOKEN_PATH, JSON.stringify(token, null, 2))
+}
+
+async function fetchGoogleAccountEmail(accessToken: string): Promise<string | null> {
+  if (!accessToken) return null
+  try {
+    const response = await fetch("https://www.googleapis.com/oauth2/v1/userinfo", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!response.ok) return null
+    const info = await response.json() as { email?: string }
+    return typeof info.email === "string" ? info.email : null
+  } catch {
+    return null
+  }
+}
+
+async function refreshGoogleAccessToken(refreshToken: string, clientId: string, clientSecret: string) {
+  if (!refreshToken) return null
+  try {
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }).toString(),
+    })
+    if (!response.ok) return null
+    const tokenData = await response.json() as { access_token?: string }
+    return tokenData.access_token ?? null
+  } catch {
+    return null
+  }
+}
+
+async function resolveTokenEmail(tokenJson: Record<string, unknown>) {
+  const savedEmail = typeof tokenJson._connected_email === "string" ? tokenJson._connected_email : null
+  if (savedEmail) return savedEmail
+
+  const currentAccessToken = typeof tokenJson.token === "string" ? tokenJson.token : ""
+  const currentTokenEmail = await fetchGoogleAccountEmail(currentAccessToken)
+  if (currentTokenEmail) return currentTokenEmail
+
+  const refreshToken = typeof tokenJson.refresh_token === "string" ? tokenJson.refresh_token : ""
+  if (!refreshToken) return null
+
+  const fallbackCreds = getClientCreds()
+  const clientId = typeof tokenJson.client_id === "string" ? tokenJson.client_id : fallbackCreds.client_id
+  const clientSecret = typeof tokenJson.client_secret === "string" ? tokenJson.client_secret : fallbackCreds.client_secret
+  const refreshedAccessToken = await refreshGoogleAccessToken(refreshToken, clientId, clientSecret)
+  return refreshedAccessToken ? fetchGoogleAccountEmail(refreshedAccessToken) : null
+}
+
+async function readTokenStatus(force = false): Promise<GoogleTokenStatus> {
+  if (!force && tokenStatusCache && Date.now() - tokenStatusCache.at < TOKEN_STATUS_CACHE_TTL_MS) {
+    return tokenStatusCache.status
+  }
+
+  const disconnectedStatus: GoogleTokenStatus = {
+    connected: false,
+    email: null,
+    requiredEmail: REQUIRED_GOOGLE_EMAIL,
+    allowed: false,
+  }
+
+  try {
+    const tokenJson = readStoredToken()
+    if (!tokenJson) {
+      tokenStatusCache = { at: Date.now(), status: disconnectedStatus }
+      return disconnectedStatus
+    }
+
+    const refreshToken = typeof tokenJson.refresh_token === "string" ? tokenJson.refresh_token : ""
+    if (!refreshToken) {
+      tokenStatusCache = { at: Date.now(), status: disconnectedStatus }
+      return disconnectedStatus
+    }
+
+    const email = await resolveTokenEmail(tokenJson)
+    if (email && tokenJson._connected_email !== email) {
+      tokenJson._connected_email = email
+      writeStoredToken(tokenJson)
+    }
+
+    const status: GoogleTokenStatus = {
+      connected: true,
+      email,
+      requiredEmail: REQUIRED_GOOGLE_EMAIL,
+      allowed: !!email && normalizeGoogleEmail(email) === REQUIRED_GOOGLE_EMAIL,
+    }
+    tokenStatusCache = { at: Date.now(), status }
+    return status
+  } catch {
+    tokenStatusCache = { at: Date.now(), status: disconnectedStatus }
+    return disconnectedStatus
+  }
+}
+
+async function enforceRequiredGoogleAccount(
+  res: ServerResponse,
+  source: "SEO" | "SEM",
+) {
+  const status = await readTokenStatus()
+  if (status.allowed) return true
+
+  const detail = status.email
+    ? `Connected account is ${status.email}.`
+    : status.connected
+      ? "Unable to verify connected Google account email."
+      : "No Google account connected."
+
+  sendJson(res, 403, {
+    error: `${source} Intelligence requires Google account ${REQUIRED_GOOGLE_EMAIL}. ${detail}`,
+    requiredEmail: REQUIRED_GOOGLE_EMAIL,
+    connectedEmail: status.email,
+    connected: status.connected,
+    allowed: status.allowed,
+  })
+  return false
+}
+
 function notebooklmDevPlugin() {
   return {
     name: "notebooklm-dev-api",
@@ -180,30 +348,6 @@ function notebooklmDevPlugin() {
 
 // ─── Google OAuth one-click auth ────────────────────────────────────────────
 function googleAuthPlugin() {
-  const API_SCOPES = [
-    "https://www.googleapis.com/auth/webmasters.readonly",
-    "https://www.googleapis.com/auth/analytics.readonly",
-    "https://www.googleapis.com/auth/adwords",
-  ]
-  const REDIRECT_URI = "http://localhost:5173/api/auth/google/callback"
-  const TOKEN_PATH = path.resolve(__dirname, "token.json")
-  const CREDS_PATH = path.resolve(__dirname, "credentials.json")
-
-  function getClientCreds() {
-    const raw = JSON.parse(fs.readFileSync(CREDS_PATH, "utf-8"))
-    const d = raw.installed || raw.web
-    return { client_id: d.client_id as string, client_secret: d.client_secret as string }
-  }
-
-  function readTokenStatus(): { connected: boolean; email: string | null } {
-    try {
-      const t = JSON.parse(fs.readFileSync(TOKEN_PATH, "utf-8"))
-      return { connected: !!t.refresh_token, email: (t._connected_email as string) || null }
-    } catch {
-      return { connected: false, email: null }
-    }
-  }
-
   return {
     name: "google-auth",
     configureServer(server: { middlewares: { use: (fn: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
@@ -214,7 +358,7 @@ function googleAuthPlugin() {
 
         // ── Status ──────────────────────────────────────────────────────────
         if (url.pathname === "/api/auth/google/status") {
-          sendJson(res, 200, readTokenStatus())
+          sendJson(res, 200, await readTokenStatus(true))
           return
         }
 
@@ -226,9 +370,9 @@ function googleAuthPlugin() {
           const state = Buffer.from(JSON.stringify({ returnPath })).toString("base64url")
           const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
           authUrl.searchParams.set("client_id", client_id)
-          authUrl.searchParams.set("redirect_uri", REDIRECT_URI)
+          authUrl.searchParams.set("redirect_uri", GOOGLE_REDIRECT_URI)
           authUrl.searchParams.set("response_type", "code")
-          authUrl.searchParams.set("scope", [...API_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
+          authUrl.searchParams.set("scope", [...GOOGLE_API_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
           authUrl.searchParams.set("access_type", "offline")
           authUrl.searchParams.set("prompt", "consent")
           authUrl.searchParams.set("state", state)
@@ -250,7 +394,7 @@ function googleAuthPlugin() {
 
           if (oauthError || !code) {
             console.error("[google-auth] callback error:", oauthError)
-            res.writeHead(302, { Location: `${returnPath}?auth=error` })
+            res.writeHead(302, { Location: appendAuthResult(returnPath, "error") })
             res.end()
             return
           }
@@ -262,26 +406,25 @@ function googleAuthPlugin() {
             const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
               method: "POST",
               headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }).toString(),
+              body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: GOOGLE_REDIRECT_URI, grant_type: "authorization_code" }).toString(),
             })
             const tokenData = await tokenResp.json() as Record<string, string>
 
             if (tokenData.error) {
               console.error("[google-auth] token exchange error:", tokenData)
-              res.writeHead(302, { Location: `${returnPath}?auth=error` })
+              res.writeHead(302, { Location: appendAuthResult(returnPath, "error") })
               res.end()
               return
             }
 
             // Fetch connected account email
-            let email: string | null = null
-            try {
-              const infoResp = await fetch("https://www.googleapis.com/oauth2/v1/userinfo", {
-                headers: { Authorization: `Bearer ${tokenData.access_token}` },
-              })
-              const info = await infoResp.json() as { email?: string }
-              email = info.email ?? null
-            } catch { /* non-critical */ }
+            const email = await fetchGoogleAccountEmail(tokenData.access_token ?? "")
+            if (!email || normalizeGoogleEmail(email) !== REQUIRED_GOOGLE_EMAIL) {
+              console.warn("[google-auth] rejected account:", email ?? "unknown")
+              res.writeHead(302, { Location: appendAuthResult(returnPath, "wrong-account") })
+              res.end()
+              return
+            }
 
             // Save token.json in google-auth (Python) format
             const tokenJson: Record<string, unknown> = {
@@ -290,18 +433,19 @@ function googleAuthPlugin() {
               token_uri: "https://oauth2.googleapis.com/token",
               client_id,
               client_secret,
-              scopes: API_SCOPES,
+              scopes: GOOGLE_API_SCOPES,
             }
             if (email) tokenJson._connected_email = email
 
-            fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokenJson, null, 2))
+            writeStoredToken(tokenJson)
+            tokenStatusCache = null
             console.log("[google-auth] ✓ token.json saved for", email ?? "unknown user")
 
-            res.writeHead(302, { Location: `${returnPath}?auth=success` })
+            res.writeHead(302, { Location: appendAuthResult(returnPath, "success") })
             res.end()
           } catch (err) {
             console.error("[google-auth]", err)
-            res.writeHead(302, { Location: `${returnPath}?auth=error` })
+            res.writeHead(302, { Location: appendAuthResult(returnPath, "error") })
             res.end()
           }
           return
@@ -322,6 +466,7 @@ function seoDevPlugin() {
           next()
           return
         }
+        if (!(await enforceRequiredGoogleAccount(res, "SEO"))) return
 
         const { searchParams } = new URL(req.url, "http://localhost")
         const toolsDir = path.resolve(__dirname, "tools")
@@ -399,6 +544,7 @@ function semDevPlugin() {
           next()
           return
         }
+        if (!(await enforceRequiredGoogleAccount(res, "SEM"))) return
 
         const { searchParams } = new URL(req.url, "http://localhost")
         const toolsDir         = path.resolve(__dirname, "tools")

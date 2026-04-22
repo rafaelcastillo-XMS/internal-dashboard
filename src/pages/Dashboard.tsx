@@ -24,120 +24,16 @@ const panelHeaderClass = "flex items-center justify-between gap-3 border-b borde
 const panelBodyClass = "px-6 py-5"
 const surfaceClass = "rounded-lg border border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4/35"
 
-function MiniCalendar({
-  selectedDate,
-  onSelectDate,
-  events,
-  today,
-}: {
-  selectedDate: Date
-  onSelectDate: (date: Date) => void
-  events: CalendarEvent[]
-  today: Date
-}) {
-  const [current] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
-  const year = current.getFullYear()
-  const month = current.getMonth()
-  const firstDay = new Date(year, month, 1).getDay()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const todayNum = today.getDate()
-  const monthName = current.toLocaleString("en-US", { month: "long", year: "numeric" })
-  const selectedNum =
-    selectedDate.getFullYear() === year && selectedDate.getMonth() === month
-      ? selectedDate.getDate()
-      : null
-
-  const cells: (number | null)[] = []
-  for (let i = 0; i < firstDay; i++) cells.push(null)
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
-  while (cells.length % 7 !== 0) cells.push(null)
-
-  const rows: (number | null)[][] = []
-  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7))
-
-  const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`
-  const eventDays = new Set(
-    events
-      .filter((event) => event.date.startsWith(monthPrefix))
-      .map((event) => parseInt(event.date.split("-")[2], 10)),
-  )
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm font-semibold text-black dark:text-white">{monthName}</p>
-        <span className="rounded-full bg-[#1A72D9]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#1A72D9]">
-          Planner
-        </span>
-      </div>
-      <div className="mb-2 grid grid-cols-7 text-center text-[11px] font-semibold uppercase tracking-wider text-body dark:text-bodydark">
-        {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-          <span key={day} className="py-1">
-            {day}
-          </span>
-        ))}
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-1">
-        {rows.map((row, rowIndex) => (
-          <div key={rowIndex} className="flex flex-1 gap-1">
-            {row.map((day, columnIndex) =>
-              day === null ? (
-                <div key={columnIndex} className="flex-1" />
-              ) : (
-                <button
-                  key={columnIndex}
-                  onClick={() => onSelectDate(new Date(year, month, day))}
-                  className={`relative flex flex-1 items-center justify-center rounded-lg text-[12px] font-semibold transition-all
-                    ${
-                      day === todayNum
-                        ? "border-[#1A72D9] bg-[#1A72D9] text-white shadow-card"
-                      : day === selectedNum
-                          ? "border-[#1A72D9]/40 bg-[#1A72D9]/10 text-[#1A72D9] dark:border-[#1A72D9]/50 dark:bg-[#1A72D9]/15"
-                        : eventDays.has(day)
-                            ? "border-transparent bg-white text-black hover:bg-gray hover:text-[#1A72D9] dark:bg-meta-4/50 dark:text-white dark:hover:bg-meta-4/70"
-                            : "border-transparent text-body hover:bg-gray dark:text-bodydark dark:hover:bg-meta-4/50"
-                    }`}
-                >
-                  {day}
-                  {day !== todayNum && day !== selectedNum && eventDays.has(day) && (
-                    <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[#1A72D9]" />
-                  )}
-                </button>
-              ),
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 export function Dashboard() {
   const tasks = getTasks()
   const [today] = useState(() => new Date())
   const todayStr = formatIsoDate(today)
   const navigate = useNavigate()
-  const [selectedDate, setSelectedDate] = useState<Date>(today)
   const { events, loading: loadingEvents } = useCalendarEvents({
     monthDate: today,
     monthSpan: 2,
   })
-
-  const selectedDateStr = formatIsoDate(selectedDate)
-  const isToday = selectedDateStr === todayStr
-  const selectedDayEvents = events.filter((event) => event.date === selectedDateStr)
-  const dayLabel = isToday
-    ? "Today"
-    : new Intl.DateTimeFormat("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      }).format(selectedDate)
-
-  const upcomingEvents = useMemo(
-    () => events.filter((event) => event.date > todayStr).slice(0, 8),
-    [events, todayStr],
-  )
 
   const doneTasks = tasks.filter((task) => task.status === "done").length
   const inProgressTasks = tasks.filter((task) => task.status === "in-progress").length
@@ -236,21 +132,24 @@ export function Dashboard() {
           ))}
         </section>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="mb-6">
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.15 }}
-            className={`${panelClass} flex h-[360px] flex-col`}
-            aria-label="Mini calendar"
+            className={`${panelClass} flex h-[420px] flex-col`}
+            aria-label="Weekly calendar"
           >
             <div className={panelHeaderClass}>
               <div>
                 <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
                   <Calendar className="h-4 w-4 text-[#1A72D9]" />
-                  Calendar
+                  This Week
+                  {loadingEvents && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#1A72D9] ml-2" />}
                 </h2>
-                <p className="mt-0.5 text-xs text-body dark:text-bodydark">Monthly overview with scheduled activity</p>
+                <p className="mt-0.5 text-xs text-body dark:text-bodydark">
+                  Weekly overview of scheduled activities
+                </p>
               </div>
               <button
                 onClick={() => navigate("/calendar")}
@@ -260,117 +159,58 @@ export function Dashboard() {
                 <ChevronRight className="h-3 w-3" />
               </button>
             </div>
-            <div className={`${panelBodyClass} flex min-h-0 flex-1`}>
-              <MiniCalendar
-                selectedDate={selectedDate}
-                onSelectDate={setSelectedDate}
-                events={events}
-                today={today}
-              />
-            </div>
-          </motion.section>
+            <div className="flex min-h-0 flex-1 grid-cols-7 border-t border-stroke dark:border-strokedark sm:grid">
+              {Array.from({ length: 7 }).map((_, i) => {
+                const currentDayOfWeek = today.getDay()
+                const startOfWeek = new Date(today)
+                startOfWeek.setDate(today.getDate() - currentDayOfWeek + i)
+                const dateStr = formatIsoDate(startOfWeek)
+                const dayEvents = events.filter((e) => e.date === dateStr)
+                const isCurrentDay = dateStr === todayStr
 
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-          className={`${panelClass} flex h-[360px] flex-col`}
-          aria-label="Day events"
-        >
-          <div className={panelHeaderClass}>
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
-                <CalendarDays className="h-4 w-4 text-[#1A72D9]" />
-                {dayLabel}
-              </h2>
-              <p className="mt-0.5 text-xs text-body dark:text-bodydark">Scheduled items for the selected day</p>
-            </div>
-            <span className="rounded-full bg-[#1A72D9]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#1A72D9]">
-              {selectedDayEvents.length} items
-            </span>
-          </div>
-          <div className={`${panelBodyClass} min-h-0 flex-1 overflow-y-auto custom-scrollbar`}>
-            <div className="space-y-3">
-              {selectedDayEvents.length > 0 ? (
-                selectedDayEvents.map((event) => (
-                  <div key={event.id} className={`${surfaceClass} flex items-start gap-3 p-4`}>
-                    <div className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${event.color}`} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-black dark:text-white">{event.title}</p>
-                      <p className="mt-1 flex items-center gap-1 text-xs text-body dark:text-bodydark">
-                        <Clock className="h-3 w-3" />
-                        {event.time}
+                return (
+                  <div
+                    key={i}
+                    className="flex flex-col border-r border-stroke last:border-r-0 dark:border-strokedark"
+                  >
+                    <div className="border-b border-stroke p-3 text-center dark:border-strokedark">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-body dark:text-bodydark">
+                        {new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(startOfWeek)}
+                      </p>
+                      <p
+                        className={`mx-auto mt-1 flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
+                          isCurrentDay
+                            ? "bg-[#1A72D9] text-white shadow-card"
+                            : "text-black dark:text-white"
+                        }`}
+                      >
+                        {startOfWeek.getDate()}
                       </p>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <div className="flex h-full min-h-[180px] flex-col items-center justify-center rounded-lg border border-dashed border-stroke px-6 text-center dark:border-strokedark">
-                  <CalendarDays className="mb-3 h-8 w-8 text-body dark:text-bodydark" />
-                  <p className="text-sm font-medium text-black dark:text-white">No events on this day</p>
-                  <p className="mt-1 text-xs text-body dark:text-bodydark">
-                    Pick another date in the calendar to inspect activity.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.section>
-
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.25 }}
-          className={`${panelClass} flex h-[360px] flex-col`}
-          aria-label="Upcoming events"
-        >
-          <div className={panelHeaderClass}>
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
-                <Clock className="h-4 w-4 text-[#1A72D9]" />
-                Upcoming
-                {loadingEvents && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#1A72D9]" />}
-              </h2>
-              <p className="mt-0.5 text-xs text-body dark:text-bodydark">Next scheduled calendar touchpoints</p>
-            </div>
-            <span className="rounded-full bg-stroke/50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-body dark:bg-strokedark dark:text-bodydark">
-              {upcomingEvents.length} queued
-            </span>
-          </div>
-          <div className={`${panelBodyClass} min-h-0 flex-1 overflow-y-auto custom-scrollbar`}>
-            <div className="space-y-3">
-              {upcomingEvents.length > 0 ? (
-                upcomingEvents.map((event) => {
-                  const date = new Date(`${event.date}T12:00:00`)
-                  const label = new Intl.DateTimeFormat("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  }).format(date)
-
-                  return (
-                    <div key={event.id} className={`${surfaceClass} flex items-start gap-3 p-4`}>
-                      <div className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${event.color}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-black dark:text-white">{event.title}</p>
-                        <p className="mt-1 text-xs text-body dark:text-bodydark">
-                          {label} · {event.time}
-                        </p>
-                      </div>
+                    <div className="flex-1 space-y-2 overflow-y-auto p-2 custom-scrollbar">
+                      {dayEvents.map((event) => (
+                        <div
+                          key={event.id}
+                          className={`${surfaceClass} group relative cursor-pointer overflow-hidden p-2 text-xs transition-colors hover:bg-gray dark:hover:bg-meta-4/60`}
+                        >
+                          <div className={`absolute bottom-0 left-0 top-0 w-[3px] ${event.color || "bg-[#1A72D9]"}`} />
+                          <div className="pl-1">
+                            <p className="truncate font-semibold text-black dark:text-white">
+                              {event.title}
+                            </p>
+                            <p className="mt-1 flex items-center gap-1 text-[10px] text-body dark:text-bodydark">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              {event.time}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  )
-                })
-              ) : (
-                <div className="flex h-full min-h-[180px] flex-col items-center justify-center rounded-lg border border-dashed border-stroke px-6 text-center dark:border-strokedark">
-                  <Clock className="mb-3 h-8 w-8 text-body dark:text-bodydark" />
-                  <p className="text-sm font-medium text-black dark:text-white">No upcoming events</p>
-                  <p className="mt-1 text-xs text-body dark:text-bodydark">
-                    New scheduled items will appear here automatically.
-                  </p>
-                </div>
-              )}
+                  </div>
+                )
+              })}
             </div>
-          </div>
-        </motion.section>
+          </motion.section>
         </div>
 
         <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-4">

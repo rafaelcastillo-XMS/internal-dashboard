@@ -73,7 +73,9 @@ export function useSEMDashboardState(defaultPreset = 1) {
         const list: AdsAccount[] = d.accounts || []
         setAccounts(list)
         ssSet(ACCOUNTS_KEY, list)
-        setSelectedAccountIdRaw((prev) => prev || list[0]?.id || '')
+        const enabled = list.filter((a) => a.status === 'ENABLED')
+        const fallback = enabled[0]?.id || list[0]?.id || ''
+        setSelectedAccountIdRaw((prev) => list.some((a) => a.id === prev) ? prev : fallback)
       })
       .catch((err: Error) => setAccountsError(err.message))
       .finally(() => setAccountsLoading(false))
