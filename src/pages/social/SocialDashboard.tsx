@@ -197,7 +197,8 @@ function MetricSection({
     tooltip: {
       theme: isDark ? 'dark' : 'light',
       x: {
-        formatter: (_, { dataPointIndex }) => {
+        formatter: (_: unknown, opts: any) => {
+          const dataPointIndex = opts?.dataPointIndex ?? 0
           const d = new Date(labels[dataPointIndex])
           return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
         }
