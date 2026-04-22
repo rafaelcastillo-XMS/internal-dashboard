@@ -11,7 +11,7 @@ export function SocialLayout() {
       <SocialSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
-        <Header />
+        <Header onMobileMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1">
           <Outlet />
         </main>

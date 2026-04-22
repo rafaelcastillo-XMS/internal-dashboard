@@ -24,7 +24,11 @@ function getAIResponse(query: string): string {
     return AI_RESPONSES.default
 }
 
-export function Header() {
+interface HeaderProps {
+    onMobileMenuClick?: () => void
+}
+
+export function Header({ onMobileMenuClick }: HeaderProps = {}) {
     const { theme, toggleTheme } = useTheme()
     const { collapsed, toggle: toggleSidebar, toggleMobile } = useSidebar()
     const navigate = useNavigate()
@@ -143,10 +147,10 @@ export function Header() {
         <>
             <header className="h-16 border-b border-[var(--sidebar-border)] bg-[var(--bg-surface)]/90 backdrop-blur-md flex items-center px-6 justify-between shrink-0 shadow-sm z-[100] sticky top-0">
                 <div className="flex items-center gap-2">
-                    {/* Sidebar toggle - Mobile (hidden on SEO routes) */}
-                    {!isSEO && (
+                    {/* Sidebar toggle - Mobile */}
+                    {(!isSEO || onMobileMenuClick) && (
                         <button
-                            onClick={toggleMobile}
+                            onClick={onMobileMenuClick ?? toggleMobile}
                             aria-label="Toggle mobile sidebar"
                             className="lg:hidden p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
