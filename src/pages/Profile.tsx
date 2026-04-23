@@ -8,14 +8,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getClients } from "@/features/clients/repository"
-import { getTasks } from "@/features/tasks/repository"
 import { supabase } from "@/lib/supabase"
 
 const tabs = ["Overview", "Edit Profile"] as const
 type Tab = typeof tabs[number]
 
 export function Profile() {
-    const tasks = getTasks()
     const clients = getClients()
     const [activeTab, setActiveTab] = useState<Tab>("Overview")
     const [avatarUrl, setAvatarUrl] = useState<string>("")
@@ -36,8 +34,8 @@ export function Profile() {
         instagram: "@xms_mktg",
     })
     const stats = [
-        { label: "Tasks Done", value: tasks.filter(t => t.status === "done").length, icon: CheckSquare, color: "text-green-600 bg-green-50 dark:bg-green-900/20" },
-        { label: "In Progress", value: tasks.filter(t => t.status === "in-progress").length, icon: Clock, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/20" },
+        { label: "Tasks Done", value: "—", icon: CheckSquare, color: "text-green-600 bg-green-50 dark:bg-green-900/20" },
+        { label: "In Progress", value: "—", icon: Clock, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/20" },
         { label: "Clients", value: clients.filter(c => c.status === "active").length, icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/20" },
         { label: "Performance", value: "94%", icon: Star, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/20" },
     ]
@@ -198,14 +196,16 @@ export function Profile() {
 
                                     <div>
                                         <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Recent Tasks</h3>
-                                        <div className="space-y-2">
-                                            {tasks.slice(0, 5).map(t => (
-                                                <div key={t.id} className="flex items-center gap-3 py-2">
-                                                    <div className={`w-2 h-2 rounded-full shrink-0 ${t.status === "done" ? "bg-green-500" : t.status === "in-progress" ? "bg-amber-500" : "bg-slate-300"}`} />
-                                                    <span className={`text-sm flex-1 ${t.status === "done" ? "line-through text-slate-400 dark:text-slate-600" : "text-slate-700 dark:text-slate-300"}`}>{t.title}</span>
-                                                    <span className="text-xs text-slate-400">{t.client}</span>
-                                                </div>
-                                            ))}
+                                        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 py-8 px-4">
+                                            <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-900/20 px-3 py-1 text-xs font-semibold text-amber-700 dark:text-amber-400 mb-3">
+                                                <span className="relative flex h-1.5 w-1.5">
+                                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                                                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                                </span>
+                                                Coming Soon
+                                            </span>
+                                            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Integrating with monday.com</p>
+                                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Tasks will appear here once connected</p>
                                         </div>
                                     </div>
                                 </div>
