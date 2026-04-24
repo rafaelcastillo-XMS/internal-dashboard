@@ -240,14 +240,11 @@ export function Sidebar() {
 
                     {/* Guidelines */}
                     <div className="relative group">
-                        <button
-                            onClick={closeMobile}
-                            className={`${navItemClass} ${inactiveClass}`}
-                        >
+                        <button className={`${navItemClass} ${inactiveClass} opacity-70`} onClick={() => alert("This app is coming soon!")}>
                             <FileText className="w-4 h-4 shrink-0" />
-                            {!collapsed && "Guidelines"}
+                            {!collapsed && <>Guidelines <span className="ml-auto text-[9px] font-semibold text-[var(--text-muted)] bg-[var(--bg-subtle)] px-1.5 py-0.5 rounded-full">Soon</span></>}
                         </button>
-                        {collapsed && <Tooltip label="Guidelines" />}
+                        {collapsed && <Tooltip label="Guidelines – Coming soon" />}
                     </div>
 
                     {/* APPS section */}

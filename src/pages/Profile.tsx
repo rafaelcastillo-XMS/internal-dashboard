@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { motion } from "framer-motion"
 import {
     Camera, Mail, Phone, MapPin, Building, Link,
@@ -8,7 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getClients } from "@/features/clients/repository"
-import { supabase } from "@/lib/supabase"
+import { useProfile } from "@/features/profile/useProfile"
+import { useMondayTasks, statusColor } from "@/features/tasks/useMondayTasks"
 
 const tabs = ["Overview", "Edit Profile"] as const
 type Tab = typeof tabs[number]
@@ -16,71 +17,55 @@ type Tab = typeof tabs[number]
 export function Profile() {
     const clients = getClients()
     const [activeTab, setActiveTab] = useState<Tab>("Overview")
-    const [avatarUrl, setAvatarUrl] = useState<string>("")
-    const [saving, setSaving] = useState(false)
     const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
-    const [form, setForm] = useState({
-        firstName: "Rafael",
-        lastName: "Castillo",
-        email: "rafael.castillo@xperienceusa.com",
-        phone: "+1 (555) 012-3456",
-        role: "Marketing Strategist",
-        company: "Xperience Ai Marketing Solutions",
-        location: "Miami, FL",
-        bio: "Marketing strategist specializing in digital campaigns, brand strategy, and AI-powered growth solutions. Passionate about driving measurable results for global brands.",
-        website: "xms-marketing.com",
-        twitter: "@xms_rafael",
-        linkedin: "linkedin.com/in/rafael",
-        instagram: "@xms_mktg",
-    })
+    const { profile, loading, saving, save, setProfile } = useProfile()
+    const { tasks, loading: loadingTasks } = useMondayTasks()
+
+    const doneTasks = tasks.filter(t => t.statusIndex === 1)
+    const inProgressTasks = tasks.filter(t => t.statusIndex !== 1)
+
     const stats = [
-        { label: "Tasks Done", value: "—", icon: CheckSquare, color: "text-green-600 bg-green-50 dark:bg-green-900/20" },
-        { label: "In Progress", value: "—", icon: Clock, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/20" },
+        { label: "Tasks Done", value: loadingTasks ? "…" : doneTasks.length, icon: CheckSquare, color: "text-green-600 bg-green-50 dark:bg-green-900/20" },
+        { label: "In Progress", value: loadingTasks ? "…" : inProgressTasks.length, icon: Clock, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/20" },
         { label: "Clients", value: clients.filter(c => c.status === "active").length, icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/20" },
         { label: "Performance", value: "94%", icon: Star, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/20" },
     ]
 
-    useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (!session) return
-            const meta = session.user.user_metadata
-            const fullName: string = meta?.full_name ?? meta?.name ?? ""
-            const [first = "", ...rest] = fullName.split(" ")
-            setAvatarUrl(meta?.picture ?? meta?.avatar_url ?? "")
-            setForm(prev => ({
-                ...prev,
-                firstName: first,
-                lastName: rest.join(" ") || prev.lastName,
-                email: session.user.email ?? prev.email,
-            }))
-        })
-    }, [])
-
-    const handleChange = (field: keyof typeof form, value: string) => {
-        setForm(prev => ({ ...prev, [field]: value }))
+    const handleChange = (field: keyof typeof profile, value: string) => {
+        setProfile(prev => prev ? { ...prev, [field]: value } : prev)
     }
 
     const handleSave = async () => {
-        setSaving(true)
-        setSaveMsg(null)
-        const { error } = await supabase.auth.updateUser({
-            email: form.email,
-            data: {
-                full_name: `${form.firstName} ${form.lastName}`.trim(),
-                phone: form.phone,
-                role: form.role,
-                location: form.location,
-                bio: form.bio,
-                website: form.website,
-                twitter: form.twitter,
-                linkedin: form.linkedin,
-                instagram: form.instagram,
-            },
+        if (!profile) return
+        const result = await save({
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            phone: profile.phone,
+            role: profile.role,
+            company: profile.company,
+            location: profile.location,
+            bio: profile.bio,
+            website: profile.website,
+            twitter: profile.twitter,
+            linkedin: profile.linkedin,
+            instagram: profile.instagram,
         })
-        setSaving(false)
-        setSaveMsg(error ? { ok: false, text: error.message } : { ok: true, text: "Profile saved successfully." })
+        setSaveMsg({ ok: result.ok, text: result.message })
         setTimeout(() => setSaveMsg(null), 3000)
     }
+
+    if (loading) {
+        return (
+            <div className="flex h-full items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+            </div>
+        )
+    }
+
+    if (!profile) return null
+
+    const initials = (profile.first_name[0] ?? "") + (profile.last_name[0] ?? "")
+    const fullName = `${profile.first_name} ${profile.last_name}`.trim()
 
     return (
         <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">
@@ -92,46 +77,59 @@ export function Profile() {
                     animate={{ opacity: 1, y: 0 }}
                     className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm"
                 >
-                    {/* Avatar + name row */}
                     <div className="px-6 py-8">
                         <div className="flex items-center justify-between mb-6">
                             <div className="relative">
                                 <Avatar className="w-24 h-24 ring-4 ring-white dark:ring-slate-800 shadow-lg">
-                                    <AvatarImage src={avatarUrl} referrerPolicy="no-referrer" />
+                                    <AvatarImage src={profile.avatar_url} referrerPolicy="no-referrer" />
                                     <AvatarFallback className="bg-blue-600 text-white text-2xl font-bold">
-                                        {(form.firstName[0] ?? "") + (form.lastName[0] ?? "")}
+                                        {initials}
                                     </AvatarFallback>
                                 </Avatar>
                                 <button className="absolute bottom-0 right-0 w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center shadow-md hover:bg-blue-700 transition-colors">
                                     <Camera className="w-3.5 h-3.5 text-white" />
                                 </button>
                             </div>
-                            <Button variant="outline" size="sm" className="dark:border-slate-600 dark:text-slate-300">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="dark:border-slate-600 dark:text-slate-300"
+                                onClick={() => setActiveTab("Edit Profile")}
+                            >
                                 Edit Profile
                             </Button>
                         </div>
 
                         <div className="flex items-start justify-between flex-wrap gap-4">
                             <div>
-                                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{form.firstName} {form.lastName}</h1>
-                                <p className="text-blue-600 dark:text-blue-400 font-medium text-sm mt-0.5">{form.role}</p>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">{form.company}</p>
+                                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{fullName || "—"}</h1>
+                                <p className="text-blue-600 dark:text-blue-400 font-medium text-sm mt-0.5">{profile.role || "—"}</p>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">{profile.company || "—"}</p>
                                 <div className="flex items-center gap-4 mt-3 text-sm text-slate-500 dark:text-slate-400 flex-wrap">
-                                    <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{form.location}</span>
-                                    <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />{form.email}</span>
-                                    <span className="flex items-center gap-1.5"><Link className="w-3.5 h-3.5" />{form.website}</span>
+                                    {profile.location && <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{profile.location}</span>}
+                                    <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />{profile.email}</span>
+                                    {profile.website && <span className="flex items-center gap-1.5"><Link className="w-3.5 h-3.5" />{profile.website}</span>}
                                 </div>
                             </div>
                             <div className="flex gap-2">
-                                <a href="#" className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-500 hover:border-blue-300 transition-all">
-                                    <Twitter className="w-4 h-4" />
-                                </a>
-                                <a href="#" className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-700 hover:border-blue-300 transition-all">
-                                    <Linkedin className="w-4 h-4" />
-                                </a>
-                                <a href="#" className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-pink-500 hover:border-pink-300 transition-all">
-                                    <Instagram className="w-4 h-4" />
-                                </a>
+                                {profile.twitter && (
+                                    <a href={`https://twitter.com/${profile.twitter.replace("@", "")}`} target="_blank" rel="noreferrer"
+                                        className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-500 hover:border-blue-300 transition-all">
+                                        <Twitter className="w-4 h-4" />
+                                    </a>
+                                )}
+                                {profile.linkedin && (
+                                    <a href={`https://${profile.linkedin.startsWith("http") ? "" : ""}${profile.linkedin}`} target="_blank" rel="noreferrer"
+                                        className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-700 hover:border-blue-300 transition-all">
+                                        <Linkedin className="w-4 h-4" />
+                                    </a>
+                                )}
+                                {profile.instagram && (
+                                    <a href={`https://instagram.com/${profile.instagram.replace("@", "")}`} target="_blank" rel="noreferrer"
+                                        className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-pink-500 hover:border-pink-300 transition-all">
+                                        <Instagram className="w-4 h-4" />
+                                    </a>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -165,19 +163,17 @@ export function Profile() {
                     transition={{ delay: 0.2 }}
                     className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden"
                 >
-                    {/* Tab bar */}
                     <div role="tablist" className="flex border-b border-slate-100 dark:border-slate-700 px-6 gap-1">
                         {tabs.map(tab => (
                             <button
                                 key={tab}
                                 role="tab"
                                 aria-selected={activeTab === tab}
-                                aria-controls={`tabpanel-${tab.toLowerCase().replace(" ", "-")}`}
                                 onClick={() => setActiveTab(tab)}
                                 className={`py-4 px-3 text-sm font-medium border-b-2 transition-colors -mb-px ${activeTab === tab
-                                        ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
-                                        : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-                                    }`}
+                                    ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+                                    : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                                }`}
                             >
                                 {tab}
                             </button>
@@ -186,40 +182,66 @@ export function Profile() {
 
                     <div className="p-6">
                         {activeTab === "Overview" && (
-                            <div role="tabpanel" id="tabpanel-overview" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                {/* Bio */}
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 <div className="lg:col-span-2 space-y-6">
                                     <div>
                                         <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-2">About</h3>
-                                        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{form.bio}</p>
+                                        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                                            {profile.bio || <span className="italic text-slate-400">No bio yet. Go to Edit Profile to add one.</span>}
+                                        </p>
                                     </div>
 
                                     <div>
-                                        <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Recent Tasks</h3>
-                                        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 py-8 px-4">
-                                            <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-900/20 px-3 py-1 text-xs font-semibold text-amber-700 dark:text-amber-400 mb-3">
-                                                <span className="relative flex h-1.5 w-1.5">
-                                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                                                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                                </span>
-                                                Coming Soon
-                                            </span>
-                                            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Integrating with monday.com</p>
-                                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Tasks will appear here once connected</p>
-                                        </div>
+                                        <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-3">My Tasks</h3>
+                                        {loadingTasks ? (
+                                            <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
+                                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                                                Loading tasks…
+                                            </div>
+                                        ) : tasks.length === 0 ? (
+                                            <p className="text-sm text-slate-400 py-4">No tasks assigned.</p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {tasks.slice(0, 8).map(task => {
+                                                    const color = statusColor(task.statusIndex)
+                                                    const colorMap: Record<string, string> = {
+                                                        green: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+                                                        blue: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+                                                        amber: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+                                                        purple: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+                                                        slate: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400",
+                                                    }
+                                                    return (
+                                                        <div key={task.id} className="flex items-center gap-3 rounded-lg border border-slate-100 dark:border-slate-700 px-3 py-2.5 bg-slate-50 dark:bg-slate-800/50">
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{task.name}</p>
+                                                                <p className="text-xs text-slate-400 truncate">{task.board}</p>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                {task.dueDate && (
+                                                                    <span className="text-[11px] text-slate-400">{task.dueDate}</span>
+                                                                )}
+                                                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${colorMap[color]}`}>
+                                                                    {task.status}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
-                                {/* Contact card */}
                                 <div className="space-y-4">
                                     <h3 className="text-sm font-semibold text-slate-800 dark:text-white">Contact Information</h3>
                                     <div className="space-y-3">
                                         {[
-                                            { icon: Mail, label: "Email", value: form.email },
-                                            { icon: Phone, label: "Phone", value: form.phone },
-                                            { icon: MapPin, label: "Location", value: form.location },
-                                            { icon: Building, label: "Company", value: form.company },
-                                            { icon: Link, label: "Website", value: form.website },
+                                            { icon: Mail, label: "Email", value: profile.email },
+                                            { icon: Phone, label: "Phone", value: profile.phone },
+                                            { icon: MapPin, label: "Location", value: profile.location },
+                                            { icon: Building, label: "Company", value: profile.company },
+                                            { icon: Link, label: "Website", value: profile.website },
                                         ].map(item => (
                                             <div key={item.label} className="flex items-start gap-3">
                                                 <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center shrink-0">
@@ -227,7 +249,7 @@ export function Profile() {
                                                 </div>
                                                 <div className="min-w-0">
                                                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{item.label}</p>
-                                                    <p className="text-sm text-slate-700 dark:text-slate-300 truncate">{item.value}</p>
+                                                    <p className="text-sm text-slate-700 dark:text-slate-300 truncate">{item.value || "—"}</p>
                                                 </div>
                                             </div>
                                         ))}
@@ -237,39 +259,48 @@ export function Profile() {
                         )}
 
                         {activeTab === "Edit Profile" && (
-                            <div role="tabpanel" id="tabpanel-edit-profile" className="max-w-2xl space-y-6">
+                            <div className="max-w-2xl space-y-6">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">First Name</label>
-                                        <Input value={form.firstName} onChange={e => handleChange("firstName", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                        <Input value={profile.first_name} onChange={e => handleChange("first_name", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Last Name</label>
-                                        <Input value={form.lastName} onChange={e => handleChange("lastName", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                        <Input value={profile.last_name} onChange={e => handleChange("last_name", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                                     </div>
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Email</label>
-                                    <Input type="email" value={form.email} onChange={e => handleChange("email", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                    <Input type="email" value={profile.email} disabled className="dark:bg-slate-700 dark:border-slate-600 dark:text-white opacity-60 cursor-not-allowed" />
+                                    <p className="text-[11px] text-slate-400">Email is managed by your login account.</p>
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Phone</label>
-                                    <Input value={form.phone} onChange={e => handleChange("phone", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                    <Input value={profile.phone} onChange={e => handleChange("phone", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Role</label>
-                                        <Input value={form.role} onChange={e => handleChange("role", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                        <Input value={profile.role} onChange={e => handleChange("role", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Location</label>
-                                        <Input value={form.location} onChange={e => handleChange("location", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                        <Input value={profile.location} onChange={e => handleChange("location", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                                     </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Company</label>
+                                    <Input value={profile.company} onChange={e => handleChange("company", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Website</label>
+                                    <Input value={profile.website} onChange={e => handleChange("website", e.target.value)} placeholder="yoursite.com" className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Bio</label>
                                     <textarea
-                                        value={form.bio}
+                                        value={profile.bio}
                                         onChange={e => handleChange("bio", e.target.value)}
                                         rows={4}
                                         className="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -280,15 +311,20 @@ export function Profile() {
                                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Social Links</h4>
                                     <div className="space-y-3">
                                         {[
-                                            { field: "twitter" as const, icon: Twitter, label: "Twitter" },
-                                            { field: "linkedin" as const, icon: Linkedin, label: "LinkedIn" },
-                                            { field: "instagram" as const, icon: Instagram, label: "Instagram" },
+                                            { field: "twitter" as const, icon: Twitter, label: "Twitter / X", placeholder: "@handle" },
+                                            { field: "linkedin" as const, icon: Linkedin, label: "LinkedIn", placeholder: "linkedin.com/in/yourname" },
+                                            { field: "instagram" as const, icon: Instagram, label: "Instagram", placeholder: "@handle" },
                                         ].map(s => (
                                             <div key={s.field} className="flex items-center gap-3">
                                                 <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center shrink-0">
                                                     <s.icon className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                                                 </div>
-                                                <Input value={form[s.field]} onChange={e => handleChange(s.field, e.target.value)} placeholder={s.label} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                                <Input
+                                                    value={profile[s.field]}
+                                                    onChange={e => handleChange(s.field, e.target.value)}
+                                                    placeholder={s.placeholder}
+                                                    className="dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                                />
                                             </div>
                                         ))}
                                     </div>
@@ -307,7 +343,13 @@ export function Profile() {
                                     >
                                         {saving ? "Saving…" : "Save Changes"}
                                     </Button>
-                                    <Button variant="outline" className="dark:border-slate-600 dark:text-slate-300">Cancel</Button>
+                                    <Button
+                                        variant="outline"
+                                        className="dark:border-slate-600 dark:text-slate-300"
+                                        onClick={() => setActiveTab("Overview")}
+                                    >
+                                        Cancel
+                                    </Button>
                                 </div>
                             </div>
                         )}
