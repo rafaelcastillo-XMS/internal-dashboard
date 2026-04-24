@@ -651,9 +651,184 @@ function pdfExportDevPlugin() {
   }
 }
 
+// ─── Monday.com tasks cache (5-minute TTL per user) ──────────────────────────
+const mondayTaskCache = new Map<string, { at: number; payload: unknown }>()
+const MONDAY_CACHE_TTL_MS = 5 * 60 * 1000
+
+// ─── Monday.com tasks plugin ──────────────────────────────────────────────────
+function mondayPlugin() {
+  return {
+    name: "monday-api",
+    configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/api/monday/")) { next(); return }
+
+        const mondayToken = process.env.MONDAY_API_TOKEN ?? ""
+        if (!mondayToken) {
+          sendJson(res, 503, { error: "MONDAY_API_TOKEN is not configured" })
+          return
+        }
+
+        const url = new URL(req.url, "http://localhost")
+
+        // GET /api/monday/tasks?email=...
+        if (url.pathname === "/api/monday/tasks" && req.method === "GET") {
+          // Build email mapping (MONDAY_EMAIL_MAP=supabase@x.com:monday@x.com,...)
+          const emailMapRaw = process.env.MONDAY_EMAIL_MAP ?? ""
+          const emailMap: Record<string, string> = Object.fromEntries(
+            emailMapRaw.split(",").filter(s => s.includes(":")).map(s => {
+              const [k, v] = s.split(":").map(e => e.trim())
+              return [k, v]
+            })
+          )
+          const sessionEmail = url.searchParams.get("email") ?? ""
+          const mondayEmail = emailMap[sessionEmail] ?? sessionEmail
+
+          async function mondayGraphQL(query: string, variables: Record<string, unknown> = {}) {
+            const resp = await fetch("https://api.monday.com/v2", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: mondayToken,
+                "API-Version": "2024-01",
+              },
+              body: JSON.stringify({ query, variables }),
+            })
+            if (!resp.ok) throw new Error(`Monday API HTTP ${resp.status}`)
+            const json = await resp.json() as { data?: unknown; errors?: { message: string }[] }
+            if (json.errors?.length) throw new Error(json.errors.map(e => e.message).join("; "))
+            return json.data
+          }
+
+          try {
+            // 1. Find the Monday user by (possibly remapped) email
+            const usersData = await mondayGraphQL(`
+              query GetUsers($emails: [String]) {
+                users(emails: $emails, limit: 1) {
+                  id name email photo_thumb_small
+                }
+              }
+            `, { emails: mondayEmail ? [mondayEmail] : [] }) as { users?: { id: string; name: string; email: string; photo_thumb_small: string }[] }
+
+            const user = usersData?.users?.[0] ?? null
+            if (!user) {
+              sendJson(res, 200, { user: null, tasks: [] })
+              return
+            }
+
+            // Serve from cache if fresh (5 min TTL)
+            const cached = mondayTaskCache.get(user.id)
+            if (cached && Date.now() - cached.at < MONDAY_CACHE_TTL_MS) {
+              sendJson(res, 200, cached.payload)
+              return
+            }
+
+            // 2. Fetch recent items from task boards (skip subitems boards).
+            //    Small per-board limit — we only need the 20 most recent overall.
+            const itemsData = await mondayGraphQL(`
+              query GetBoardItems {
+                boards(limit: 100, state: active) {
+                  id
+                  name
+                  items_page(limit: 20) {
+                    items {
+                      id
+                      name
+                      state
+                      updated_at
+                      column_values {
+                        id
+                        text
+                        type
+                        ... on StatusValue { label index }
+                        ... on DateValue { date }
+                        ... on PeopleValue { persons_and_teams { id kind } }
+                      }
+                    }
+                  }
+                }
+              }
+            `) as {
+              boards?: {
+                id: string
+                name: string
+                items_page: {
+                  items: {
+                    id: string
+                    name: string
+                    state: string
+                    updated_at: string
+                    column_values: { id: string; text: string; type: string; label?: string; index?: number; date?: string; persons_and_teams?: { id: string; kind: string }[] }[]
+                  }[]
+                }
+              }[]
+            }
+
+            const SUBITEMS_PREFIXES = ["subitems of", "subelementos de"]
+            const isSubitemsBoard = (name: string) =>
+              SUBITEMS_PREFIXES.some(p => name.toLowerCase().startsWith(p))
+
+            const rawItems = (itemsData?.boards ?? [])
+              .filter(board => !isSubitemsBoard(board.name))
+              .flatMap(board =>
+                (board.items_page?.items ?? [])
+                  .filter(item =>
+                    item.state !== "deleted" &&
+                    item.column_values.some(col =>
+                      col.type === "people" &&
+                      col.persons_and_teams?.some(
+                        p => p.kind === "person" && String(p.id) === String(user.id),
+                      ),
+                    ),
+                  )
+                  .map(item => ({ ...item, board: { id: board.id, name: board.name } }))
+              )
+
+            // Sort by most recently updated, keep top 20
+            rawItems.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+            const top20 = rawItems.slice(0, 20)
+
+            const tasks = top20.map(item => {
+              const byId = (id: string) => item.column_values.find(c => c.id === id)
+              const byType = (type: string) => item.column_values.find(c => c.type === type)
+
+              const statusCol = byId("status") ?? byType("status")
+              const priorityCol = byId("priority") ?? byType("priority")
+              const dueDateCol = byId("due_date") ?? byId("date") ?? byType("date")
+
+              return {
+                id: item.id,
+                name: item.name,
+                board: item.board?.name ?? "Unknown Board",
+                status: (statusCol as { label?: string })?.label ?? statusCol?.text ?? "—",
+                statusIndex: (statusCol as { index?: number })?.index ?? null,
+                priority: (priorityCol as { label?: string })?.label ?? priorityCol?.text ?? null,
+                priorityIndex: (priorityCol as { index?: number })?.index ?? null,
+                dueDate: (dueDateCol as { date?: string })?.date ?? dueDateCol?.text ?? null,
+                updatedAt: item.updated_at,
+              }
+            })
+
+            const payload = { user: { id: user.id, name: user.name, email: user.email, avatar: user.photo_thumb_small }, tasks }
+            mondayTaskCache.set(user.id, { at: Date.now(), payload })
+            sendJson(res, 200, payload)
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Monday API error"
+            console.error("[monday-api]", message)
+            sendJson(res, 500, { error: message })
+          }
+          return
+        }
+
+        next()
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin()],
+  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin(), mondayPlugin()],
   server: {},
   build: {
     rollupOptions: {

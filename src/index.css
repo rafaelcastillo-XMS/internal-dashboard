@@ -28,6 +28,14 @@
     scrollbar-width: auto;
     scrollbar-color: var(--border-strong) color-mix(in srgb, var(--bg-subtle) 72%, transparent);
   }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
 }
 
 @layer base {
