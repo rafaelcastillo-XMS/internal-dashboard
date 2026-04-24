@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getClients } from "@/features/clients/repository"
-import { useProfile } from "@/features/profile/useProfile"
+import { useProfile, type ProfileData } from "@/features/profile/useProfile"
 import { useMondayTasks, statusColor } from "@/features/tasks/useMondayTasks"
 
 const tabs = ["Overview", "Edit Profile"] as const
