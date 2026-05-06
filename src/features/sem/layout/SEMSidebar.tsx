@@ -47,6 +47,17 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
+      {
+        label: 'Search Terms',
+        href: '/sem/search-terms',
+        badge: { text: 'Ads', color: 'bg-[#16a34a]/20 text-[#16a34a]' },
+        icon: (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803a7.5 7.5 0 0010.607 0zM10.5 7.5h3m-3 3h3m-3 3h1.5" />
+          </svg>
+        ),
+      },
     ],
   },
 ]

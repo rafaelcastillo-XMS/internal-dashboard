@@ -34,6 +34,7 @@ const SEMLayout = lazy(() => import("./features/sem/layout/SEMLayout").then(modu
 const SEMDashboard = lazy(() => import("./pages/sem/SEMDashboard").then(module => ({ default: module.SEMDashboard })))
 const SEMCampaigns = lazy(() => import("./pages/sem/SEMCampaigns").then(module => ({ default: module.SEMCampaigns })))
 const SEMKeywords = lazy(() => import("./pages/sem/SEMKeywords").then(module => ({ default: module.SEMKeywords })))
+const SEMSearchTerms = lazy(() => import("./pages/sem/SEMSearchTerms").then(module => ({ default: module.SEMSearchTerms })))
 
 // Social Media Intelligence
 const SocialLayout = lazy(() => import("./features/social/layout/SocialLayout").then(module => ({ default: module.SocialLayout })))
@@ -115,6 +116,7 @@ function App() {
                                 <Route path="/sem" element={<SEMDashboard />} />
                                 <Route path="/sem/campaigns" element={<SEMCampaigns />} />
                                 <Route path="/sem/keywords" element={<SEMKeywords />} />
+                                <Route path="/sem/search-terms" element={<SEMSearchTerms />} />
                             </Route>
                             <Route element={<SocialProtectedLayout session={session} />}>
                                 <Route path="/social" element={<SocialDashboard />} />

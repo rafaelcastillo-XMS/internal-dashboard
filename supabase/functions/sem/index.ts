@@ -217,13 +217,59 @@ async function fetchPerformance(token: string, params: URLSearchParams) {
   }
 }
 
+// ── /search-terms ─────────────────────────────────────────────────────────────
+
+async function fetchSearchTerms(token: string, params: URLSearchParams) {
+  const accountId = (params.get("accountId") ?? "").replace(/-/g, "")
+  const startDate = params.get("startDate") ?? ""
+  const endDate   = params.get("endDate")   ?? ""
+
+  if (!accountId || !startDate || !endDate) throw new Error("Missing required params: accountId, startDate, endDate")
+
+  const query = `
+    SELECT
+      search_term_view.search_term,
+      campaign.name,
+      ad_group.name,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.ctr,
+      metrics.average_cpc,
+      metrics.conversions
+    FROM search_term_view
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+      AND campaign.status != 'REMOVED'
+      AND ad_group.status != 'REMOVED'
+    ORDER BY metrics.cost_micros DESC
+    LIMIT 500
+  `
+
+  const data = await adsSearch(token, accountId, query)
+
+  // deno-lint-ignore no-explicit-any
+  const searchTerms = (data.results ?? []).map((row: any) => ({
+    search_term:   row.searchTermView?.searchTerm ?? "",
+    campaign_name: row.campaign?.name ?? "",
+    ad_group_name: row.adGroup?.name ?? "",
+    impressions:   Math.round(Number(row.metrics?.impressions ?? 0)),
+    clicks:        Math.round(Number(row.metrics?.clicks ?? 0)),
+    cost:          safeFloat(row.metrics?.costMicros, MICROS),
+    ctr:           safeFloat(Number(row.metrics?.ctr ?? 0) * 100),
+    avg_cpc:       safeFloat(row.metrics?.averageCpc, MICROS),
+    conversions:   safeFloat(row.metrics?.conversions),
+  }))
+
+  return { searchTerms, dateRange: { start: startDate, end: endDate } }
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS })
 
   const url = new URL(req.url)
-  const segment = url.pathname.split("/").pop() // 'accounts', 'performance'
+  const segment = url.pathname.split("/").pop() // 'accounts', 'performance', 'search-terms'
 
   try {
     const token = await getAccessToken()
@@ -233,6 +279,8 @@ serve(async (req) => {
       result = await fetchAccounts(token)
     } else if (segment === "performance") {
       result = await fetchPerformance(token, url.searchParams)
+    } else if (segment === "search-terms") {
+      result = await fetchSearchTerms(token, url.searchParams)
     } else {
       return new Response(JSON.stringify({ error: `Unknown endpoint: ${segment}` }), {
         status: 404,
