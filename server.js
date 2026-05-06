@@ -36,6 +36,110 @@ async function mondayGraphQL(token, query, variables = {}) {
   return json.data
 }
 
+// ─── Google Ads helpers ───────────────────────────────────────────────────────
+
+const MICROS = 1_000_000
+const ADS_VERSION = "v17"
+
+async function getGoogleAccessToken() {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type:    "refresh_token",
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN ?? "",
+      client_id:     process.env.GOOGLE_CLIENT_ID     ?? "",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    }),
+  })
+  const data = await res.json()
+  if (!data.access_token) throw new Error(`Google token refresh failed: ${JSON.stringify(data)}`)
+  return data.access_token
+}
+
+async function adsSearch(token, customerId, query) {
+  const mccId = (process.env.ADS_MCC_ID ?? "").replace(/-/g, "")
+  const url   = `https://googleads.googleapis.com/${ADS_VERSION}/customers/${customerId}/googleAds:search`
+  const res   = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization:      `Bearer ${token}`,
+      "developer-token":  process.env.ADS_DEVELOPER_TOKEN ?? "",
+      "login-customer-id": mccId,
+      "Content-Type":     "application/json",
+    },
+    body: JSON.stringify({ query }),
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Google Ads API ${res.status}: ${err}`)
+  }
+  return res.json()
+}
+
+function safeFloat(v, divisor = 1) {
+  const n = parseFloat(String(v ?? 0))
+  if (isNaN(n) || divisor === 0) return 0
+  return Math.round((n / divisor) * 100) / 100
+}
+
+// ─── GET /api/sem/search-terms?accountId=...&startDate=...&endDate=... ────────
+app.get("/api/sem/search-terms", async (req, res) => {
+  const required = ["GOOGLE_REFRESH_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ADS_DEVELOPER_TOKEN", "ADS_MCC_ID"]
+  const missing  = required.filter(k => !process.env[k])
+  if (missing.length) {
+    return res.status(503).json({ error: `Missing env vars: ${missing.join(", ")}` })
+  }
+
+  const accountId = (req.query.accountId ?? "").replace(/-/g, "")
+  const startDate = req.query.startDate ?? ""
+  const endDate   = req.query.endDate   ?? ""
+
+  if (!accountId || !startDate || !endDate) {
+    return res.status(400).json({ error: "accountId, startDate, and endDate are required" })
+  }
+
+  try {
+    const token = await getGoogleAccessToken()
+    const data  = await adsSearch(token, accountId, `
+      SELECT
+        search_term_view.search_term,
+        campaign.name,
+        ad_group.name,
+        metrics.impressions,
+        metrics.clicks,
+        metrics.cost_micros,
+        metrics.ctr,
+        metrics.average_cpc,
+        metrics.conversions
+      FROM search_term_view
+      WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+        AND campaign.status != 'REMOVED'
+        AND ad_group.status != 'REMOVED'
+      ORDER BY metrics.cost_micros DESC
+      LIMIT 500
+    `)
+
+    const searchTerms = (data.results ?? []).map(row => ({
+      search_term:   row.searchTermView?.searchTerm   ?? "",
+      campaign_name: row.campaign?.name               ?? "",
+      ad_group_name: row.adGroup?.name                ?? "",
+      impressions:   Math.round(Number(row.metrics?.impressions ?? 0)),
+      clicks:        Math.round(Number(row.metrics?.clicks      ?? 0)),
+      cost:          safeFloat(row.metrics?.costMicros, MICROS),
+      ctr:           safeFloat(Number(row.metrics?.ctr ?? 0) * 100),
+      avg_cpc:       safeFloat(row.metrics?.averageCpc, MICROS),
+      conversions:   safeFloat(row.metrics?.conversions),
+    }))
+
+    res.json({ searchTerms, dateRange: { start: startDate, end: endDate } })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Google Ads API error"
+    console.error("[sem-search-terms]", message)
+    res.status(500).json({ error: message })
+  }
+})
+
 // ─── GET /api/monday/tasks?email=... ─────────────────────────────────────────
 app.get("/api/monday/tasks", async (req, res) => {
   const mondayToken = process.env.MONDAY_API_TOKEN ?? ""

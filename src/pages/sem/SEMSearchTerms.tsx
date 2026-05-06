@@ -4,9 +4,6 @@ import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
 import { useSEMDashboardState, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
-import { edgeFetch } from '@/lib/edgeFetch'
-
-const SEM_API = 'https://sjpvyxdyleebhqlmqscy.supabase.co/functions/v1/sem'
 
 interface SearchTerm {
   search_term:   string
@@ -63,8 +60,8 @@ export function SEMSearchTerms() {
     state.setLoading(true)
     setError(null)
     try {
-      const url = `${SEM_API}/search-terms?accountId=${state.selectedAccountId}&startDate=${state.dateRange.startDate}&endDate=${state.dateRange.endDate}`
-      const res = await edgeFetch(url)
+      const url = `/api/sem/search-terms?accountId=${state.selectedAccountId}&startDate=${state.dateRange.startDate}&endDate=${state.dateRange.endDate}`
+      const res  = await fetch(url)
       const json = await res.json()
       if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`)
       const rows: SearchTerm[] = (json.searchTerms ?? [])
