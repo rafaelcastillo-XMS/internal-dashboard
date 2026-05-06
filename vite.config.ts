@@ -285,7 +285,7 @@ async function readTokenStatus(force = false): Promise<GoogleTokenStatus> {
 
 async function enforceRequiredGoogleAccount(
   res: ServerResponse,
-  source: "SEO" | "SEM",
+  source: "SEO" | "SEM" | "Monday",
 ) {
   const status = await readTokenStatus()
   if (status.allowed) return true
