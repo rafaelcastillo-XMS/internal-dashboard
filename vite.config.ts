@@ -685,55 +685,22 @@ function semDevPlugin() {
           script = path.join(toolsDir, "ads_fetch.py")
           args   = ["--customer-id", customerId, "--start", start, "--end", end]
         } else if (req.url.startsWith("/api/sem/search-terms")) {
-          // Inline Google Ads API call for dev (no Python script needed)
-          const accountId = (searchParams.get("accountId") ?? "").replace(/-/g, "")
+          // Proxy to Supabase Edge Function (credentials live as Supabase secrets)
+          const accountId = searchParams.get("accountId") ?? ""
           const startDate = searchParams.get("startDate") ?? ""
           const endDate   = searchParams.get("endDate")   ?? ""
           if (!accountId || !startDate || !endDate) {
             sendJson(res, 400, { error: "accountId, startDate, and endDate are required" })
             return
           }
-          const devMicros = 1_000_000
-          const safeF = (v: unknown, d = 1) => { const n = parseFloat(String(v ?? 0)); return isNaN(n) ? 0 : Math.round((n / d) * 100) / 100 }
+          const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcHZ5eGR5bGVlYmhxbG1xc2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzgxODksImV4cCI6MjA4ODc1NDE4OX0.ZvzbBm-L8Jt3FzhmmX3qd7_inwrupjQrfh9JWIlX1ng"
           try {
-            const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({
-                grant_type: "refresh_token",
-                refresh_token: process.env.GOOGLE_REFRESH_TOKEN ?? "",
-                client_id:     process.env.GOOGLE_CLIENT_ID     ?? "",
-                client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-              }),
-            })
-            const tokenData = await tokenRes.json() as { access_token?: string }
-            if (!tokenData.access_token) throw new Error(`Token refresh failed: ${JSON.stringify(tokenData)}`)
-            const mccId  = (adsMccId).replace(/-/g, "")
-            const adsRes = await fetch(`https://googleads.googleapis.com/v17/customers/${accountId}/googleAds:search`, {
-              method: "POST",
-              headers: {
-                Authorization:       `Bearer ${tokenData.access_token}`,
-                "developer-token":   adsDeveloperToken,
-                "login-customer-id": mccId,
-                "Content-Type":      "application/json",
-              },
-              body: JSON.stringify({ query: `SELECT search_term_view.search_term, campaign.name, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.average_cpc, metrics.conversions FROM search_term_view WHERE segments.date BETWEEN '${startDate}' AND '${endDate}' AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED' ORDER BY metrics.cost_micros DESC LIMIT 500` }),
-            })
-            if (!adsRes.ok) { const e = await adsRes.text(); throw new Error(`Google Ads ${adsRes.status}: ${e}`) }
-            const adsData = await adsRes.json() as { results?: Record<string, unknown>[] }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const searchTerms = (adsData.results ?? []).map((row: any) => ({
-              search_term:   row.searchTermView?.searchTerm ?? "",
-              campaign_name: row.campaign?.name             ?? "",
-              ad_group_name: row.adGroup?.name              ?? "",
-              impressions:   Math.round(Number(row.metrics?.impressions ?? 0)),
-              clicks:        Math.round(Number(row.metrics?.clicks      ?? 0)),
-              cost:          safeF(row.metrics?.costMicros, devMicros),
-              ctr:           safeF(Number(row.metrics?.ctr ?? 0) * 100),
-              avg_cpc:       safeF(row.metrics?.averageCpc, devMicros),
-              conversions:   safeF(row.metrics?.conversions),
-            }))
-            sendJson(res, 200, { searchTerms, dateRange: { start: startDate, end: endDate } })
+            const upstream = await fetch(
+              `https://sjpvyxdyleebhqlmqscy.supabase.co/functions/v1/sem/search-terms?accountId=${accountId}&startDate=${startDate}&endDate=${endDate}`,
+              { headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, "Content-Type": "application/json" } }
+            )
+            const data = await upstream.json()
+            sendJson(res, upstream.status, data)
           } catch (error) {
             sendJson(res, 500, { error: error instanceof Error ? error.message : "Search terms error" })
           }
