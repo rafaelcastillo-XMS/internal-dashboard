@@ -36,62 +36,14 @@ async function mondayGraphQL(token, query, variables = {}) {
   return json.data
 }
 
-// ─── Google Ads helpers ───────────────────────────────────────────────────────
+// ─── Supabase Edge Function proxy ────────────────────────────────────────────
 
-const MICROS = 1_000_000
-const ADS_VERSION = "v17"
-
-async function getGoogleAccessToken() {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type:    "refresh_token",
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN ?? "",
-      client_id:     process.env.GOOGLE_CLIENT_ID     ?? "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-    }),
-  })
-  const data = await res.json()
-  if (!data.access_token) throw new Error(`Google token refresh failed: ${JSON.stringify(data)}`)
-  return data.access_token
-}
-
-async function adsSearch(token, customerId, query) {
-  const mccId = (process.env.ADS_MCC_ID ?? "").replace(/-/g, "")
-  const url   = `https://googleads.googleapis.com/${ADS_VERSION}/customers/${customerId}/googleAds:search`
-  const res   = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization:      `Bearer ${token}`,
-      "developer-token":  process.env.ADS_DEVELOPER_TOKEN ?? "",
-      "login-customer-id": mccId,
-      "Content-Type":     "application/json",
-    },
-    body: JSON.stringify({ query }),
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Google Ads API ${res.status}: ${err}`)
-  }
-  return res.json()
-}
-
-function safeFloat(v, divisor = 1) {
-  const n = parseFloat(String(v ?? 0))
-  if (isNaN(n) || divisor === 0) return 0
-  return Math.round((n / divisor) * 100) / 100
-}
+const SUPABASE_URL      = "https://sjpvyxdyleebhqlmqscy.supabase.co"
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcHZ5eGR5bGVlYmhxbG1xc2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzgxODksImV4cCI6MjA4ODc1NDE4OX0.ZvzbBm-L8Jt3FzhmmX3qd7_inwrupjQrfh9JWIlX1ng"
 
 // ─── GET /api/sem/search-terms?accountId=...&startDate=...&endDate=... ────────
 app.get("/api/sem/search-terms", async (req, res) => {
-  const required = ["GOOGLE_REFRESH_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ADS_DEVELOPER_TOKEN", "ADS_MCC_ID"]
-  const missing  = required.filter(k => !process.env[k])
-  if (missing.length) {
-    return res.status(503).json({ error: `Missing env vars: ${missing.join(", ")}` })
-  }
-
-  const accountId = (req.query.accountId ?? "").replace(/-/g, "")
+  const accountId = req.query.accountId ?? ""
   const startDate = req.query.startDate ?? ""
   const endDate   = req.query.endDate   ?? ""
 
@@ -100,41 +52,18 @@ app.get("/api/sem/search-terms", async (req, res) => {
   }
 
   try {
-    const token = await getGoogleAccessToken()
-    const data  = await adsSearch(token, accountId, `
-      SELECT
-        search_term_view.search_term,
-        campaign.name,
-        ad_group.name,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.ctr,
-        metrics.average_cpc,
-        metrics.conversions
-      FROM search_term_view
-      WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
-        AND campaign.status != 'REMOVED'
-        AND ad_group.status != 'REMOVED'
-      ORDER BY metrics.cost_micros DESC
-      LIMIT 500
-    `)
-
-    const searchTerms = (data.results ?? []).map(row => ({
-      search_term:   row.searchTermView?.searchTerm   ?? "",
-      campaign_name: row.campaign?.name               ?? "",
-      ad_group_name: row.adGroup?.name                ?? "",
-      impressions:   Math.round(Number(row.metrics?.impressions ?? 0)),
-      clicks:        Math.round(Number(row.metrics?.clicks      ?? 0)),
-      cost:          safeFloat(row.metrics?.costMicros, MICROS),
-      ctr:           safeFloat(Number(row.metrics?.ctr ?? 0) * 100),
-      avg_cpc:       safeFloat(row.metrics?.averageCpc, MICROS),
-      conversions:   safeFloat(row.metrics?.conversions),
-    }))
-
-    res.json({ searchTerms, dateRange: { start: startDate, end: endDate } })
+    const edgeUrl = `${SUPABASE_URL}/functions/v1/sem/search-terms?accountId=${accountId}&startDate=${startDate}&endDate=${endDate}`
+    const upstream = await fetch(edgeUrl, {
+      headers: {
+        apikey:        SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+    })
+    const data = await upstream.json()
+    res.status(upstream.status).json(data)
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Google Ads API error"
+    const message = err instanceof Error ? err.message : "Search terms error"
     console.error("[sem-search-terms]", message)
     res.status(500).json({ error: message })
   }
