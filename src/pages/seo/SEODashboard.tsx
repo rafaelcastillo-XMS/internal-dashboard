@@ -161,8 +161,9 @@ export function SEODashboard() {
           <div className="flex-1">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">No Google properties found</p>
             <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
-              The connected Google account has no Search Console sites or GA4 properties.
-              Connect with the correct account from a client's integrations page.
+              {state.propertiesError
+                ? state.propertiesError
+                : "The connected Google account has no Search Console sites or GA4 properties. Connect with the correct account from a client's integrations page."}
             </p>
           </div>
           <button
