@@ -414,22 +414,33 @@ export function SEMDashboard() {
                     )
                   }
                 })}
-              {/* Totals Row */}
-              {yearlyAds.length > 0 && (
-              <tr className="bg-meta-3/10 transition-colors">
-                <td className="whitespace-nowrap px-5 py-4 font-bold text-black dark:text-white uppercase text-xs bg-[#eef7f2] dark:bg-[#1a382e]">TOTAL</td>
-                <td className="whitespace-nowrap px-5 py-4 text-body dark:text-bodydark bg-[#eef7f2] dark:bg-[#1a382e] border-r border-stroke/50 dark:border-strokedark/50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)] relative z-10">-</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmtCurrency(yearlyAds.reduce((sum, r) => sum + r.spend, 0))}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmt(yearlyAds.reduce((sum, r) => sum + r.clicks, 0))}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{yearlyAds.reduce((sum, r) => sum + r.conversions, 0).toFixed(2)}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmt(yearlyAds.reduce((sum, r) => sum + r.impressions, 0))}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmt(yearlyAds.reduce((sum, r) => sum + r.ctr, 0) / yearlyAds.length || 0, 2)}%</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmtCurrency(yearlyAds.reduce((sum, r) => sum + r.avg_cpc, 0) / yearlyAds.length || 0)}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmt(yearlyAds.reduce((sum, r) => sum + r.interactions, 0))}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">-</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">-</td>
-              </tr>
-              )}
+              {/* Totals Row — always visible */}
+              {(() => {
+                const totalSpend       = yearlyAds.reduce((s, r) => s + r.spend, 0)
+                const totalClicks      = yearlyAds.reduce((s, r) => s + r.clicks, 0)
+                const totalConv        = yearlyAds.reduce((s, r) => s + r.conversions, 0)
+                const totalImpr        = yearlyAds.reduce((s, r) => s + r.impressions, 0)
+                const totalInteract    = yearlyAds.reduce((s, r) => s + r.interactions, 0)
+                const weightedCtr      = totalImpr > 0 ? (totalClicks / totalImpr) * 100 : 0
+                const weightedCpc      = totalClicks > 0 ? totalSpend / totalClicks : 0
+                const scoredRows       = yearlyAds.filter(r => r.opt_score > 0)
+                const avgOptScore      = scoredRows.length > 0 ? scoredRows.reduce((s, r) => s + r.opt_score, 0) / scoredRows.length : 0
+                return (
+                  <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
+                    <td className="whitespace-nowrap px-5 py-4 font-bold text-[#16a34a] uppercase text-xs">Total {selectedYear}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-[#16a34a]/60 dark:text-[#16a34a]/40 border-r border-stroke/50 dark:border-strokedark/50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)] relative z-10 text-xs">Google Ads</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmtCurrency(totalSpend)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmt(totalClicks)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmt(totalConv, 2)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmt(totalImpr)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmt(weightedCtr, 2)}%</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmtCurrency(weightedCpc)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmt(totalInteract)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{avgOptScore > 0 ? `${fmt(avgOptScore, 2)}%` : '—'}</td>
+                    <td className="whitespace-nowrap px-5 py-4" />
+                  </tr>
+                )
+              })()}
             </tbody>
             </table>
           </div>
@@ -497,20 +508,30 @@ export function SEMDashboard() {
                     )
                   }
                 })}
-              {/* Totals Row */}
-              {yearlyGuarantee.length > 0 && (
-              <tr className="bg-meta-3/10 transition-colors">
-                <td className="whitespace-nowrap px-5 py-4 font-bold text-black dark:text-white uppercase text-xs bg-[#eef7f2] dark:bg-[#1a382e]">TOTAL</td>
-                <td className="whitespace-nowrap px-5 py-4 text-body dark:text-bodydark bg-[#eef7f2] dark:bg-[#1a382e] border-r border-stroke/50 dark:border-strokedark/50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)] relative z-10">-</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmtCurrency(yearlyGuarantee.reduce((sum, r) => sum + r.spend, 0))}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmt(yearlyGuarantee.reduce((sum, r) => sum + r.leads, 0))}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmtCurrency(yearlyGuarantee.reduce((sum, r) => sum + r.cost_per_lead, 0) / yearlyGuarantee.length || 0)}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmt(yearlyGuarantee.reduce((sum, r) => sum + r.ad_impressions, 0))}</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmt(yearlyGuarantee.reduce((sum, r) => sum + r.top_imp_rate, 0) / yearlyGuarantee.length || 0, 2)}%</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">{fmt(yearlyGuarantee.reduce((sum, r) => sum + r.abs_top_imp_rate, 0) / yearlyGuarantee.length || 0, 2)}%</td>
-                <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-meta-3">-</td>
-              </tr>
-              )}
+              {/* Totals Row — always visible */}
+              {(() => {
+                const totalSpend    = yearlyGuarantee.reduce((s, r) => s + r.spend, 0)
+                const totalLeads    = yearlyGuarantee.reduce((s, r) => s + r.leads, 0)
+                const totalImpr     = yearlyGuarantee.reduce((s, r) => s + r.ad_impressions, 0)
+                const avgCostPerLead = totalLeads > 0 ? totalSpend / totalLeads : 0
+                const rowsWithTop   = yearlyGuarantee.filter(r => r.top_imp_rate > 0)
+                const rowsWithAbs   = yearlyGuarantee.filter(r => r.abs_top_imp_rate > 0)
+                const avgTopImp     = rowsWithTop.length > 0 ? rowsWithTop.reduce((s, r) => s + r.top_imp_rate, 0) / rowsWithTop.length : 0
+                const avgAbsTop     = rowsWithAbs.length > 0 ? rowsWithAbs.reduce((s, r) => s + r.abs_top_imp_rate, 0) / rowsWithAbs.length : 0
+                return (
+                  <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
+                    <td className="whitespace-nowrap px-5 py-4 font-bold text-[#16a34a] uppercase text-xs">Total {selectedYear}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-[#16a34a]/60 dark:text-[#16a34a]/40 border-r border-stroke/50 dark:border-strokedark/50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)] relative z-10 text-xs">Google Guarantee</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmtCurrency(totalSpend)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmt(totalLeads)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totalLeads > 0 ? fmtCurrency(avgCostPerLead) : '—'}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmt(totalImpr)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{avgTopImp > 0 ? `${fmt(avgTopImp, 2)}%` : '—'}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{avgAbsTop > 0 ? `${fmt(avgAbsTop, 2)}%` : '—'}</td>
+                    <td className="whitespace-nowrap px-5 py-4" />
+                  </tr>
+                )
+              })()}
             </tbody>
             </table>
           </div>
