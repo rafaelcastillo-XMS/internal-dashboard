@@ -130,7 +130,7 @@ export function SEMSearchTerms() {
         <div className="border-b border-stroke px-6 py-5 dark:border-strokedark flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-black dark:text-white">Top Search Terms</h3>
-            <p className="mt-0.5 text-xs text-body dark:text-bodydark">Top 500 by spend · Live from Google Ads · Click headers to sort</p>
+            <p className="mt-0.5 text-xs text-body dark:text-bodydark">Top 100 by spend · Live from Google Ads · Click headers to sort</p>
           </div>
           {!state.loading && searchTerms.length > 0 && (
             <span className="rounded-full bg-stroke/50 px-2.5 py-1 text-xs font-semibold text-body dark:text-bodydark dark:bg-strokedark">

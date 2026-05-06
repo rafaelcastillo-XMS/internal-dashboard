@@ -242,7 +242,7 @@ async function fetchSearchTerms(token: string, params: URLSearchParams) {
       AND campaign.status != 'REMOVED'
       AND ad_group.status != 'REMOVED'
     ORDER BY metrics.cost_micros DESC
-    LIMIT 500
+    LIMIT 100
   `
 
   const data = await adsSearch(token, accountId, query)
