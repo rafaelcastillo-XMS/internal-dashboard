@@ -6,7 +6,7 @@ const CORS = {
 }
 
 const MICROS = 1_000_000
-const ADS_VERSION = "v17"
+const ADS_VERSION = "v24"
 
 // ── Google OAuth ────────────────────────────────────────────────────────────
 
