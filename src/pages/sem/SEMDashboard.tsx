@@ -128,29 +128,18 @@ export function SEMDashboard() {
 
   const fetchYearlyPerformance = useCallback(async (accountId: string, year: string) => {
     try {
-      // Uncomment and adapt table names to your Supabase schema:
-      /*
       const [adsRes, guaranteeRes] = await Promise.all([
-        supabase.from('sem_yearly_ads').select('*').eq('account_id', accountId).eq('year', year).order('month_index', { ascending: true }),
-        supabase.from('sem_yearly_guarantee').select('*').eq('account_id', accountId).eq('year', year).order('month_index', { ascending: true })
+        supabase.from('sem_yearly_ads').select('*').eq('account_id', accountId).eq('year', Number(year)).order('month_index', { ascending: true }),
+        supabase.from('sem_yearly_guarantee').select('*').eq('account_id', accountId).eq('year', Number(year)).order('month_index', { ascending: true }),
       ])
-      
-      if (adsRes.error) throw adsRes.error;
-      if (guaranteeRes.error) throw guaranteeRes.error;
-
-      setYearlyAds(adsRes.data || []);
-      setYearlyGuarantee(guaranteeRes.data || []);
-      */
-      
-      // Since it's dynamic now, we initialize to empty to prove it won't show hardcoded data.
-      // Once your Supabase tables are ready, you can uncomment block above.
-      setYearlyAds([]);
-      setYearlyGuarantee([]);
-      
+      if (adsRes.error) throw adsRes.error
+      if (guaranteeRes.error) throw guaranteeRes.error
+      setYearlyAds(adsRes.data || [])
+      setYearlyGuarantee(guaranteeRes.data || [])
     } catch (err) {
       console.error('[SEM Yearly Performance]', err)
-      setYearlyAds([]);
-      setYearlyGuarantee([]);
+      setYearlyAds([])
+      setYearlyGuarantee([])
     }
   }, [])
 
