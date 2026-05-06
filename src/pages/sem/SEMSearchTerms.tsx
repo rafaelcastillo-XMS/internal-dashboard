@@ -4,7 +4,9 @@ import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
 import { useSEMDashboardState, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
-import { supabase } from '@/lib/supabase'
+import { edgeFetch } from '@/lib/edgeFetch'
+
+const SEM_API = 'https://sjpvyxdyleebhqlmqscy.supabase.co/functions/v1/sem'
 
 interface SearchTerm {
   search_term:   string
@@ -43,43 +45,40 @@ const COLUMNS: { key: string; label: string; sortable: boolean }[] = [
 export function SEMSearchTerms() {
   const state = useSEMDashboardState()
   const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([])
+  const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('cost')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   const fetchData = useCallback(async (force = false) => {
-    if (!state.selectedAccountId) return
-    const cacheKey = `search-terms:${state.selectedAccountId}:${state.rangeKey}`
+    if (!state.selectedAccountId || !state.dateRange.startDate) return
+    const cacheKey = `search-terms:${state.selectedAccountId}:${state.dateRange.startDate}:${state.dateRange.endDate}`
     if (!force) {
       const cached = cacheGet<{ data: SearchTerm[]; lastUpdated: string }>(cacheKey)
-      if (cached) { setSearchTerms(cached.data); state.setLastUpdated(new Date(cached.lastUpdated)); return }
+      if (cached) {
+        setSearchTerms(cached.data)
+        state.setLastUpdated(new Date(cached.lastUpdated))
+        return
+      }
     }
     state.setLoading(true)
+    setError(null)
     try {
-      const { data, error } = await supabase
-        .from('sem_search_terms')
-        .select('search_term,campaign_name,ad_group_name,impressions,clicks,cost,ctr,avg_cpc,conversions')
-        .eq('account_id', state.selectedAccountId)
-        .eq('date_range', state.rangeKey)
-        .order('cost', { ascending: false })
-        .limit(500)
-      if (error) { console.error('[SEM Search Terms]', error.message); return }
-      const rows: SearchTerm[] = (data || []).map((r) => ({
-        search_term:   r.search_term,
-        campaign_name: r.campaign_name,
-        ad_group_name: r.ad_group_name,
-        impressions:   r.impressions,
-        clicks:        r.clicks,
-        cost:          r.cost,
-        ctr:           r.ctr,
-        avg_cpc:       r.avg_cpc,
-        conversions:   r.conversions,
-      }))
+      const url = `${SEM_API}/search-terms?accountId=${state.selectedAccountId}&startDate=${state.dateRange.startDate}&endDate=${state.dateRange.endDate}`
+      const res = await edgeFetch(url)
+      const json = await res.json()
+      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`)
+      const rows: SearchTerm[] = (json.searchTerms ?? [])
       const updated = new Date()
       setSearchTerms(rows)
       cacheSet(cacheKey, { data: rows, lastUpdated: updated.toISOString() })
       state.setLastUpdated(updated)
-    } catch (err) { console.error('[SEM Search Terms]', err) } finally { state.setLoading(false) }
-  }, [state.selectedAccountId, state.rangeKey])
+    } catch (err) {
+      setError((err as Error).message)
+      console.error('[SEM Search Terms]', err)
+    } finally {
+      state.setLoading(false)
+    }
+  }, [state.selectedAccountId, state.dateRange.startDate, state.dateRange.endDate])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -123,11 +122,18 @@ export function SEMSearchTerms() {
         <DashboardControls {...state} onRefresh={() => fetchData(true)} pageTitle="SEM-SearchTerms" />
       </div>
 
+      {error && (
+        <div className="mb-4 rounded-xl border border-danger/30 bg-danger/5 px-5 py-4">
+          <p className="text-sm font-semibold text-danger">Error loading search terms</p>
+          <p className="mt-0.5 text-xs text-danger/80">{error}</p>
+        </div>
+      )}
+
       <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
         <div className="border-b border-stroke px-6 py-5 dark:border-strokedark flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-black dark:text-white">Top Search Terms</h3>
-            <p className="mt-0.5 text-xs text-body dark:text-bodydark">Top 500 by spend · Click column headers to sort</p>
+            <p className="mt-0.5 text-xs text-body dark:text-bodydark">Top 500 by spend · Live from Google Ads · Click headers to sort</p>
           </div>
           {!state.loading && searchTerms.length > 0 && (
             <span className="rounded-full bg-stroke/50 px-2.5 py-1 text-xs font-semibold text-body dark:text-bodydark dark:bg-strokedark">
@@ -154,7 +160,11 @@ export function SEMSearchTerms() {
         ) : sorted.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <p className="text-sm text-body dark:text-bodydark">
-              {state.selectedAccountId ? 'No search term data for this period. Make sure the sync script has run.' : 'Select an account to load data.'}
+              {!state.selectedAccountId
+                ? 'Select an account to load data.'
+                : error
+                  ? 'Could not load search terms. Check the error above.'
+                  : 'No search term data for this period.'}
             </p>
           </div>
         ) : (
