@@ -339,6 +339,28 @@ export function SEMDashboard() {
           </div>
         </div>
         
+        {yearlyAds.length === 0 && (
+          <div className="mx-6 my-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/20 dark:bg-amber-500/10">
+            <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                No data yet — run the sync script to load yearly performance
+              </p>
+              <p className="mt-0.5 text-xs text-amber-600/80 dark:text-amber-400/70">
+                Google Ads API quota resets <span className="font-semibold">Thursday May 7 ~10:24 AM</span>. Then run:
+              </p>
+              <code className="mt-1.5 block rounded-lg bg-amber-100 px-3 py-2 font-mono text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300 leading-relaxed">
+                python3 tools/ads_sync_yearly.py --customer-id YOUR_ID --year {selectedYear}
+              </code>
+              <p className="mt-1.5 text-[10px] text-amber-500/70 dark:text-amber-400/50">
+                IDs: 2786993252 · 9384381125 · 2666670356 · 9079015711 · 3440776703 · 2855087048 · 2984731543
+              </p>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'ads' && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
