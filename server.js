@@ -43,10 +43,10 @@ app.get("/api/monday/tasks", async (req, res) => {
     return res.status(503).json({ error: "MONDAY_API_TOKEN is not configured" })
   }
 
-  // Require a shared internal secret to prevent unauthenticated enumeration
+  // Only enforce secret when INTERNAL_API_SECRET is configured
   const internalSecret = process.env.INTERNAL_API_SECRET ?? ""
   const authHeader = req.headers["authorization"] ?? ""
-  if (!internalSecret || authHeader !== `Bearer ${internalSecret}`) {
+  if (internalSecret && authHeader !== `Bearer ${internalSecret}`) {
     return res.status(401).json({ error: "Unauthorized" })
   }
 
