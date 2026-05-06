@@ -131,7 +131,8 @@ export function Tasks() {
 
   const doneCount = tasks.filter(t => t.statusIndex === 1).length
   const inProgressCount = tasks.filter(t => t.statusIndex !== null && t.statusIndex !== 1 && t.statusIndex !== 0).length
-  const overdueCount = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date()).length
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const overdueCount = tasks.filter(t => t.dueDate && new Date(t.dueDate) < todayStart).length
 
   return (
     <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">

@@ -102,6 +102,8 @@ function createNotebooklmBridge() {
 
 const notebooklmBridge = createNotebooklmBridge()
 
+const auditResultStore = new Map<string, { html: string; receivedAt: number }>()
+
 async function readJsonBody(req: IncomingMessage) {
   const chunks: Uint8Array[] = []
 
@@ -122,11 +124,19 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown) {
 }
 
 function sendPdf(res: ServerResponse, filename: string, payload: Buffer) {
+  const safeFilename = filename.replace(/["\r\n\\]/g, "").replace(/[^a-zA-Z0-9._\- ]/g, "_") || "report.pdf"
   res.statusCode = 200
   res.setHeader("Content-Type", "application/pdf")
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+  res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`)
   res.end(payload)
 }
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const NUMERIC_RE = /^\d+$/
+
+function isValidDate(v: string) { return DATE_RE.test(v) }
+function isNumericId(v: string) { return NUMERIC_RE.test(v) }
+function isSafeReturnPath(v: string) { return v.startsWith("/") && !v.startsWith("//") }
 
 type GoogleTokenStatus = {
   connected: boolean
@@ -148,7 +158,7 @@ function normalizeGoogleEmail(input: string) {
   return email.endsWith("@xperienceusa") ? `${email}.com` : email
 }
 
-const REQUIRED_GOOGLE_EMAIL = normalizeGoogleEmail(process.env.GOOGLE_REQUIRED_EMAIL ?? "eva@xperienceusa.com")
+const REQUIRED_GOOGLE_EMAIL = normalizeGoogleEmail(process.env.GOOGLE_REQUIRED_EMAIL ?? "")
 const TOKEN_STATUS_CACHE_TTL_MS = 30_000
 let tokenStatusCache: { at: number; status: GoogleTokenStatus } | null = null
 
@@ -366,7 +376,8 @@ function googleAuthPlugin() {
         if (url.pathname === "/api/auth/google/start") {
           const { client_id } = getClientCreds()
           // Encode return URL in the OAuth state param so callback knows where to redirect
-          const returnPath = url.searchParams.get("return") || "/settings"
+          const rawReturn = url.searchParams.get("return") || "/settings"
+          const returnPath = isSafeReturnPath(rawReturn) ? rawReturn : "/settings"
           const state = Buffer.from(JSON.stringify({ returnPath })).toString("base64url")
           const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
           authUrl.searchParams.set("client_id", client_id)
@@ -389,7 +400,9 @@ function googleAuthPlugin() {
           let returnPath = "/settings"
           try {
             const decoded = JSON.parse(Buffer.from(stateParam, "base64url").toString())
-            if (typeof decoded.returnPath === "string") returnPath = decoded.returnPath
+            if (typeof decoded.returnPath === "string" && isSafeReturnPath(decoded.returnPath)) {
+              returnPath = decoded.returnPath
+            }
           } catch { /* use default */ }
 
           if (oauthError || !code) {
@@ -466,6 +479,26 @@ function seoDevPlugin() {
           next()
           return
         }
+
+        // N8N callback — validate shared secret before accepting
+        if (req.url === "/api/seo/onpage-audit/result" && req.method === "POST") {
+          const callbackSecret = process.env.N8N_CALLBACK_SECRET ?? ""
+          const authHeader = req.headers["authorization"] ?? ""
+          if (!callbackSecret || authHeader !== `Bearer ${callbackSecret}`) {
+            sendJson(res, 401, { error: "Unauthorized" })
+            return
+          }
+          const body = await readJsonBody(req)
+          const { url, html } = body as { url?: string; html?: string }
+          if (!url || !html) {
+            sendJson(res, 400, { error: "url and html are required" })
+            return
+          }
+          auditResultStore.set(url, { html, receivedAt: Date.now() })
+          sendJson(res, 200, { success: true })
+          return
+        }
+
         if (!(await enforceRequiredGoogleAccount(res, "SEO"))) return
 
         const { searchParams } = new URL(req.url, "http://localhost")
@@ -486,6 +519,17 @@ function seoDevPlugin() {
             sendJson(res, 400, { error: "siteUrl, startDate, and endDate are required" })
             return
           }
+          if (!isValidDate(startDate) || !isValidDate(endDate)) {
+            sendJson(res, 400, { error: "startDate and endDate must be YYYY-MM-DD" })
+            return
+          }
+          const normalizedSite = siteUrl.startsWith("sc-domain:")
+            ? siteUrl
+            : (() => { try { const u = new URL(siteUrl); return ["http:","https:"].includes(u.protocol) ? siteUrl : null } catch { return null } })()
+          if (!normalizedSite) {
+            sendJson(res, 400, { error: "siteUrl must be a valid http/https URL or sc-domain: property" })
+            return
+          }
           script = path.join(toolsDir, "gsc_fetch.py")
           args = ["--site", siteUrl, "--start", startDate, "--end", endDate]
         } else if (req.url.startsWith("/api/seo/ga4")) {
@@ -496,6 +540,14 @@ function seoDevPlugin() {
             sendJson(res, 400, { error: "propertyId, startDate, and endDate are required" })
             return
           }
+          if (!isNumericId(propertyId)) {
+            sendJson(res, 400, { error: "propertyId must be numeric" })
+            return
+          }
+          if (!isValidDate(startDate) || !isValidDate(endDate)) {
+            sendJson(res, 400, { error: "startDate and endDate must be YYYY-MM-DD" })
+            return
+          }
           script = path.join(toolsDir, "ga4_fetch.py")
           args = ["--property", propertyId, "--start", startDate, "--end", endDate]
         } else if (req.url.startsWith("/api/seo/psi")) {
@@ -504,11 +556,68 @@ function seoDevPlugin() {
             sendJson(res, 400, { error: "url param is required" })
             return
           }
-          const url = rawUrl.startsWith("sc-domain:")
-            ? `https://${rawUrl.slice("sc-domain:".length)}/`
-            : rawUrl
+          const parsedUrl = (() => { try { return new URL(rawUrl.startsWith("sc-domain:") ? `https://${rawUrl.slice("sc-domain:".length)}/` : rawUrl) } catch { return null } })()
+          if (!parsedUrl || !["http:", "https:"].includes(parsedUrl.protocol)) {
+            sendJson(res, 400, { error: "url must be a valid http/https URL" })
+            return
+          }
           script = path.join(toolsDir, "psi_fetch.py")
-          args = ["--url", url]
+          args = ["--url", parsedUrl.href]
+        } else if (req.url.startsWith("/api/seo/onpage-audit/result") && req.method === "GET") {
+          const url = searchParams.get("url") ?? ""
+          if (!url) {
+            sendJson(res, 400, { error: "url param required" })
+            return
+          }
+          const entry = auditResultStore.get(url)
+          if (!entry) {
+            sendJson(res, 200, { ready: false })
+          } else {
+            sendJson(res, 200, { ready: true, html: entry.html, receivedAt: entry.receivedAt })
+          }
+          return
+        } else if (req.url.startsWith("/api/seo/onpage-audit") && req.method === "POST") {
+          const webhookUrl = process.env.N8N_ONPAGE_AUDIT_WEBHOOK ?? ""
+          if (!webhookUrl) {
+            sendJson(res, 503, { error: "N8N_ONPAGE_AUDIT_WEBHOOK is not configured in .env" })
+            return
+          }
+          const body = await readJsonBody(req)
+          const { landingPageUrl, screamingFrogSheetUrl } = body as { landingPageUrl?: string; screamingFrogSheetUrl?: string }
+          if (!landingPageUrl || !screamingFrogSheetUrl) {
+            sendJson(res, 400, { error: "landingPageUrl and screamingFrogSheetUrl are required" })
+            return
+          }
+          const parsedLanding = (() => { try { return new URL(landingPageUrl) } catch { return null } })()
+          const parsedSheet   = (() => { try { return new URL(screamingFrogSheetUrl) } catch { return null } })()
+          if (!parsedLanding || parsedLanding.protocol !== "https:") {
+            sendJson(res, 400, { error: "landingPageUrl must be a valid https URL" })
+            return
+          }
+          if (!parsedSheet || parsedSheet.protocol !== "https:") {
+            sendJson(res, 400, { error: "screamingFrogSheetUrl must be a valid https URL" })
+            return
+          }
+          try {
+            const n8nRes = await fetch(webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                "Landing Page Url": landingPageUrl,
+                "Screaming Frog Google Sheet URL": screamingFrogSheetUrl,
+              }),
+            })
+            if (!n8nRes.ok) {
+              sendJson(res, 502, { error: `N8N webhook returned ${n8nRes.status}` })
+              return
+            }
+            sendJson(res, 200, { success: true })
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "N8N request failed"
+            console.error("[seo-api/onpage-audit]", message)
+            sendJson(res, 500, { error: message })
+          }
+          return
         } else {
           next()
           return
@@ -563,6 +672,14 @@ function semDevPlugin() {
           const end        = searchParams.get("end")        ?? ""
           if (!customerId || !start || !end) {
             sendJson(res, 400, { error: "customerId, start, and end are required" })
+            return
+          }
+          if (!isNumericId(customerId.replace(/-/g, ""))) {
+            sendJson(res, 400, { error: "customerId must be numeric" })
+            return
+          }
+          if (!isValidDate(start) || !isValidDate(end)) {
+            sendJson(res, 400, { error: "start and end must be YYYY-MM-DD" })
             return
           }
           script = path.join(toolsDir, "ads_fetch.py")
@@ -628,19 +745,22 @@ function pdfExportDevPlugin() {
           }
 
           const toolsDir = path.resolve(__dirname, "tools")
-          const tmpDir = fs.mkdtempSync(path.join(process.cwd(), ".pdf-export-"))
+          const tmpDir = fs.mkdtempSync(path.join(require("os").tmpdir(), ".pdf-export-"))
           const inputPath = path.join(tmpDir, "payload.json")
           const outputPath = path.join(tmpDir, "report.pdf")
-          fs.writeFileSync(inputPath, JSON.stringify(body.payload, null, 2))
+          try {
+            fs.writeFileSync(inputPath, JSON.stringify(body.payload, null, 2))
 
-          await execFileAsync("python3", [path.join(toolsDir, "pdf_export.py"), "--input", inputPath, "--output", outputPath], {
-            cwd: __dirname,
-            timeout: 60_000,
-          })
+            await execFileAsync("python3", [path.join(toolsDir, "pdf_export.py"), "--input", inputPath, "--output", outputPath], {
+              cwd: __dirname,
+              timeout: 60_000,
+            })
 
-          const pdfBuffer = fs.readFileSync(outputPath)
-          sendPdf(res, body.filename || "xms-report.pdf", pdfBuffer)
-          fs.rmSync(tmpDir, { recursive: true, force: true })
+            const pdfBuffer = fs.readFileSync(outputPath)
+            sendPdf(res, body.filename || "xms-report.pdf", pdfBuffer)
+          } finally {
+            fs.rmSync(tmpDir, { recursive: true, force: true })
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : "PDF export error"
           console.error("[pdf-export]", message)
@@ -670,6 +790,8 @@ function mondayPlugin() {
         }
 
         const url = new URL(req.url, "http://localhost")
+
+        if (!(await enforceRequiredGoogleAccount(res, "Monday"))) return
 
         // GET /api/monday/tasks?email=...
         if (url.pathname === "/api/monday/tasks" && req.method === "GET") {

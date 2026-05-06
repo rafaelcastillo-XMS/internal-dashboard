@@ -43,6 +43,13 @@ app.get("/api/monday/tasks", async (req, res) => {
     return res.status(503).json({ error: "MONDAY_API_TOKEN is not configured" })
   }
 
+  // Require a shared internal secret to prevent unauthenticated enumeration
+  const internalSecret = process.env.INTERNAL_API_SECRET ?? ""
+  const authHeader = req.headers["authorization"] ?? ""
+  if (!internalSecret || authHeader !== `Bearer ${internalSecret}`) {
+    return res.status(401).json({ error: "Unauthorized" })
+  }
+
   const emailMap = buildEmailMap()
   const sessionEmail = req.query.email ?? ""
   const mondayEmail = emailMap[sessionEmail] ?? sessionEmail
@@ -67,9 +74,9 @@ app.get("/api/monday/tasks", async (req, res) => {
 
     const itemsData = await mondayGraphQL(mondayToken, `
       query GetBoardItems {
-        boards(limit: 100, state: active) {
+        boards(limit: 50, state: active) {
           id name
-          items_page(limit: 20) {
+          items_page(limit: 50) {
             items {
               id name state updated_at
               column_values {

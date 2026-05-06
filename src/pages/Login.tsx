@@ -49,8 +49,10 @@ export function Login() {
         })
         if (error) {
             setAuthError(error.message)
-            setLoading(false)
         }
+        // Always reset loading — if no error the redirect is in progress, but if
+        // the user cancels the OAuth popup they return here and the button must unlock.
+        setLoading(false)
     }
 
     return (

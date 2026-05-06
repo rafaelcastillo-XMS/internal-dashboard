@@ -24,6 +24,7 @@ Install: pip3 install google-ads
 import argparse
 import json
 import os
+import re
 import sys
 
 _ROOT = os.path.join(os.path.dirname(__file__), '..')
@@ -69,7 +70,18 @@ def safe_float(v, divisor=1) -> float:
         return 0.0
 
 
+_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+_ID_RE   = re.compile(r'^\d+$')
+
+def _validate_inputs(customer_id: str, start: str, end: str) -> None:
+    if not _ID_RE.match(customer_id):
+        raise ValueError(f'Invalid customer_id: {customer_id!r}')
+    if not _DATE_RE.match(start) or not _DATE_RE.match(end):
+        raise ValueError(f'Invalid date range: {start!r} – {end!r}')
+
+
 def fetch_campaigns(ga_service, customer_id: str, start: str, end: str) -> list:
+    _validate_inputs(customer_id, start, end)
     query = f"""
         SELECT
           campaign.id,
@@ -112,6 +124,7 @@ def fetch_campaigns(ga_service, customer_id: str, start: str, end: str) -> list:
 
 
 def fetch_keywords(ga_service, customer_id: str, start: str, end: str) -> list:
+    _validate_inputs(customer_id, start, end)
     query = f"""
         SELECT
           ad_group_criterion.keyword.text,
@@ -181,6 +194,12 @@ def main():
     args = parser.parse_args()
 
     customer_id = args.customer_id.replace('-', '')
+    if not re.fullmatch(r'\d+', customer_id):
+        print(json.dumps({'error': 'Invalid customer-id'}), file=sys.stderr)
+        sys.exit(1)
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', args.start) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', args.end):
+        print(json.dumps({'error': 'Invalid date format, expected YYYY-MM-DD'}), file=sys.stderr)
+        sys.exit(1)
 
     client     = get_ads_client()
     ga_service = client.get_service('GoogleAdsService')

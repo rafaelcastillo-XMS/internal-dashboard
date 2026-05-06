@@ -27,6 +27,7 @@ const SEOEngagement = lazy(() => import("./pages/seo/SEOEngagement").then(module
 const SEOTraffic = lazy(() => import("./pages/seo/SEOTraffic").then(module => ({ default: module.SEOTraffic })))
 const SEOCoreWebVitals = lazy(() => import("./pages/seo/SEOCoreWebVitals").then(module => ({ default: module.SEOCoreWebVitals })))
 const SEOMobile = lazy(() => import("./pages/seo/SEOMobile").then(module => ({ default: module.SEOMobile })))
+const SEOOnPageAudit = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOOnPageAudit })))
 
 // SEM Intelligence
 const SEMLayout = lazy(() => import("./features/sem/layout/SEMLayout").then(module => ({ default: module.SEMLayout })))
@@ -108,6 +109,7 @@ function App() {
                                 <Route path="/seo/traffic" element={<SEOTraffic />} />
                                 <Route path="/seo/cwv" element={<SEOCoreWebVitals />} />
                                 <Route path="/seo/mobile" element={<SEOMobile />} />
+                                <Route path="/seo/onpage-audit" element={<SEOOnPageAudit />} />
                             </Route>
                             <Route element={<SEMProtectedLayout session={session} />}>
                                 <Route path="/sem" element={<SEMDashboard />} />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 import {
@@ -11,12 +11,45 @@ import {
   Clock,
   Loader2,
   RefreshCw,
-  TrendingUp,
 } from "lucide-react"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { formatIsoDate } from "@/features/calendar/model"
 import { useCalendarEvents } from "@/features/calendar/useCalendarEvents"
-import { useMondayTasks, statusColor } from "@/features/tasks/useMondayTasks"
+import { useMondayTasks, statusColor, type MondayTask } from "@/features/tasks/useMondayTasks"
 
+// ─── Task Performance chart ────────────────────────────────────────────────────
+function buildPerfData(tasks: MondayTask[]) {
+  const now = new Date()
+  // Build the last 4 Sunday-to-Saturday week buckets
+  return Array.from({ length: 4 }, (_, w) => {
+    const start = new Date(now)
+    start.setDate(now.getDate() - now.getDay() - (3 - w) * 7)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    end.setHours(23, 59, 59, 999)
+
+    const bucket = tasks.filter(t => {
+      const d = new Date(t.updatedAt)
+      return d >= start && d <= end
+    })
+
+    return {
+      date: start.toISOString().split("T")[0],
+      done: bucket.filter(t => t.statusIndex === 1).length,
+      open: bucket.filter(t => t.statusIndex !== 1).length,
+    }
+  })
+}
+
+const perfChartConfig = {
+  views: { label: "Tasks" },
+  done:  { label: "Completed", color: "var(--chart-2)" },
+  open:  { label: "In Progress", color: "var(--chart-1)" },
+} satisfies ChartConfig
+
+// ─── Status chip colour map ────────────────────────────────────────────────────
 const colorMap: Record<string, { bg: string; text: string; dot: string }> = {
   green:  { bg: "bg-green-50 dark:bg-green-900/20",  text: "text-green-700 dark:text-green-400",  dot: "bg-green-500"  },
   blue:   { bg: "bg-blue-50 dark:bg-blue-900/20",    text: "text-blue-700 dark:text-blue-400",    dot: "bg-blue-500"   },
@@ -96,10 +129,12 @@ export function Dashboard() {
       })()
     : "—"
 
-  const weeklyData = [65, 40, 80, 55, 90, 70, 85]
-  const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-  const maxVal = Math.max(...weeklyData)
-  const weeklyAverage = Math.round(weeklyData.reduce((sum, value) => sum + value, 0) / weeklyData.length)
+  const [activePerfMetric, setActivePerfMetric] = useState<"done" | "open">("done")
+  const performanceData = useMemo(() => buildPerfData(tasks), [tasks])
+  const perfTotals = useMemo(() => ({
+    done: performanceData.reduce((acc, d) => acc + d.done, 0),
+    open: performanceData.reduce((acc, d) => acc + d.open, 0),
+  }), [performanceData])
 
 
   return (
@@ -253,33 +288,31 @@ export function Dashboard() {
             className={`${panelClass} xl:col-span-2 overflow-hidden flex flex-col`}
             aria-label="My Tasks"
           >
-            <div className={panelHeaderClass}>
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="relative shrink-0 rounded-lg border border-stroke dark:border-strokedark bg-white dark:bg-boxdark p-1.5 shadow-sm">
-                  <img src={MONDAY_LOGO} alt="monday.com" className="h-4 w-auto object-contain"
-                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none" }} />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
-                    <CheckSquare className="h-4 w-4 text-[#1A72D9]" />
-                    My Tasks
-                  </h2>
-                  <p className="mt-0.5 text-xs text-body dark:text-bodydark truncate">
-                    {loadingTasks ? "Loading…" : mondayUser ? `${mondayUser.name} · ${tasks.length} assigned` : "monday.com"}
-                  </p>
-                </div>
+            <div className="flex flex-col items-stretch border-b border-stroke dark:border-strokedark sm:flex-row">
+              <div className="flex flex-1 flex-col justify-center gap-1 px-6 py-4">
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
+                  <CheckSquare className="h-4 w-4 text-[#1A72D9]" />
+                  My Tasks
+                </h2>
+                <p className="text-xs text-body dark:text-bodydark truncate">
+                  {loadingTasks ? "Loading…" : mondayUser ? `${mondayUser.name} · ${tasks.length} assigned` : "monday.com"}
+                </p>
               </div>
-              {/* Quick counts */}
+              {/* Metric display */}
               {!loadingTasks && !tasksError && mondayUser && (
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-[10px] font-bold text-meta-3">{doneCount} done</span>
-                  <span className="text-[10px] font-bold text-[#1A72D9]">{widgetTasks.length} open</span>
-                  <button
-                    onClick={() => navigate("/tasks")}
-                    className="flex items-center gap-1 text-xs font-medium text-body transition-colors hover:text-[#1A72D9] dark:text-bodydark dark:hover:text-white"
-                  >
-                    All <ChevronRight className="h-3 w-3" />
-                  </button>
+                <div className="flex border-t border-stroke dark:border-strokedark sm:border-t-0">
+                  {([
+                    { key: "done", label: "Done", value: doneCount          },
+                    { key: "open", label: "Open", value: widgetTasks.length },
+                  ] as const).map(({ key, label, value }) => (
+                    <div
+                      key={key}
+                      className="flex flex-1 flex-col justify-center gap-0.5 border-l border-stroke dark:border-strokedark px-6 py-4 sm:px-8"
+                    >
+                      <span className="text-[11px] text-body dark:text-bodydark">{label}</span>
+                      <span className="text-2xl font-bold tabular-nums text-black dark:text-white">{value}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -352,53 +385,81 @@ export function Dashboard() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.33 }}
-            className={`${panelClass} xl:col-span-2`}
-            aria-label="Weekly performance"
+            className={`${panelClass} xl:col-span-2 overflow-hidden flex flex-col`}
+            aria-label="Task performance"
           >
-            <div className={panelHeaderClass}>
-              <div>
+            {/* Interactive header with metric toggles */}
+            <div className="flex flex-col items-stretch border-b border-stroke dark:border-strokedark sm:flex-row">
+              <div className="flex flex-1 flex-col justify-center gap-1 px-6 py-4">
                 <h2 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
                   <BarChart2 className="h-4 w-4 text-[#1A72D9]" />
-                  Weekly Performance
+                  Task Performance
                 </h2>
-                <p className="mt-0.5 text-xs text-body dark:text-bodydark">Task activity distribution across the week</p>
+                <p className="text-xs text-body dark:text-bodydark">Last 4 weeks · click a metric to explore</p>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-meta-3/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-meta-3">
-                <TrendingUp className="h-3 w-3" />
-                +18%
-              </span>
+              <div className="flex border-t border-stroke dark:border-strokedark sm:border-t-0">
+                {(["done", "open"] as const).map((key) => (
+                  <button
+                    key={key}
+                    data-active={activePerfMetric === key}
+                    onClick={() => setActivePerfMetric(key)}
+                    className="relative flex flex-1 flex-col justify-center gap-0.5 border-l border-stroke dark:border-strokedark px-6 py-4 text-left transition-colors hover:bg-gray-2 dark:hover:bg-meta-4/20 data-[active=true]:bg-[#1A72D9]/5 dark:data-[active=true]:bg-[#1A72D9]/10 sm:px-8"
+                  >
+                    <span className="text-[11px] text-body dark:text-bodydark whitespace-nowrap">
+                      {perfChartConfig[key].label}
+                    </span>
+                    <span className="text-2xl font-bold tabular-nums text-black dark:text-white">
+                      {perfTotals[key]}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className={panelBodyClass}>
-              <div className={`${surfaceClass} p-4`}>
-                <div className="flex h-64 items-end gap-3">
-                  {weeklyData.map((value, index) => (
-                    <div key={weekDays[index]} className="group flex flex-1 flex-col items-center gap-2">
-                      <span className="text-[10px] font-semibold text-body opacity-0 transition-opacity group-hover:opacity-100 dark:text-bodydark">
-                        {value}%
-                      </span>
-                      <div className="flex h-[180px] w-full items-end justify-center rounded-lg bg-white px-2 py-2 dark:bg-boxdark-2">
-                        <div
-                          className="w-full rounded-t-lg bg-[#1A72D9]/80 transition-colors group-hover:bg-[#1A72D9]"
-                          style={{ height: `${(value / maxVal) * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-body dark:text-bodydark">
-                        {weekDays[index]}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between border-t border-stroke pt-4 text-xs text-body dark:border-strokedark dark:text-bodydark">
-                <span>
-                  Avg: <strong className="tabular-nums text-black dark:text-white">{weeklyAverage}%</strong>
-                </span>
-                <span>
-                  Peak: <strong className="tabular-nums text-[#1A72D9]">{maxVal}%</strong>
-                </span>
-              </div>
+            {/* Chart */}
+            <div className="flex-1 flex flex-col px-2 pt-4 pb-3 sm:px-6 sm:pt-5 min-h-0">
+              <ChartContainer config={perfChartConfig} className="flex-1 w-full min-h-0">
+                <BarChart accessibilityLayer data={performanceData} margin={{ left: 12, right: 12, top: 8, bottom: 0 }}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) =>
+                      new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                    }
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={4}
+                    allowDecimals={false}
+                    domain={[0, 8]}
+                    ticks={[0, 1, 2, 3, 4, 5, 6, 7, 8]}
+                    width={24}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        className="w-[160px]"
+                        nameKey="views"
+                        labelFormatter={(value) =>
+                          new Date(value).toLocaleDateString("en-US", {
+                            month: "short", day: "numeric", year: "numeric",
+                          })
+                        }
+                      />
+                    }
+                  />
+                  <Bar
+                    dataKey={activePerfMetric}
+                    fill={`var(--color-${activePerfMetric})`}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ChartContainer>
             </div>
           </motion.section>
         </div>
