@@ -13,6 +13,10 @@ ARG VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 
+# Write .env so Vite picks up VITE_* vars even if build-arg injection varies by platform
+RUN printf "VITE_SUPABASE_URL=%s\nVITE_SUPABASE_ANON_KEY=%s\n" \
+    "$VITE_SUPABASE_URL" "$VITE_SUPABASE_ANON_KEY" > .env
+
 RUN npm run build
 
 # Stage 2: Run Express server

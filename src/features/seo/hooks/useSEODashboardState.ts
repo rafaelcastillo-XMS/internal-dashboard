@@ -91,17 +91,22 @@ export function useSEODashboardState(defaultPreset = 1) {
   useEffect(() => {
     setPropertiesLoading(true)
     edgeFetch(`${SEO_API}/properties`)
-      .then((r) => r.json())
+      .then((r) => r.json().then((d: Record<string, unknown>) => {
+        // Supabase errors use "message" field, not "error"
+        if (!r.ok || d.error || d.message) {
+          throw new Error(String(d.error ?? d.message ?? `HTTP ${r.status}`))
+        }
+        return d
+      }))
       .then((d) => {
-        if (d.error) { setPropertiesError(d.error); setPropertiesLoaded(true); return }
         const next = {
-          gscSites: Array.isArray(d.gscSites) ? d.gscSites : [],
-          ga4Properties: Array.isArray(d.ga4Properties) ? d.ga4Properties : [],
+          gscSites: Array.isArray(d.gscSites) ? d.gscSites as { url: string }[] : [],
+          ga4Properties: Array.isArray(d.ga4Properties) ? d.ga4Properties as { id: string; name?: string }[] : [],
         }
         setProperties(next)
         ssSet(PROPS_KEY, next)
-        setSelectedGscSite((prev) => next.gscSites.some((s: { url: string }) => s.url === prev) ? prev : next.gscSites[0]?.url || '')
-        setSelectedGa4Id((prev)   => next.ga4Properties.some((p: { id: string }) => p.id === prev) ? prev : next.ga4Properties[0]?.id || '')
+        setSelectedGscSite((prev) => next.gscSites.some((s) => s.url === prev) ? prev : next.gscSites[0]?.url || '')
+        setSelectedGa4Id((prev)   => next.ga4Properties.some((p) => p.id === prev) ? prev : next.ga4Properties[0]?.id || '')
         setPropertiesLoaded(true)
       })
       .catch((err: Error) => { setPropertiesError(err.message); setPropertiesLoaded(true) })
