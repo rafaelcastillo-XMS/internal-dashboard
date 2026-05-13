@@ -24,8 +24,29 @@ export interface MondayTasksResult {
   user: MondayUser | null
   tasks: MondayTask[]
   loading: boolean
+  syncing: boolean
   error: string | null
   refetch: () => void
+}
+
+const CACHE_KEY = 'monday_tasks_v1'
+const REVALIDATE_MS = 2 * 60 * 1000 // refetch if cache is older than 2 min
+
+interface Cache {
+  user: MondayUser | null
+  tasks: MondayTask[]
+  cachedAt: number
+}
+
+function readCache(): Cache | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    return raw ? (JSON.parse(raw) as Cache) : null
+  } catch { return null }
+}
+
+function writeCache(data: Cache) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)) } catch {}
 }
 
 /** Maps Monday status index → semantic colour bucket */
@@ -49,19 +70,25 @@ export function priorityColor(label: string | null): string {
 }
 
 export function useMondayTasks(): MondayTasksResult {
-  const [user, setUser] = useState<MondayUser | null>(null)
-  const [tasks, setTasks] = useState<MondayTask[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [tick, setTick] = useState(0)
+  const cached = readCache()
+  const [user, setUser]       = useState<MondayUser | null>(cached?.user ?? null)
+  const [tasks, setTasks]     = useState<MondayTask[]>(cached?.tasks ?? [])
+  const [loading, setLoading] = useState(!cached)
+  const [syncing, setSyncing] = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+  const [tick, setTick]       = useState(0)
 
   const refetch = useCallback(() => setTick(t => t + 1), [])
 
   useEffect(() => {
+    const cache = readCache()
+    const fresh = cache && Date.now() - cache.cachedAt < REVALIDATE_MS && tick === 0
+    if (fresh) return // cache is recent enough, skip fetch
+
     let cancelled = false
 
     async function load() {
-      setLoading(true)
+      cache ? setSyncing(true) : setLoading(true)
       setError(null)
 
       try {
@@ -83,11 +110,12 @@ export function useMondayTasks(): MondayTasksResult {
         if (!cancelled) {
           setUser(body.user)
           setTasks(body.tasks)
+          writeCache({ user: body.user, tasks: body.tasks, cachedAt: Date.now() })
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unknown error")
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) { setLoading(false); setSyncing(false) }
       }
     }
 
@@ -95,5 +123,5 @@ export function useMondayTasks(): MondayTasksResult {
     return () => { cancelled = true }
   }, [tick])
 
-  return { user, tasks, loading, error, refetch }
+  return { user, tasks, loading, syncing, error, refetch }
 }

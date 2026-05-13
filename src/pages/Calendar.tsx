@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ChevronLeft, ChevronRight, Plus, X, Clock, Loader2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, X, Clock, Loader2 } from "lucide-react"
 import { formatIsoDate } from "@/features/calendar/model"
 import type { CalendarEvent } from "@/features/calendar/types"
 import { useCalendarEvents } from "@/features/calendar/useCalendarEvents"
@@ -192,9 +192,7 @@ export function CalendarPage() {
                             <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                         )}
                     </div>
-                    <button className="flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors shadow-sm">
-                        <Plus className="w-4 h-4" /> New Event
-                    </button>
+
                 </div>
 
                 {/* Day names */}

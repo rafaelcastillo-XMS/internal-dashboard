@@ -105,41 +105,54 @@ export function SEMDashboard() {
   const [yearlyGuarantee, setYearlyGuarantee] = useState<YearlyGuaranteeMetrics[]>([])
   const [selectedYear, setSelectedYear] = useState('2026')
   
-  // Local notes state
-  const [localNotes, setLocalNotes] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem('sem_dashboard_notes')
-      return saved ? JSON.parse(saved) : {}
-    } catch { return {} }
-  })
+  const [loadingYearly, setLoadingYearly] = useState(false)
+  const [localNotes, setLocalNotes] = useState<Record<string, string>>({})
   const [editingNote, setEditingNote] = useState<{ key: string; month: string } | null>(null)
 
   const getNoteKey = useCallback((month: string) => {
     return `${state.selectedAccountId || 'default'}-${selectedYear}-${activeTab}-${month}`
   }, [state.selectedAccountId, selectedYear, activeTab])
 
-  const handleSaveNote = (content: string) => {
+  const handleSaveNote = async (content: string) => {
     if (!editingNote) return
     const newNotes = { ...localNotes, [editingNote.key]: content }
     setLocalNotes(newNotes)
-    localStorage.setItem('sem_dashboard_notes', JSON.stringify(newNotes))
     setEditingNote(null)
+    if (state.selectedAccountId) {
+      await supabase.from('sem_yearly_notes').upsert({
+        account_id: state.selectedAccountId,
+        year: Number(selectedYear),
+        month: editingNote.month,
+        tab: activeTab,
+        content,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'account_id,year,month,tab' })
+    }
   }
 
   const fetchYearlyPerformance = useCallback(async (accountId: string, year: string) => {
+    setLoadingYearly(true)
     try {
-      const [adsRes, guaranteeRes] = await Promise.all([
+      const [adsRes, guaranteeRes, notesRes] = await Promise.all([
         supabase.from('sem_yearly_ads').select('*').eq('account_id', accountId).eq('year', Number(year)).order('month_index', { ascending: true }),
         supabase.from('sem_yearly_guarantee').select('*').eq('account_id', accountId).eq('year', Number(year)).order('month_index', { ascending: true }),
+        supabase.from('sem_yearly_notes').select('month,tab,content').eq('account_id', accountId).eq('year', Number(year)),
       ])
       if (adsRes.error) throw adsRes.error
       if (guaranteeRes.error) throw guaranteeRes.error
       setYearlyAds(adsRes.data || [])
       setYearlyGuarantee(guaranteeRes.data || [])
+      const notesMap: Record<string, string> = {}
+      for (const n of notesRes.data || []) {
+        notesMap[`${accountId}-${year}-${n.tab}-${n.month}`] = n.content
+      }
+      setLocalNotes(notesMap)
     } catch (err) {
       console.error('[SEM Yearly Performance]', err)
       setYearlyAds([])
       setYearlyGuarantee([])
+    } finally {
+      setLoadingYearly(false)
     }
   }, [])
 
@@ -339,25 +352,21 @@ export function SEMDashboard() {
           </div>
         </div>
         
-        {yearlyAds.length === 0 && (
-          <div className="mx-6 my-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/20 dark:bg-amber-500/10">
-            <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+        {loadingYearly && (
+          <div className="flex items-center gap-2 px-6 py-3 text-xs text-body dark:text-bodydark">
+            <svg className="h-3.5 w-3.5 animate-spin text-[#1A72D9]" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                No data yet — run the sync script to load yearly performance
-              </p>
-              <p className="mt-0.5 text-xs text-amber-600/80 dark:text-amber-400/70">
-                Google Ads API quota resets <span className="font-semibold">Thursday May 7 ~10:24 AM</span>. Then run:
-              </p>
-              <code className="mt-1.5 block rounded-lg bg-amber-100 px-3 py-2 font-mono text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300 leading-relaxed">
-                python3 tools/ads_sync_yearly.py --customer-id YOUR_ID --year {selectedYear}
-              </code>
-              <p className="mt-1.5 text-[10px] text-amber-500/70 dark:text-amber-400/50">
-                IDs: 2786993252 · 9384381125 · 2666670356 · 9079015711 · 3440776703 · 2855087048 · 2984731543
-              </p>
-            </div>
+            Loading yearly performance…
+          </div>
+        )}
+        {!loadingYearly && yearlyAds.length === 0 && (
+          <div className="px-6 py-3 text-xs text-body dark:text-bodydark">
+            No data for {selectedYear}. Run:{' '}
+            <code className="rounded bg-stroke/50 px-1.5 py-0.5 font-mono text-[11px] dark:bg-strokedark">
+              python3 tools/ads_sync_yearly.py --customer-id YOUR_ID --year {selectedYear}
+            </code>
           </div>
         )}
 

@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
 import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
 import { useSEMDashboardState, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
+import { InsightCard } from '@/features/sem/components/InsightCards'
 
 interface SearchTerm {
   search_term:   string
@@ -45,6 +46,8 @@ export function SEMSearchTerms() {
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('cost')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 20
 
   const fetchData = useCallback(async (force = false) => {
     if (!state.selectedAccountId || !state.dateRange.startDate) return
@@ -84,11 +87,59 @@ export function SEMSearchTerms() {
     else { setSortKey(key); setSortDir('desc') }
   }
 
+  const topTerms = useMemo(() =>
+    searchTerms
+      .filter(st => st.conversions > 0 || (st.clicks > 5 && st.ctr > 8))
+      .sort((a, b) => b.conversions - a.conversions)
+      .slice(0, 25)
+      .map(st => ({
+        label: st.search_term,
+        metric: st.conversions > 0 ? `${fmt(st.conversions, 1)} conv.` : `${fmt(st.ctr, 1)}% CTR`,
+      })),
+    [searchTerms]
+  )
+
+  const negativeTerms = useMemo(() => {
+    const topSet = new Set(topTerms.map(t => t.label))
+    const seen = new Set<string>()
+    return searchTerms
+      .filter(st => {
+        if (topSet.has(st.search_term) || seen.has(st.search_term)) return false
+        const bad = (st.impressions > 30 && st.clicks === 0)
+          || (st.cost > 5 && st.conversions === 0 && st.clicks > 2)
+        if (bad) seen.add(st.search_term)
+        return bad
+      })
+      .slice(0, 25)
+      .map(st => ({
+        label: st.search_term,
+        metric: st.impressions > 30 && st.clicks === 0
+          ? `${fmt(st.impressions)} impr`
+          : `$${st.cost.toFixed(0)}, 0 conv`,
+      }))
+  }, [searchTerms, topTerms])
+
+  const recommended = useMemo(() => {
+    const topSet = new Set(topTerms.map(t => t.label))
+    const negSet = new Set(negativeTerms.map(t => t.label))
+    return searchTerms
+      .filter(st =>
+        !topSet.has(st.search_term) && !negSet.has(st.search_term) &&
+        st.clicks > 2 && st.ctr > 4
+      )
+      .sort((a, b) => b.ctr - a.ctr)
+      .slice(0, 25)
+      .map(st => ({ label: st.search_term, metric: `${fmt(st.ctr, 1)}% CTR` }))
+  }, [searchTerms, topTerms, negativeTerms])
+
   const sorted = [...searchTerms].sort((a, b) => {
     const va = a[sortKey] as number
     const vb = b[sortKey] as number
     return sortDir === 'desc' ? vb - va : va - vb
   })
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function SortIcon({ col }: { col: string }) {
     if (col !== sortKey) return <svg className="h-3 w-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
@@ -117,6 +168,33 @@ export function SEMSearchTerms() {
           </p>
         </div>
         <DashboardControls {...state} onRefresh={() => fetchData(true)} pageTitle="SEM-SearchTerms" />
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <InsightCard
+          title="Add as Keywords"
+          subtitle="Converting terms — add to your keyword list"
+          variant="green"
+          items={topTerms}
+          emptyText="No converting search terms yet for this period."
+          loading={state.loading}
+        />
+        <InsightCard
+          title="Negative Candidates"
+          subtitle="Burning budget with no clicks or conversions"
+          variant="red"
+          items={negativeTerms}
+          emptyText="No negative candidates detected."
+          loading={state.loading}
+        />
+        <InsightCard
+          title="Explore These Terms"
+          subtitle="High engagement — consider adding as keywords"
+          variant="blue"
+          items={recommended}
+          emptyText="No additional opportunities found."
+          loading={state.loading}
+        />
       </div>
 
       {error && (
@@ -165,6 +243,7 @@ export function SEMSearchTerms() {
             </p>
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -185,7 +264,7 @@ export function SEMSearchTerms() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stroke dark:divide-strokedark">
-                {sorted.map((st, i) => (
+                {paginated.map((st, i) => (
                   <tr key={`${st.search_term}-${i}`} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                     <td className="max-w-[220px] truncate px-5 py-4 font-medium text-black dark:text-white" title={st.search_term}>{st.search_term}</td>
                     <td className="max-w-[160px] truncate px-5 py-4 text-body dark:text-bodydark" title={st.campaign_name}>{st.campaign_name || '—'}</td>
@@ -201,6 +280,55 @@ export function SEMSearchTerms() {
               </tbody>
             </table>
           </div>
+          <div className="flex items-center justify-between border-t border-stroke px-6 py-4 dark:border-strokedark">
+            <p className="text-xs text-body dark:text-bodydark">
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sorted.length)} of {sorted.length} terms
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page === 1}
+                className="rounded px-2 py-1 text-xs text-body hover:text-black disabled:opacity-30 dark:text-bodydark dark:hover:text-white"
+              >«</button>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="rounded px-2 py-1 text-xs text-body hover:text-black disabled:opacity-30 dark:text-bodydark dark:hover:text-white"
+              >‹</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, i) =>
+                  p === '...' ? (
+                    <span key={`dots-${i}`} className="px-1 text-xs text-body dark:text-bodydark">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p as number)}
+                      className={`min-w-[28px] rounded px-2 py-1 text-xs font-semibold transition-colors
+                        ${page === p
+                          ? 'bg-[#16a34a] text-white'
+                          : 'text-body hover:text-black dark:text-bodydark dark:hover:text-white'}`}
+                    >{p}</button>
+                  )
+                )}
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="rounded px-2 py-1 text-xs text-body hover:text-black disabled:opacity-30 dark:text-bodydark dark:hover:text-white"
+              >›</button>
+              <button
+                onClick={() => setPage(totalPages)}
+                disabled={page === totalPages}
+                className="rounded px-2 py-1 text-xs text-body hover:text-black disabled:opacity-30 dark:text-bodydark dark:hover:text-white"
+              >»</button>
+            </div>
+          </div>
+          </>
         )}
       </div>
     </div>

@@ -5,12 +5,14 @@ import {
   AlertCircle,
   BarChart2,
   Calendar,
+  CalendarCheck,
   CheckSquare,
   ChevronRight,
   Circle,
   Clock,
   Loader2,
   RefreshCw,
+  TrendingUp,
 } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
@@ -45,18 +47,18 @@ function buildPerfData(tasks: MondayTask[]) {
 
 const perfChartConfig = {
   views: { label: "Tasks" },
-  done:  { label: "Completed", color: "var(--chart-2)" },
-  open:  { label: "In Progress", color: "var(--chart-1)" },
+  done: { label: "Completed", color: "var(--chart-2)" },
+  open: { label: "In Progress", color: "var(--chart-1)" },
 } satisfies ChartConfig
 
 // ─── Status chip colour map ────────────────────────────────────────────────────
 const colorMap: Record<string, { bg: string; text: string; dot: string }> = {
-  green:  { bg: "bg-green-50 dark:bg-green-900/20",  text: "text-green-700 dark:text-green-400",  dot: "bg-green-500"  },
-  blue:   { bg: "bg-blue-50 dark:bg-blue-900/20",    text: "text-blue-700 dark:text-blue-400",    dot: "bg-blue-500"   },
-  amber:  { bg: "bg-amber-50 dark:bg-amber-900/20",  text: "text-amber-700 dark:text-amber-400",  dot: "bg-amber-500"  },
-  purple: { bg: "bg-purple-50 dark:bg-purple-900/20",text: "text-purple-700 dark:text-purple-400",dot: "bg-purple-500" },
-  red:    { bg: "bg-red-50 dark:bg-red-900/20",      text: "text-red-700 dark:text-red-400",      dot: "bg-red-500"    },
-  slate:  { bg: "bg-slate-100 dark:bg-slate-700/40", text: "text-slate-600 dark:text-slate-400",  dot: "bg-slate-400"  },
+  green: { bg: "bg-green-50 dark:bg-green-900/20", text: "text-green-700 dark:text-green-400", dot: "bg-green-500" },
+  blue: { bg: "bg-blue-50 dark:bg-blue-900/20", text: "text-blue-700 dark:text-blue-400", dot: "bg-blue-500" },
+  amber: { bg: "bg-amber-50 dark:bg-amber-900/20", text: "text-amber-700 dark:text-amber-400", dot: "bg-amber-500" },
+  purple: { bg: "bg-purple-50 dark:bg-purple-900/20", text: "text-purple-700 dark:text-purple-400", dot: "bg-purple-500" },
+  red: { bg: "bg-red-50 dark:bg-red-900/20", text: "text-red-700 dark:text-red-400", dot: "bg-red-500" },
+  slate: { bg: "bg-slate-100 dark:bg-slate-700/40", text: "text-slate-600 dark:text-slate-400", dot: "bg-slate-400" },
 }
 
 function MiniStatusChip({ label, index }: { label: string; index: number | null }) {
@@ -101,7 +103,7 @@ export function Dashboard() {
     monthDate: today,
     monthSpan: 2,
   })
-  const { tasks, loading: loadingTasks, error: tasksError, user: mondayUser } = useMondayTasks()
+  const { tasks, loading: loadingTasks, syncing: syncingTasks, error: tasksError, user: mondayUser } = useMondayTasks()
 
   // Show the 5 most recent non-done tasks in the widget
   const widgetTasks = tasks
@@ -121,13 +123,13 @@ export function Dashboard() {
   const syncLabel = loadingTasks
     ? "Syncing…"
     : syncTime
-    ? (() => {
+      ? (() => {
         const diff = Math.round((Date.now() - syncTime.getTime()) / 1000)
         if (diff < 60) return "Just now"
         if (diff < 3600) return `${Math.round(diff / 60)}m ago`
         return `${Math.round(diff / 3600)}h ago`
       })()
-    : "—"
+      : "—"
 
   const [activePerfMetric, setActivePerfMetric] = useState<"done" | "open">("done")
   const performanceData = useMemo(() => buildPerfData(tasks), [tasks])
@@ -135,6 +137,27 @@ export function Dashboard() {
     done: performanceData.reduce((acc, d) => acc + d.done, 0),
     open: performanceData.reduce((acc, d) => acc + d.open, 0),
   }), [performanceData])
+
+  const todayTasks = useMemo(() => tasks.filter(t => t.dueDate === todayStr && t.statusIndex !== 1), [tasks, todayStr])
+  const overdueTasks = useMemo(() => tasks.filter(t => t.dueDate && t.dueDate < todayStr && t.statusIndex !== 1), [tasks, todayStr])
+
+  const thisWeekEvents = useMemo(() => {
+    const start = new Date(today)
+    start.setDate(today.getDate() - today.getDay())
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    const startStr = formatIsoDate(start)
+    const endStr = formatIsoDate(end)
+    return events
+      .filter(e => e.date >= startStr && e.date <= endStr)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+  }, [events, today])
+
+  const upcomingCount = thisWeekEvents.length
+  const perfPct = useMemo(() => {
+    const total = perfTotals.done + perfTotals.open
+    return total > 0 ? Math.round((perfTotals.done / total) * 100) : 0
+  }, [perfTotals])
 
 
   return (
@@ -157,7 +180,7 @@ export function Dashboard() {
                 }).format(today)}
               </span>
               <span className="flex items-center gap-1.5 text-sm text-body dark:text-bodydark">
-                <RefreshCw className={`h-3.5 w-3.5 shrink-0 text-[#1A72D9] ${loadingTasks ? "animate-spin" : ""}`} />
+                <RefreshCw className={`h-3.5 w-3.5 shrink-0 text-[#1A72D9] ${loadingTasks || syncingTasks ? "animate-spin" : ""}`} />
                 Last sync:{" "}
                 <span className="font-bold text-black dark:text-white">{syncLabel}</span>
               </span>
@@ -165,6 +188,7 @@ export function Dashboard() {
           </div>
         </div>
 
+        {/* ── Summary cards ─────────────────────────────────────────────── */}
         <div className="mb-6">
           <motion.section
             initial={{ opacity: 0, y: 16 }}
@@ -227,20 +251,19 @@ export function Dashboard() {
                       startOfWeek.setDate(today.getDate() - currentDayOfWeek + i)
                       const dateStr = formatIsoDate(startOfWeek)
                       const isCurrentDay = dateStr === todayStr
-    
+
                       const dayOfWeek = startOfWeek.getDay()
                       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
                       const dayEvents = events.filter((e) => e.date === dateStr)
                       return (
                         <div
                           key={i}
-                          className={`min-h-full space-y-1.5 border-r border-stroke p-1.5 last:border-r-0 dark:border-strokedark ${
-                            isCurrentDay
+                          className={`min-h-full space-y-1.5 border-r border-stroke p-1.5 last:border-r-0 dark:border-strokedark ${isCurrentDay
                               ? "bg-[#EEF5FE] dark:bg-[#1A72D9]/10"
                               : isWeekend
-                              ? "bg-[#F7F8FA] dark:bg-[#1D2A39]"
-                              : "bg-white dark:bg-boxdark"
-                          }`}
+                                ? "bg-[#F7F8FA] dark:bg-[#1D2A39]"
+                                : "bg-white dark:bg-boxdark"
+                            }`}
                         >
                           {dayEvents.length === 0 ? (
                             <div className="flex justify-center pt-4">
@@ -280,6 +303,118 @@ export function Dashboard() {
           </motion.section>
         </div>
 
+
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+
+          {/* What do I need to do today? */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.05 }}
+            className={`${panelClass} flex flex-col p-5`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1A72D9]/10">
+                <CalendarCheck className="h-5 w-5 text-[#1A72D9]" />
+              </span>
+              <p className="text-xs font-semibold text-body dark:text-bodydark leading-tight">What do I need to do today?</p>
+            </div>
+            <p className="mt-4 text-4xl font-bold tabular-nums text-black dark:text-white">
+              {loadingTasks ? "—" : todayTasks.length}
+            </p>
+            <p className="mt-0.5 text-xs text-body dark:text-bodydark">pending tasks</p>
+            <button onClick={() => navigate("/tasks")} className="mt-auto pt-4 text-left text-xs font-semibold text-[#1A72D9] hover:underline">
+              View my tasks →
+            </button>
+          </motion.div>
+
+          {/* What meetings/events are coming? */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.1 }}
+            className={`${panelClass} flex flex-col p-5`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10">
+                <Calendar className="h-5 w-5 text-purple-500" />
+              </span>
+              <p className="text-xs font-semibold text-body dark:text-bodydark leading-tight">What meetings/events are coming?</p>
+            </div>
+            <p className="mt-4 text-4xl font-bold tabular-nums text-black dark:text-white">
+              {loadingEvents ? "—" : upcomingCount}
+            </p>
+            <p className="mt-0.5 text-xs text-body dark:text-bodydark">events this week</p>
+            {thisWeekEvents.length > 0 && (
+              <ul className="mt-3 max-h-24 space-y-1 overflow-y-auto">
+                {thisWeekEvents.map(e => (
+                  <li key={e.id} className="flex items-center gap-1.5 text-[11px] text-body dark:text-bodydark">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${e.color || "bg-purple-400"}`} />
+                    <span className="shrink-0 tabular-nums text-[10px] font-medium text-black dark:text-white">{e.time}</span>
+                    <span className="truncate">{e.title}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button onClick={() => navigate("/calendar")} className="mt-auto pt-3 text-left text-xs font-semibold text-purple-500 hover:underline">
+              View calendar →
+            </button>
+          </motion.div>
+
+          {/* What's overdue? */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.15 }}
+            className={`${panelClass} flex flex-col p-5`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10">
+                <Clock className="h-5 w-5 text-amber-500" />
+              </span>
+              <p className="text-xs font-semibold text-body dark:text-bodydark leading-tight">What's overdue?</p>
+            </div>
+            <p className="mt-4 text-4xl font-bold tabular-nums text-black dark:text-white">
+              {loadingTasks ? "—" : overdueTasks.length}
+            </p>
+            <p className="mt-0.5 text-xs text-body dark:text-bodydark">overdue tasks</p>
+            {overdueTasks.length > 0 && (
+              <ul className="mt-3 max-h-24 space-y-1 overflow-y-auto">
+                {overdueTasks.map(t => (
+                  <li key={t.id} className="flex items-center gap-1.5 text-[11px] text-body dark:text-bodydark">
+                    <AlertCircle className="h-3 w-3 shrink-0 text-red-400" />
+                    <span className="truncate">{t.name}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button onClick={() => navigate("/tasks")} className="mt-auto pt-3 text-left text-xs font-semibold text-amber-500 hover:underline">
+              View overdue tasks →
+            </button>
+          </motion.div>
+
+          {/* How am I performing? */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.2 }}
+            className={`${panelClass} flex flex-col p-5`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#16a34a]/10">
+                <TrendingUp className="h-5 w-5 text-[#16a34a]" />
+              </span>
+              <p className="text-xs font-semibold text-body dark:text-bodydark leading-tight">How am I performing?</p>
+            </div>
+            <p className="mt-4 text-4xl font-bold tabular-nums text-black dark:text-white">
+              {loadingTasks ? "—" : `${perfPct}%`}
+            </p>
+            <p className="mt-0.5 text-xs text-body dark:text-bodydark">completed last 4 weeks</p>
+            <p className="mt-1.5 text-xs text-[#16a34a] font-semibold">
+              {loadingTasks ? "" : `${perfTotals.done} completed · ${perfTotals.open} in progress`}
+            </p>
+            <button
+              onClick={() => document.querySelector('[aria-label="Task performance"]')?.scrollIntoView({ behavior: "smooth" })}
+              className="mt-auto pt-3 text-left text-xs font-semibold text-[#16a34a] hover:underline"
+            >
+              View metrics →
+            </button>
+          </motion.div>
+        </div>
+
+
         <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-4">
           <motion.section
             initial={{ opacity: 0, y: 16 }}
@@ -302,7 +437,7 @@ export function Dashboard() {
               {!loadingTasks && !tasksError && mondayUser && (
                 <div className="flex border-t border-stroke dark:border-strokedark sm:border-t-0">
                   {([
-                    { key: "done", label: "Done", value: doneCount          },
+                    { key: "done", label: "Done", value: doneCount },
                     { key: "open", label: "Open", value: widgetTasks.length },
                   ] as const).map(({ key, label, value }) => (
                     <div

@@ -4,10 +4,56 @@ import DOMPurify from 'dompurify'
 const STATUS = { idle: 'idle', loading: 'loading', ready: 'ready', error: 'error' } as const
 type StatusKey = typeof STATUS[keyof typeof STATUS]
 
+type TabKey = 'run-audit' | 'initial-status' | 'comparative' | 'download-reports'
+
+const TABS: { id: TabKey; label: string; icon: React.ReactNode }[] = [
+  {
+    id: 'run-audit',
+    label: 'Run Audit',
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+              d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'initial-status',
+    label: 'Initial Status',
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+              d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'comparative',
+    label: 'Comparative',
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+              d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'download-reports',
+    label: 'Download Reports',
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+      </svg>
+    ),
+  },
+]
+
 const POLL_INTERVAL = 5000
 const POLL_TIMEOUT  = 5 * 60 * 1000
 
 export function SEOOnPageAudit() {
+  const [activeTab, setActiveTab] = useState<TabKey>('run-audit')
   const [landingPageUrl, setLandingPageUrl]               = useState('')
   const [screamingFrogSheetUrl, setScreamingFrogSheetUrl] = useState('')
   const [status, setStatus]     = useState<StatusKey>(STATUS.idle)
@@ -93,24 +139,124 @@ export function SEOOnPageAudit() {
   return (
     <div className="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10">
 
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1A72D9]/15 border border-[#1A72D9]/20">
-            <svg className="h-4 w-4 text-[#1A72D9]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round"
-                    d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">On-Page SEO Audit</h1>
-        </div>
-        <p className="text-sm text-body dark:text-bodydark ml-11">
-          Technical · Content · Screaming Frog analysis — results displayed here
-        </p>
+      {/* Tabs */}
+      <div className="mb-8 border-b border-stroke dark:border-strokedark">
+        <nav className="-mb-px flex gap-0" aria-label="Tabs">
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={[
+                  'flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors duration-150 whitespace-nowrap',
+                  isActive
+                    ? 'border-[#1A72D9] text-[#1A72D9]'
+                    : 'border-transparent text-body dark:text-bodydark hover:text-black dark:hover:text-white hover:border-stroke dark:hover:border-strokedark',
+                ].join(' ')}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            )
+          })}
+        </nav>
       </div>
 
-      {/* Results view */}
-      {status === STATUS.ready ? (
+      {/* Tab: Initial Status */}
+      {activeTab === 'initial-status' && (
+        <>
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1A72D9]/15 border border-[#1A72D9]/20">
+                <svg className="h-4 w-4 text-[#1A72D9]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                        d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-bold text-black dark:text-white">Initial Status</h1>
+            </div>
+            <p className="text-sm text-body dark:text-bodydark ml-11">
+              Baseline SEO snapshot recorded at client onboarding
+            </p>
+          </div>
+          <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark px-8 py-16 text-center">
+            <span className="inline-block rounded-full bg-[#1A72D9]/10 border border-[#1A72D9]/20 px-4 py-1.5 text-xs font-medium text-[#1A72D9]">
+              Coming soon
+            </span>
+          </div>
+        </>
+      )}
+
+      {/* Tab: Comparative */}
+      {activeTab === 'comparative' && (
+        <>
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                        d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-bold text-black dark:text-white">Comparative</h1>
+            </div>
+            <p className="text-sm text-body dark:text-bodydark ml-11">
+              Initial Status vs. current audit — track progress since onboarding
+            </p>
+          </div>
+          <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark px-8 py-16 text-center">
+            <span className="inline-block rounded-full bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 text-xs font-medium text-emerald-500">
+              Coming soon
+            </span>
+          </div>
+        </>
+      )}
+
+      {/* Tab: Download Reports */}
+      {activeTab === 'download-reports' && (
+        <>
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#F47C20]/10 border border-[#F47C20]/20">
+                <svg className="h-4 w-4 text-[#F47C20]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-bold text-black dark:text-white">Download Reports</h1>
+            </div>
+            <p className="text-sm text-body dark:text-bodydark ml-11">
+              Export audit results as PDF or CSV for client delivery
+            </p>
+          </div>
+          <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark px-8 py-16 text-center">
+            <span className="inline-block rounded-full bg-[#F47C20]/10 border border-[#F47C20]/20 px-4 py-1.5 text-xs font-medium text-[#F47C20]">
+              Coming soon
+            </span>
+          </div>
+        </>
+      )}
+
+      {/* Tab: Run Audit */}
+      {activeTab === 'run-audit' && (
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1A72D9]/15 border border-[#1A72D9]/20">
+              <svg className="h-4 w-4 text-[#1A72D9]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-black dark:text-white">On-Page SEO Audit</h1>
+          </div>
+          <p className="text-sm text-body dark:text-bodydark ml-11">
+            Technical · Content · Screaming Frog analysis — results displayed here
+          </p>
+        </div>
+      )}
+
+      {activeTab === 'run-audit' && status === STATUS.ready ? (
         <div>
           <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
@@ -184,7 +330,7 @@ export function SEOOnPageAudit() {
             />
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'run-audit' ? (
         <div className="grid grid-cols-12 gap-6">
 
           {/* Left: Form or loading */}
@@ -411,7 +557,7 @@ export function SEOOnPageAudit() {
 
           </div>
         </div>
-      )}
+      ) : null}
 
     </div>
   )

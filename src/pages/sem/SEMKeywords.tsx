@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
 import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
 import { useSEMDashboardState, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
 import { supabase } from '@/lib/supabase'
+import { InsightCard } from '@/features/sem/components/InsightCards'
 
 interface Keyword {
   text:          string
@@ -65,6 +66,8 @@ export function SEMKeywords() {
   const [keywords, setKeywords] = useState<Keyword[]>([])
   const [sortKey, setSortKey] = useState<SortKey>('cost')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 20
 
   const fetchData = useCallback(async (force = false) => {
     if (!state.selectedAccountId) return
@@ -106,13 +109,63 @@ export function SEMKeywords() {
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
     else { setSortKey(key); setSortDir('desc') }
+    setPage(1)
   }
+
+  const topPerformers = useMemo(() =>
+    keywords
+      .filter(k => (k.quality_score ?? 0) >= 7 && k.conversions > 0)
+      .sort((a, b) => b.conversions - a.conversions)
+      .slice(0, 25)
+      .map(k => ({ label: k.text, metric: `${fmt(k.conversions, 1)} conv.` })),
+    [keywords]
+  )
+
+  const lowPerformers = useMemo(() => {
+    const topSet = new Set(topPerformers.map(k => k.label))
+    const seen = new Set<string>()
+    return keywords
+      .filter(k => {
+        if (topSet.has(k.text) || seen.has(k.text)) return false
+        const bad = (k.quality_score != null && k.quality_score <= 3)
+          || (k.impressions > 100 && k.clicks === 0)
+          || (k.cost > 10 && k.conversions === 0 && k.clicks > 3)
+        if (bad) seen.add(k.text)
+        return bad
+      })
+      .slice(0, 25)
+      .map(k => ({
+        label: k.text,
+        metric: k.quality_score != null && k.quality_score <= 3
+          ? `QS ${k.quality_score}/10`
+          : k.impressions > 100 && k.clicks === 0
+            ? `${fmt(k.impressions)} impr`
+            : `$${k.cost.toFixed(0)}, 0 conv`,
+      }))
+  }, [keywords, topPerformers])
+
+  const opportunities = useMemo(() => {
+    const topSet = new Set(topPerformers.map(k => k.label))
+    const lowSet = new Set(lowPerformers.map(k => k.label))
+    return keywords
+      .filter(k =>
+        !topSet.has(k.text) && !lowSet.has(k.text) &&
+        k.impressions > 100 && k.ctr < 1.5 &&
+        (k.quality_score == null || k.quality_score >= 5)
+      )
+      .sort((a, b) => b.impressions - a.impressions)
+      .slice(0, 25)
+      .map(k => ({ label: k.text, metric: `${fmt(k.ctr, 2)}% CTR` }))
+  }, [keywords, topPerformers, lowPerformers])
 
   const sorted = [...keywords].sort((a, b) => {
     const va = (a[sortKey] ?? -1) as number
     const vb = (b[sortKey] ?? -1) as number
     return sortDir === 'desc' ? vb - va : va - vb
   })
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function SortIcon({ col }: { col: string }) {
     if (col !== sortKey) return <svg className="h-3 w-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
@@ -141,6 +194,33 @@ export function SEMKeywords() {
           </p>
         </div>
         <DashboardControls {...state} onRefresh={() => fetchData(true)} pageTitle="SEM-Keywords" />
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <InsightCard
+          title="High Performance"
+          subtitle="Quality ≥7 with conversions — keep and expand"
+          variant="green"
+          items={topPerformers}
+          emptyText="No high-performance keywords yet for this period."
+          loading={state.loading}
+        />
+        <InsightCard
+          title="Review for Removal"
+          subtitle="Poor quality score or spending with no results"
+          variant="red"
+          items={lowPerformers}
+          emptyText="No low-performance keywords detected."
+          loading={state.loading}
+        />
+        <InsightCard
+          title="Optimization Opportunities"
+          subtitle="High impressions but low CTR — improve ad copy"
+          variant="blue"
+          items={opportunities}
+          emptyText="No optimization opportunities found."
+          loading={state.loading}
+        />
       </div>
 
       <div className="mb-4 flex flex-wrap gap-3">
@@ -193,6 +273,7 @@ export function SEMKeywords() {
             </p>
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -213,7 +294,7 @@ export function SEMKeywords() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stroke dark:divide-strokedark">
-                {sorted.map((kw, i) => (
+                {paginated.map((kw, i) => (
                   <tr key={`${kw.text}-${kw.match_type}-${i}`} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                     <td className="max-w-[200px] truncate px-5 py-4 font-medium text-black dark:text-white" title={kw.text}>{kw.text}</td>
                     <td className="px-5 py-4"><MatchTypeBadge type={kw.match_type} /></td>
@@ -229,6 +310,36 @@ export function SEMKeywords() {
               </tbody>
             </table>
           </div>
+          <div className="flex items-center justify-between border-t border-stroke px-6 py-4 dark:border-strokedark">
+            <p className="text-xs text-body dark:text-bodydark">
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sorted.length)} of {sorted.length} keywords
+            </p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(1)} disabled={page === 1} className="rounded px-2 py-1 text-xs text-body hover:text-black disabled:opacity-30 dark:text-bodydark dark:hover:text-white">«</button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="rounded px-2 py-1 text-xs text-body hover:text-black disabled:opacity-30 dark:text-bodydark dark:hover:text-white">‹</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, i) =>
+                  p === '...' ? (
+                    <span key={`dots-${i}`} className="px-1 text-xs text-body dark:text-bodydark">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p as number)}
+                      className={`min-w-[28px] rounded px-2 py-1 text-xs font-semibold transition-colors ${page === p ? 'bg-[#16a34a] text-white' : 'text-body hover:text-black dark:text-bodydark dark:hover:text-white'}`}
+                    >{p}</button>
+                  )
+                )}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded px-2 py-1 text-xs text-body hover:text-black disabled:opacity-30 dark:text-bodydark dark:hover:text-white">›</button>
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="rounded px-2 py-1 text-xs text-body hover:text-black disabled:opacity-30 dark:text-bodydark dark:hover:text-white">»</button>
+            </div>
+          </div>
+          </>
         )}
       </div>
     </div>
