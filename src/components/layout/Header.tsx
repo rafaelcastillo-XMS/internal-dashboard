@@ -7,22 +7,6 @@ import { useTheme } from "@/context/useTheme"
 import { useSidebar } from "@/context/useSidebar"
 import { supabase } from "@/lib/supabase"
 
-const AI_RESPONSES: Record<string, string> = {
-    default: "I'm analyzing your dashboard data now. Based on current activity, your top priority this week should be the IBM campaign review — it's overdue and blocking two dependent tasks.",
-    task: `You have 3 tasks in progress and 2 completed this week. The highest priority pending item is the Coca-Cola brand refresh, due ${new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric" }).format(new Date())}.`,
-    client: "Your most active client this week is IBM with 4 open tasks. McDonald's has a campaign deadline coming up on March 15.",
-    calendar: "You have 2 events today and 6 upcoming this month. Your next meeting is tomorrow at 10:00 AM — the SEO strategy review.",
-    performance: "Weekly task activity is up 18% compared to last week. Friday had the highest output at 90%. Keep it up!",
-}
-
-function getAIResponse(query: string): string {
-    const q = query.toLowerCase()
-    if (q.includes("task") || q.includes("todo")) return AI_RESPONSES.task
-    if (q.includes("client") || q.includes("account")) return AI_RESPONSES.client
-    if (q.includes("calendar") || q.includes("event") || q.includes("meeting")) return AI_RESPONSES.calendar
-    if (q.includes("performance") || q.includes("stat") || q.includes("progress")) return AI_RESPONSES.performance
-    return AI_RESPONSES.default
-}
 
 interface HeaderProps {
     onMobileMenuClick?: () => void
@@ -119,14 +103,41 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
         }, 1800)
     }
 
-    const handleAskAI = () => {
+    const handleAskAI = async () => {
         if (!aiQuery.trim() || aiLoading) return
         setAiLoading(true)
         setAiResponse("")
-        setTimeout(() => {
-            setAiResponse(getAIResponse(aiQuery))
+        try {
+            // Build dashboard context to send alongside the query
+            const context: Record<string, unknown> = {
+                today: new Date().toLocaleDateString("es-MX", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+                currentPage: pathname,
+            }
+
+            // Fetch Monday.com tasks for the current user
+            const { data: { session } } = await supabase.auth.getSession()
+            if (session?.user?.email) {
+                try {
+                    const mondayRes = await fetch(`/api/monday/tasks?email=${encodeURIComponent(session.user.email)}`)
+                    if (mondayRes.ok) {
+                        const { tasks } = await mondayRes.json()
+                        context.tasks = tasks
+                    }
+                } catch { /* tasks unavailable, continue without them */ }
+            }
+
+            const res = await fetch("/api/ai/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: aiQuery, context }),
+            })
+            const data = await res.json()
+            setAiResponse(data.response ?? data.error ?? "No response")
+        } catch {
+            setAiResponse("Error al conectar con la IA. Inténtalo de nuevo.")
+        } finally {
             setAiLoading(false)
-        }, 900)
+        }
     }
 
     const handleAiKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -134,6 +145,15 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
             e.preventDefault()
             handleAskAI()
         }
+    }
+
+    const renderAiResponse = (text: string) => {
+        return text.split("\n").filter(l => l.trim()).map((line, i) => {
+            const parts = line.split(/\*\*(.+?)\*\*/g).map((part, j) =>
+                j % 2 === 1 ? <strong key={j} className="font-semibold text-[var(--text-primary)]">{part}</strong> : part
+            )
+            return <p key={i} className="text-sm text-[var(--text-secondary)] leading-relaxed">{parts}</p>
+        })
     }
 
     const openAI = () => {
@@ -337,7 +357,7 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                                             <Sparkles className="w-4 h-4 text-white" />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-semibold text-[var(--text-primary)]">XMS AI Assistant <span className="text-[10px] font-normal text-[var(--text-muted)]">(Demo)</span></p>
+                                            <p className="text-sm font-semibold text-[var(--text-primary)]">XMS AI Assistant</p>
                                             <p className="text-[10px] text-[var(--text-muted)]">Ask anything about your campaigns, tasks or clients</p>
                                         </div>
                                     </div>
@@ -374,7 +394,7 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                                             <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center shrink-0 mt-0.5">
                                                 <Sparkles className="w-3.5 h-3.5 text-white" />
                                             </div>
-                                            <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{aiResponse}</p>
+                                            <div className="space-y-1">{renderAiResponse(aiResponse)}</div>
                                         </motion.div>
                                     ) : (
                                         <div className="flex flex-wrap gap-2">

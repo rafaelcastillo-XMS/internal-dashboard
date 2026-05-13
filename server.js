@@ -1,9 +1,11 @@
 import express from "express"
 import { fileURLToPath } from "url"
 import path from "path"
+import Anthropic from "@anthropic-ai/sdk"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
+app.use(express.json())
 const PORT = process.env.PORT ?? 3000
 
 // ─── Monday.com cache (5-min TTL per user) ────────────────────────────────────
@@ -175,6 +177,37 @@ app.get("/api/monday/tasks", async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Monday API error"
     console.error("[monday-api]", message)
+    res.status(500).json({ error: message })
+  }
+})
+
+// ─── POST /api/ai/ask ─────────────────────────────────────────────────────────
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+app.post("/api/ai/ask", async (req, res) => {
+  const { query, context } = req.body ?? {}
+  if (!query?.trim()) return res.status(400).json({ error: "query is required" })
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: "AI not configured" })
+
+  const contextBlock = context ? `\n\nDashboard context:\n${JSON.stringify(context, null, 2)}` : ""
+
+  try {
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      system: `You are XMS AI, an assistant embedded in a marketing agency dashboard called XMS (Xperience Marketing Suite).
+You help the team with tasks, campaigns, clients, SEM/SEO performance, and scheduling.
+Respond in the same language the user writes in (Spanish or English).
+Be concise and actionable — 2–4 sentences max unless a longer answer is clearly needed.
+If you have dashboard context, use it to give specific answers. Never make up data you don't have.${contextBlock}`,
+      messages: [{ role: "user", content: query }],
+    })
+
+    const text = message.content.find(b => b.type === "text")?.text ?? ""
+    res.json({ response: text })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "AI error"
+    console.error("[ai-ask]", message)
     res.status(500).json({ error: message })
   }
 })

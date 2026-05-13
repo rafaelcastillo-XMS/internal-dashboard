@@ -5,6 +5,7 @@ import { promisify } from "util"
 import { config as loadDotenv } from "dotenv"
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import Anthropic from "@anthropic-ai/sdk"
 import type { IncomingMessage, ServerResponse } from "http"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
@@ -969,9 +970,79 @@ function mondayPlugin() {
   }
 }
 
+function aiPlugin() {
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+  return {
+    name: "ai-api",
+    configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.url !== "/api/ai/ask" || req.method !== "POST") { next(); return }
+
+        if (!process.env.ANTHROPIC_API_KEY) {
+          sendJson(res, 503, { error: "ANTHROPIC_API_KEY not configured in .env" })
+          return
+        }
+
+        try {
+          const body = await readJsonBody(req) as { query?: string; context?: unknown }
+          const { query, context } = body
+
+          if (!query?.trim()) {
+            sendJson(res, 400, { error: "query is required" })
+            return
+          }
+
+          let contextBlock = ""
+          if (context) {
+            const ctx = context as Record<string, unknown>
+            const parts: string[] = []
+            if (ctx.today) parts.push(`Today is: ${ctx.today}`)
+            if (ctx.currentPage) parts.push(`User is currently on page: ${ctx.currentPage}`)
+            if (Array.isArray(ctx.tasks) && ctx.tasks.length > 0) {
+              const taskLines = ctx.tasks.map((t: Record<string, unknown>) =>
+                `- [${t.status ?? "—"}] ${t.name} (board: ${t.board}, priority: ${t.priority ?? "none"}, due: ${t.dueDate ?? "no date"})`
+              ).join("\n")
+              parts.push(`User's current tasks from Monday.com:\n${taskLines}`)
+            } else if (Array.isArray(ctx.tasks)) {
+              parts.push("User has no tasks assigned in Monday.com right now.")
+            }
+            if (parts.length) contextBlock = `\n\n---\n${parts.join("\n\n")}\n---`
+          }
+
+          const message = await anthropic.messages.create({
+            model: "claude-sonnet-4-6",
+            max_tokens: 1024,
+            system: `You are XMS AI, an assistant embedded in a marketing agency dashboard called XMS (Xperience Marketing Suite).
+You help the team with tasks, campaigns, clients, SEM/SEO performance, and scheduling.
+Respond in the same language the user writes in (Spanish or English).
+
+Formatting rules (strictly follow these):
+- Never use markdown tables, headers (###), or horizontal rules.
+- Use plain short sentences or simple bullet points with "·" as the bullet character.
+- Keep responses to 3–6 lines max. Be direct and conversational.
+- If listing tasks, write each on its own line like: "· Task name — due May 13"
+- No bold overuse — only bold 1–2 key words at most per response.
+
+Use the dashboard context below to give specific, data-driven answers. Never invent data you don't have.${contextBlock}`,
+            messages: [{ role: "user", content: query }],
+          })
+
+          const text = message.content.find(b => b.type === "text")?.text ?? ""
+          sendJson(res, 200, { response: text })
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "AI error"
+          console.error("[ai-ask]", message)
+          sendJson(res, 500, { error: message })
+        }
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin(), mondayPlugin()],
+  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin(), mondayPlugin(), aiPlugin()],
   server: {},
   build: {
     rollupOptions: {
