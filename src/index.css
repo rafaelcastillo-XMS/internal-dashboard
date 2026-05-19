@@ -58,12 +58,12 @@
   --text-link:           #2563EB;
 
   /* Accent */
-  --accent:              #2563EB;
-  --accent-hover:        #1D4ED8;
-  --accent-active:       #1E40AF;
-  --accent-subtle:       #EFF6FF;
-  --accent-subtle-border:#BFDBFE;
-  --accent-muted-text:   #2563EB;
+  --brand-accent:              #2563EB;
+  --brand-accent-hover:        #1D4ED8;
+  --brand-accent-active:       #1E40AF;
+  --brand-accent-subtle:       #EFF6FF;
+  --brand-accent-subtle-border:#BFDBFE;
+  --brand-accent-muted-text:   #2563EB;
   --hover-bg:            #EEF1F7;
   --focus-ring:          #93C5FD;
 
@@ -151,12 +151,12 @@
   --text-link:           #6BA8FF;
 
   /* Accent */
-  --accent:              #3B7EF6;
-  --accent-hover:        #2563EB;
-  --accent-active:       #1D4ED8;
-  --accent-subtle:       #162040;
-  --accent-subtle-border:#2E407A;
-  --accent-muted-text:   #6BA8FF;
+  --brand-accent:              #3B7EF6;
+  --brand-accent-hover:        #2563EB;
+  --brand-accent-active:       #1D4ED8;
+  --brand-accent-subtle:       #162040;
+  --brand-accent-subtle-border:#2E407A;
+  --brand-accent-muted-text:   #6BA8FF;
   --hover-bg:            #1C2438;
   --focus-ring:          #3B7EF6;
 

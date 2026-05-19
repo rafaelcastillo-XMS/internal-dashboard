@@ -266,7 +266,7 @@ function InfoItem({ icon: Icon, label, value, isLink, linkUrl, badge }: { icon: 
             <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold text-[var(--sidebar-section-label)] uppercase tracking-wider mb-0.5">{label}</p>
                 {badge ? (
-                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[var(--accent-subtle)] text-[var(--accent)] border border-[var(--accent-subtle-border)]">
+                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[var(--brand-accent-subtle)] text-[var(--brand-accent)] border border-[var(--brand-accent-subtle-border)]">
                         {value}
                     </span>
                 ) : isLink ? (

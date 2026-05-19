@@ -17,6 +17,7 @@ const CalendarPage = lazy(() => import("./pages/Calendar").then(module => ({ def
 const Profile = lazy(() => import("./pages/Profile").then(module => ({ default: module.Profile })))
 const Settings = lazy(() => import("./pages/Settings").then(module => ({ default: module.Settings })))
 const Login = lazy(() => import("./pages/Login").then(module => ({ default: module.Login })))
+const Guidelines = lazy(() => import("./pages/Guidelines").then(module => ({ default: module.Guidelines })))
 
 // SEO Intelligence
 const SEOLayout = lazy(() => import("./features/seo/layout/SEOLayout").then(module => ({ default: module.SEOLayout })))
@@ -100,6 +101,7 @@ function App() {
                                 <Route path="/calendar" element={<CalendarPage />} />
                                 <Route path="/profile" element={<Profile />} />
                                 <Route path="/settings" element={<Settings />} />
+                                <Route path="/guidelines" element={<Guidelines />} />
                                 <Route path="*" element={<Navigate to="/" replace />} />
                             </Route>
                             <Route element={<SEOProtectedLayout session={session} />}>

@@ -107,7 +107,7 @@ export function Sidebar() {
                     ) : (
                         <>
                             <XMSLogo mode={theme === "dark" ? "dark" : "light"} height={55} className="max-w-[170px]" />
-                            <span className="text-[9px] font-bold text-[var(--accent)] bg-[var(--accent-subtle)] border border-[var(--accent-subtle-border)] px-1.5 py-0.5 rounded-full tracking-widest uppercase shrink-0">Beta</span>
+                            <span className="text-[9px] font-bold text-[var(--brand-accent)] bg-[var(--brand-accent-subtle)] border border-[var(--brand-accent-subtle-border)] px-1.5 py-0.5 rounded-full tracking-widest uppercase shrink-0">Beta</span>
                         </>
                     )}
                 </div>
@@ -240,11 +240,15 @@ export function Sidebar() {
 
                     {/* Guidelines */}
                     <div className="relative group">
-                        <button className={`${navItemClass} ${inactiveClass} opacity-70`} onClick={() => alert("This app is coming soon!")}>
+                        <NavLink
+                            to="/guidelines"
+                            onClick={closeMobile}
+                            className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}
+                        >
                             <FileText className="w-4 h-4 shrink-0" />
-                            {!collapsed && <>Guidelines <span className="ml-auto text-[9px] font-semibold text-[var(--text-muted)] bg-[var(--bg-subtle)] px-1.5 py-0.5 rounded-full">Soon</span></>}
-                        </button>
-                        {collapsed && <Tooltip label="Guidelines – Coming soon" />}
+                            {!collapsed && "Guidelines"}
+                        </NavLink>
+                        {collapsed && <Tooltip label="Guidelines" />}
                     </div>
 
                     {/* APPS section */}

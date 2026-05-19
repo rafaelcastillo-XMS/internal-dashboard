@@ -95,7 +95,7 @@ export function AllClients() {
                                             <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest text-right">
                                                 Level of Service
                                             </span>
-                                            <span className="text-xs font-semibold text-[var(--accent)] bg-[var(--accent-subtle)] px-2 py-0.5 rounded-md border border-[var(--accent-subtle-border)]">
+                                            <span className="text-xs font-semibold text-[var(--brand-accent)] bg-[var(--brand-accent-subtle)] px-2 py-0.5 rounded-md border border-[var(--brand-accent-subtle-border)]">
                                                 {client.levelOfService}
                                             </span>
                                         </div>

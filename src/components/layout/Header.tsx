@@ -192,11 +192,11 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                     {/* AI Assistant button */}
                     <button
                         onClick={openAI}
-                        className="flex h-10 items-center gap-2.5 rounded-full border border-blue-100 bg-gradient-to-r from-blue-50 to-violet-50 pl-3.5 pr-4 text-[var(--text-muted)] transition-all group hover:border-[var(--accent-subtle-border)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-blue-800/50 dark:from-blue-900/20 dark:to-violet-900/20"
+                        className="flex h-10 items-center gap-2.5 rounded-full border border-blue-100 bg-gradient-to-r from-blue-50 to-violet-50 pl-3.5 pr-4 text-[var(--text-muted)] transition-all group hover:border-[var(--brand-accent-subtle-border)] hover:text-[var(--brand-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-blue-800/50 dark:from-blue-900/20 dark:to-violet-900/20"
                         aria-label="Ask AI"
                     >
                         <Sparkles className="w-4 h-4 text-blue-500 group-hover:text-blue-600 transition-colors" />
-                        <span className="text-sm text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors">Ask AI anything...</span>
+                        <span className="text-sm text-[var(--text-muted)] group-hover:text-[var(--brand-accent)] transition-colors">Ask AI anything...</span>
                         <span className="hidden sm:inline-flex items-center gap-1 ml-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-500 dark:text-blue-400">⌘K</span>
                     </button>
                 </div>
@@ -402,7 +402,7 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                                                 <button
                                                     key={suggestion}
                                                     onClick={() => { setAiQuery(suggestion); aiInputRef.current?.focus() }}
-                                                    className="text-xs px-3 py-1.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent-subtle-border)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all"
+                                                    className="text-xs px-3 py-1.5 rounded-full border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--brand-accent-subtle-border)] hover:text-[var(--brand-accent)] hover:bg-[var(--brand-accent-subtle)] transition-all"
                                                 >
                                                     {suggestion}
                                                 </button>
@@ -413,7 +413,7 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
 
                                 {/* Input */}
                                 <div className="px-4 pb-4">
-                                    <div className="flex items-end gap-2 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border)] focus-within:border-[var(--accent)] transition-colors px-3 py-2.5">
+                                    <div className="flex items-end gap-2 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border)] focus-within:border-[var(--brand-accent)] transition-colors px-3 py-2.5">
                                         <textarea
                                             ref={aiInputRef}
                                             value={aiQuery}
@@ -464,8 +464,8 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                                 <div className="p-6">
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2.5">
-                                            <div className="w-9 h-9 bg-[var(--accent-subtle)] rounded-xl flex items-center justify-center">
-                                                <Bug className="w-5 h-5 text-[var(--accent)]" />
+                                            <div className="w-9 h-9 bg-[var(--brand-accent-subtle)] rounded-xl flex items-center justify-center">
+                                                <Bug className="w-5 h-5 text-[var(--brand-accent)]" />
                                             </div>
                                             <div>
                                                 <h2 className="font-semibold text-[var(--text-primary)] text-sm">Report a Bug</h2>
