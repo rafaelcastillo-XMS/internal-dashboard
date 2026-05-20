@@ -44,6 +44,22 @@ function saveBudgetStore(s: BudgetStore)            { save(BUDGET_KEY, s) }
 function saveGuaranteeStore(s: BudgetStore)         { save(GUARANTEE_BUDGET_KEY, s) }
 function saveMonthlyStore(s: Record<string,number>) { save(MONTHLY_BUDGET_KEY, s) }
 
+async function fetchSupabaseBudgets(reportType: string): Promise<Record<string, number>> {
+  const { data } = await supabase
+    .from('sem_report_budgets')
+    .select('account_id, budget')
+    .eq('report_type', reportType)
+  const map: Record<string, number> = {}
+  for (const r of data ?? []) map[r.account_id] = Number(r.budget)
+  return map
+}
+
+function upsertSupabaseBudget(accountId: string, reportType: string, budget: number) {
+  supabase.from('sem_report_budgets')
+    .upsert({ account_id: accountId, report_type: reportType, budget, updated_at: new Date().toISOString() }, { onConflict: 'account_id,report_type' })
+    .then(() => {})
+}
+
 function defaultRow(): BudgetRow { return { budget: 0, week1: 0, week2: 0, week3: 0, lastCheck: '' } }
 
 // ─── Week helpers ─────────────────────────────────────────────────────────────
@@ -696,8 +712,26 @@ function WeeklyBudgetReport({
   const [exporting, setExporting]         = useState(false)
   const [emailPayload, setEmailPayload]   = useState<EmailReportPayload | null>(null)
 
+  useEffect(() => {
+    if (!accounts.length) return
+    fetchSupabaseBudgets('ads_weekly').then(map => {
+      if (!Object.keys(map).length) return
+      setAdsBudgets(prev => {
+        const next = { ...prev }
+        for (const [id, budget] of Object.entries(map)) next[id] = { ...defaultRow(), ...prev[id], budget }
+        saveBudgetStore(next)
+        return next
+      })
+    })
+  }, [accounts])
+
   const updateAds = (id: string, field: keyof BudgetRow, value: number | string) => {
-    setAdsBudgets(prev => { const next = { ...prev, [id]: { ...defaultRow(), ...prev[id], [field]: value } }; saveBudgetStore(next); return next })
+    setAdsBudgets(prev => {
+      const next = { ...prev, [id]: { ...defaultRow(), ...prev[id], [field]: value } }
+      saveBudgetStore(next)
+      if (field === 'budget') upsertSupabaseBudget(id, 'ads_weekly', Number(value))
+      return next
+    })
   }
 
   const buildAdsRows = () => accounts.map(a => {
@@ -777,8 +811,26 @@ function GuaranteeWeeklyReport({ accounts }: { accounts: AdsAccount[] }) {
   const [ggMonthly,     setGgMonthly]     = useState<Record<string, { spend: number; leads: number; cost_per_lead: number }>>({})
   const [loadingMonth,  setLoadingMonth]  = useState(false)
 
+  useEffect(() => {
+    if (!accounts.length) return
+    fetchSupabaseBudgets('guarantee_weekly').then(map => {
+      if (!Object.keys(map).length) return
+      setGgBudgets(prev => {
+        const next = { ...prev }
+        for (const [id, budget] of Object.entries(map)) next[id] = { ...defaultRow(), ...prev[id], budget }
+        saveGuaranteeStore(next)
+        return next
+      })
+    })
+  }, [accounts])
+
   const updateGg = (id: string, field: keyof BudgetRow, value: number | string) => {
-    setGgBudgets(prev => { const next = { ...prev, [id]: { ...defaultRow(), ...prev[id], [field]: value } }; saveGuaranteeStore(next); return next })
+    setGgBudgets(prev => {
+      const next = { ...prev, [id]: { ...defaultRow(), ...prev[id], [field]: value } }
+      saveGuaranteeStore(next)
+      if (field === 'budget') upsertSupabaseBudget(id, 'guarantee_weekly', Number(value))
+      return next
+    })
   }
 
   const fetchGgMonth = useCallback(async (month: number, year: number) => {
@@ -915,6 +967,14 @@ function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
   const [exporting, setExporting]         = useState(false)
   const [emailPayload, setEmailPayload]   = useState<EmailReportPayload | null>(null)
 
+  useEffect(() => {
+    if (!accounts.length) return
+    fetchSupabaseBudgets('ads_monthly').then(map => {
+      if (!Object.keys(map).length) return
+      setBudgets(prev => { const next = { ...prev, ...map }; saveMonthlyStore(next); return next })
+    })
+  }, [accounts])
+
   const fetchMonthly = useCallback(async (month: number, year: number) => {
     setLoadingMonth(true)
     try {
@@ -934,6 +994,7 @@ function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
 
   const updateBudget = (id: string, v: number) => {
     setBudgets(prev => { const next = { ...prev, [id]: v }; saveMonthlyStore(next); return next })
+    upsertSupabaseBudget(id, 'ads_monthly', v)
   }
 
   const buildMonthlyRows = () => accounts.map(a => ({
