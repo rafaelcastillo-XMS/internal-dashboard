@@ -741,12 +741,6 @@ function WeeklyBudgetReport({
           </button>
         </div>
         <div className="flex items-center gap-3">
-          <p className="flex items-center gap-1 text-xs text-body dark:text-bodydark">
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-            Click any cell to edit
-          </p>
           <button disabled title="Coming soon"
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card opacity-40 cursor-not-allowed
                        dark:border-strokedark dark:bg-boxdark dark:text-white">
@@ -828,12 +822,6 @@ function GuaranteeWeeklyReport({ accounts }: { accounts: AdsAccount[] }) {
             </svg>
           )}
         </div>
-        <p className="flex items-center gap-1 text-xs text-body dark:text-bodydark">
-          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
-          Click Budget to edit
-        </p>
       </div>
 
       {/* Guarantee performance table */}
@@ -990,12 +978,6 @@ function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <p className="flex items-center gap-1 text-xs text-body dark:text-bodydark">
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-            Click Budget to edit
-          </p>
           <button disabled title="Coming soon"
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card opacity-40 cursor-not-allowed
                        dark:border-strokedark dark:bg-boxdark dark:text-white">
