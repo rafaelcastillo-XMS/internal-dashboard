@@ -1,0 +1,1159 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { supabase } from '@/lib/supabase'
+import { generateWeeklyBudgetPdf, generateMonthlyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
+import type { PdfWeeklyRow, PdfMonthlyRow } from '@/features/sem/lib/generateReportsPdf'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface AdsAccount { id: string; name: string; status: string }
+
+interface BudgetRow {
+  budget: number
+  week1: number
+  week2: number
+  week3: number
+  lastCheck: string
+}
+
+type BudgetStore = Record<string, BudgetRow>
+
+interface GuaranteeAnalytics {
+  spend: number
+  leads: number
+  cost_per_lead: number
+  ad_impressions: number
+  top_imp_rate: number
+  abs_top_imp_rate: number
+  months: number
+}
+
+// ─── Storage ──────────────────────────────────────────────────────────────────
+
+const BUDGET_KEY           = 'sem_weekly_budgets'
+const GUARANTEE_BUDGET_KEY = 'sem_weekly_guarantee_budgets'
+const MONTHLY_BUDGET_KEY   = 'sem_monthly_budgets'
+
+const load = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || '{}') } catch { return {} } }
+const save = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify(v)) } catch {} }
+
+function loadBudgetStore():     BudgetStore          { return load(BUDGET_KEY) }
+function loadGuaranteeStore():  BudgetStore          { return load(GUARANTEE_BUDGET_KEY) }
+function loadMonthlyStore():    Record<string,number> { return load(MONTHLY_BUDGET_KEY) }
+
+function saveBudgetStore(s: BudgetStore)            { save(BUDGET_KEY, s) }
+function saveGuaranteeStore(s: BudgetStore)         { save(GUARANTEE_BUDGET_KEY, s) }
+function saveMonthlyStore(s: Record<string,number>) { save(MONTHLY_BUDGET_KEY, s) }
+
+function defaultRow(): BudgetRow { return { budget: 0, week1: 0, week2: 0, week3: 0, lastCheck: '' } }
+
+// ─── Week helpers ─────────────────────────────────────────────────────────────
+
+function getWeekStart(date: Date): Date {
+  const d = new Date(date)
+  const day = d.getDay()
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day))
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function addDays(date: Date, n: number): Date {
+  const d = new Date(date); d.setDate(d.getDate() + n); return d
+}
+
+function formatWeekLabel(start: Date): string {
+  const end = addDays(start, 6)
+  const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const e = end.toLocaleDateString('en-US',   { month: 'short', day: 'numeric', year: 'numeric' })
+  return `${s} – ${e}`
+}
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const ALL_MONTHS  = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER']
+
+// ─── Formatters ───────────────────────────────────────────────────────────────
+
+const fmtCurrency = (n: number) =>
+  '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+const fmtNum = (n: number, dec = 0) =>
+  n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
+
+const parseCurrency = (v: string) => parseFloat(v.replace(/[$,]/g, '')) || 0
+
+// ─── StatusBadge ──────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: string }) {
+  const active = status === 'ENABLED'
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold
+      ${active ? 'bg-meta-3/10 text-meta-3' : 'bg-stroke/50 text-body dark:text-bodydark'}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-meta-3' : 'bg-body'}`} />
+      {active ? 'Active' : 'Inactive'}
+    </span>
+  )
+}
+
+// ─── EditableCell ─────────────────────────────────────────────────────────────
+
+function EditableCell({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [raw, setRaw] = useState('')
+  const start = () => { setRaw(value === 0 ? '' : value.toFixed(2)); setEditing(true) }
+  const commit = (r: string) => { onChange(parseCurrency(r)); setEditing(false) }
+
+  if (editing) return (
+    <input autoFocus type="text" value={raw}
+      onChange={e => setRaw(e.target.value)}
+      onBlur={e => commit(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter') commit(raw) }}
+      className="w-24 rounded border border-[#16a34a] bg-white px-2 py-1 text-xs tabular-nums outline-none dark:bg-boxdark dark:text-white"
+    />
+  )
+  return (
+    <button onClick={start} title="Click to edit"
+      className="group flex items-center gap-1 rounded px-1 py-0.5 text-left tabular-nums hover:bg-[#16a34a]/10 transition-colors text-xs font-medium text-black dark:text-white"
+    >
+      {value > 0
+        ? `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : <span className="text-body dark:text-bodydark opacity-40">—</span>
+      }
+      <svg className="h-2.5 w-2.5 opacity-0 group-hover:opacity-50 text-[#16a34a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+      </svg>
+    </button>
+  )
+}
+
+function EditableDateCell({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [raw, setRaw] = useState(value)
+  const commit = (r: string) => { onChange(r); setEditing(false) }
+
+  if (editing) return (
+    <input autoFocus type="date" value={raw}
+      onChange={e => setRaw(e.target.value)}
+      onBlur={e => commit(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter') commit(raw) }}
+      className="rounded border border-[#16a34a] bg-white px-2 py-1 text-xs outline-none dark:bg-boxdark dark:text-white"
+    />
+  )
+  return (
+    <button onClick={() => { setRaw(value); setEditing(true) }} title="Click to edit"
+      className="group flex items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-[#16a34a]/10 transition-colors text-xs text-black dark:text-white"
+    >
+      {value || <span className="text-body dark:text-bodydark opacity-40">—</span>}
+      <svg className="h-2.5 w-2.5 opacity-0 group-hover:opacity-50 text-[#16a34a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+      </svg>
+    </button>
+  )
+}
+
+// ─── WeekPickerPopover ────────────────────────────────────────────────────────
+
+function WeekPickerPopover({ weekStart, onChange }: { weekStart: Date; onChange: (d: Date) => void }) {
+  const [open, setOpen] = useState(false)
+  const [calMonth, setCalMonth] = useState<Date>(() => { const d = new Date(weekStart); d.setDate(1); return d })
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const year  = calMonth.getFullYear()
+  const month = calMonth.getMonth()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const rawFirst = new Date(year, month, 1).getDay()
+  const firstDay = rawFirst === 0 ? 6 : rawFirst - 1 // Mon=0
+
+  const days: (number | null)[] = [...Array(firstDay).fill(null)]
+  for (let d = 1; d <= daysInMonth; d++) days.push(d)
+  while (days.length % 7 !== 0) days.push(null)
+
+  const isInWeek = (day: number | null) => {
+    if (!day) return false
+    const d = new Date(year, month, day)
+    return d >= weekStart && d <= addDays(weekStart, 6)
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-1.5
+                   text-sm font-semibold text-black shadow-card hover:border-[#16a34a]
+                   dark:border-strokedark dark:bg-boxdark dark:text-white transition-colors"
+      >
+        <svg className="h-4 w-4 text-[#16a34a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+        </svg>
+        Week of {formatWeekLabel(weekStart)}
+        <svg className="h-3.5 w-3.5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-xl border border-stroke bg-white shadow-2xl dark:border-strokedark dark:bg-boxdark">
+          {/* Month nav */}
+          <div className="flex items-center justify-between border-b border-stroke px-4 py-3 dark:border-strokedark">
+            <button onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+              className="rounded p-1.5 hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+            <span className="text-sm font-bold text-black dark:text-white">
+              {MONTH_NAMES[month]} {year}
+            </span>
+            <button onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+              className="rounded p-1.5 hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Day labels */}
+          <div className="grid grid-cols-7 px-3 pt-2">
+            {['Mo','Tu','We','Th','Fr','Sa','Su'].map(d => (
+              <div key={d} className="py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-body dark:text-bodydark">{d}</div>
+            ))}
+          </div>
+
+          {/* Days */}
+          <div className="grid grid-cols-7 px-3 pb-3">
+            {days.map((day, i) => {
+              const inWeek = isInWeek(day)
+              const isFirst = i % 7 === 0
+              const isLast  = i % 7 === 6
+              return (
+                <button key={i} onClick={() => { if (day) { onChange(getWeekStart(new Date(year, month, day))); setOpen(false) } }}
+                  disabled={!day}
+                  className={`h-8 text-xs font-medium transition-colors
+                    ${!day ? 'cursor-default' : ''}
+                    ${inWeek
+                      ? `bg-[#16a34a]/15 text-[#15803d] dark:bg-[#16a34a]/25 dark:text-[#4ade80]
+                         ${isFirst ? 'rounded-l-lg' : ''} ${isLast ? 'rounded-r-lg' : ''}`
+                      : day ? 'rounded-lg hover:bg-gray-2 dark:hover:bg-meta-4 text-black dark:text-white' : ''
+                    }`}
+                >
+                  {day ?? ''}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── BudgetTableSection ───────────────────────────────────────────────────────
+
+function BudgetTableSection({
+  accounts, budgets, costByAccount = {}, onUpdate, pendingCost = false,
+}: {
+  accounts: AdsAccount[]
+  budgets: BudgetStore
+  costByAccount?: Record<string, number>
+  onUpdate: (id: string, field: keyof BudgetRow, value: number | string) => void
+  pendingCost?: boolean
+}) {
+  const get = (id: string) => budgets[id] ?? defaultRow()
+  const rem  = (id: string) => {
+    const b = get(id); const cost = costByAccount[id] ?? 0
+    return !pendingCost && b.budget > 0 ? b.budget - cost : null
+  }
+
+  const COL_HEADER = pendingCost ? 'Cost (Pending)' : 'Cost (GA)'
+
+  const totals = accounts.reduce((acc, a) => {
+    const b = get(a.id); const cost = costByAccount[a.id] ?? 0; const r = rem(a.id)
+    return {
+      budget: acc.budget + b.budget,
+      cost:   acc.cost   + cost,
+      wk1:    r !== null ? acc.wk1 + r / 22 : acc.wk1,
+      wk2:    r !== null ? acc.wk2 + r / 12 : acc.wk2,
+      wk3:    r !== null ? acc.wk3 + r / 6  : acc.wk3,
+      lc:     r !== null ? acc.lc  + r / 2  : acc.lc,
+    }
+  }, { budget: 0, cost: 0, wk1: 0, wk2: 0, wk3: 0, lc: 0 })
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
+            {['Status', 'Account Name', 'Budget', COL_HEADER, 'Remaining', 'First Week', 'Second Week', 'Third Week', 'Last Check 29th'].map(h => (
+              <th key={h} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-stroke dark:divide-strokedark">
+          {accounts.length === 0 ? (
+            <tr><td colSpan={9} className="px-5 py-10 text-center text-sm text-body dark:text-bodydark">No accounts found.</td></tr>
+          ) : accounts.map(a => {
+            const b = get(a.id)
+            const cost      = costByAccount[a.id] ?? 0
+            const remaining = rem(a.id)
+            const remNeg    = remaining !== null && remaining < 0
+            return (
+              <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
+                <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
+                <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-white" title={a.name}>{a.name}</td>
+                <td className="px-5 py-4"><EditableCell value={b.budget} onChange={v => onUpdate(a.id, 'budget', v)} /></td>
+
+                {/* Cost — always red */}
+                <td className="px-5 py-4 tabular-nums font-medium text-red-500">
+                  {pendingCost
+                    ? <span className="text-xs italic text-body/50 dark:text-bodydark/50">Pending</span>
+                    : cost > 0 ? fmtCurrency(cost) : <span className="opacity-40 text-body dark:text-bodydark">—</span>
+                  }
+                </td>
+
+                {/* Remaining */}
+                <td className={`px-5 py-4 tabular-nums font-semibold ${remNeg ? 'text-red-500' : remaining !== null ? 'text-meta-3' : 'text-body dark:text-bodydark'}`}>
+                  {remaining !== null ? fmtCurrency(remaining) : <span className="opacity-40">—</span>}
+                </td>
+
+                {/* Auto-calculated week columns */}
+                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                  {remaining !== null ? fmtCurrency(remaining / 22) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                </td>
+                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                  {remaining !== null ? fmtCurrency(remaining / 12) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                </td>
+                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                  {remaining !== null ? fmtCurrency(remaining / 6) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                </td>
+                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                  {remaining !== null ? fmtCurrency(remaining / 2) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                </td>
+              </tr>
+            )
+          })}
+          {accounts.length > 0 && (
+            <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
+              <td className="px-5 py-4" />
+              <td className="px-5 py-4 text-xs font-bold uppercase text-[#16a34a]">Totals</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.budget > 0 ? fmtCurrency(totals.budget) : '—'}</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-red-500">
+                {pendingCost ? <span className="text-xs italic text-body/50 dark:text-bodydark/50">Pending</span> : totals.cost > 0 ? fmtCurrency(totals.cost) : '—'}
+              </td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">
+                {!pendingCost && totals.budget > 0 ? fmtCurrency(totals.budget - totals.cost) : '—'}
+              </td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.wk1 > 0 ? fmtCurrency(totals.wk1) : '—'}</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.wk2 > 0 ? fmtCurrency(totals.wk2) : '—'}</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.wk3 > 0 ? fmtCurrency(totals.wk3) : '—'}</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.lc  > 0 ? fmtCurrency(totals.lc)  : '—'}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ─── GuaranteeAnalyticsCards ──────────────────────────────────────────────────
+
+function KpiCard({
+  label, value, sub, icon, accent,
+}: {
+  label: string; value: string; sub?: string; icon: React.ReactNode; accent: string
+}) {
+  return (
+    <div className={`relative overflow-hidden rounded-2xl border bg-white p-5 shadow-sm dark:bg-boxdark ${accent}`}>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-body dark:text-bodydark">{label}</span>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-stroke/50 dark:bg-white/10">
+          {icon}
+        </div>
+      </div>
+      <p className="text-2xl font-bold tabular-nums text-black dark:text-white">{value}</p>
+      {sub && <p className="mt-1 text-[11px] text-body dark:text-bodydark">{sub}</p>}
+    </div>
+  )
+}
+
+function GuaranteeAnalyticsCards({ accounts }: { accounts: AdsAccount[] }) {
+  const [accountId, setAccountId] = useState('')
+  const [year, setYear] = useState(String(new Date().getFullYear()))
+  const [data, setData] = useState<GuaranteeAnalytics | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (accounts.length > 0 && !accountId) {
+      const enabled = accounts.find(a => a.status === 'ENABLED') ?? accounts[0]
+      setAccountId(enabled.id)
+    }
+  }, [accounts, accountId])
+
+  const fetchAnalytics = useCallback(async (id: string, yr: string) => {
+    setLoading(true)
+    try {
+      const { data: rows, error } = await supabase
+        .from('sem_yearly_guarantee')
+        .select('spend, leads, cost_per_lead, ad_impressions')
+        .eq('account_id', id)
+        .eq('year', Number(yr))
+        .gt('spend', 0)
+      if (error || !rows || rows.length === 0) { setData(null); return }
+      const n = rows.length
+      const agg = rows.reduce((acc, r) => ({
+        spend:          acc.spend + r.spend,
+        leads:          acc.leads + r.leads,
+        cost_per_lead:  0,
+        ad_impressions: acc.ad_impressions + r.ad_impressions,
+        top_imp_rate:   0,
+        abs_top_imp_rate: 0,
+        months:         n,
+      }), { spend: 0, leads: 0, cost_per_lead: 0, ad_impressions: 0, top_imp_rate: 0, abs_top_imp_rate: 0, months: 0 })
+      agg.cost_per_lead = agg.leads > 0 ? agg.spend / agg.leads : 0
+      setData(agg)
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { if (accountId) fetchAnalytics(accountId, year) }, [accountId, year, fetchAnalytics])
+
+  const selectedAccount = accounts.find(a => a.id === accountId)
+
+  return (
+    <div className="mt-8">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-bold text-black dark:text-white">
+            <span className="h-2 w-2 rounded-full bg-[#3b82f6]" />
+            Google Guarantee Analytics
+          </h3>
+          <p className="mt-0.5 text-xs text-body dark:text-bodydark">
+            {data ? `${data.months} month${data.months !== 1 ? 's' : ''} with data · ${year}` : `No data · ${year}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={accountId} onChange={e => setAccountId(e.target.value)}
+            className="h-8 max-w-[220px] truncate rounded-lg border border-stroke bg-white px-3 text-xs font-medium outline-none hover:border-[#3b82f6] focus:border-[#3b82f6] dark:border-strokedark dark:bg-boxdark dark:text-white">
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <select value={year} onChange={e => setYear(e.target.value)}
+            className="h-8 rounded-lg border border-stroke bg-white px-3 text-xs font-medium outline-none hover:border-[#3b82f6] focus:border-[#3b82f6] dark:border-strokedark dark:bg-boxdark dark:text-white">
+            {['2024','2025','2026'].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          {loading && (
+            <svg className="h-4 w-4 animate-spin text-[#3b82f6]" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          )}
+        </div>
+      </div>
+
+      {!data && !loading ? (
+        <div className="rounded-xl border border-stroke bg-white px-6 py-8 text-center dark:border-strokedark dark:bg-boxdark">
+          <p className="text-sm text-body dark:text-bodydark">
+            No Google Guarantee data for <strong>{selectedAccount?.name ?? 'this account'}</strong> in {year}.
+          </p>
+        </div>
+      ) : data ? (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <KpiCard
+            label="Total Lead Spend"
+            value={fmtCurrency(data.spend)}
+            sub={`${data.months} month${data.months !== 1 ? 's' : ''} · ${year}`}
+            accent="border-[#16a34a]/20"
+            icon={
+              <svg className="h-4 w-4 text-[#16a34a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
+              </svg>
+            }
+          />
+          <KpiCard
+            label="Charged Leads"
+            value={fmtNum(data.leads)}
+            sub={`${year} year-to-date`}
+            accent="border-[#3b82f6]/20"
+            icon={
+              <svg className="h-4 w-4 text-[#3b82f6]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+              </svg>
+            }
+          />
+          <KpiCard
+            label="Cost per Lead"
+            value={data.leads > 0 ? fmtCurrency(data.cost_per_lead) : '—'}
+            sub="Avg across all months"
+            accent="border-[#f59e0b]/20"
+            icon={
+              <svg className="h-4 w-4 text-[#f59e0b]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+              </svg>
+            }
+          />
+          <KpiCard
+            label="Ad Impressions"
+            value={fmtNum(data.ad_impressions)}
+            sub="Total impressions served"
+            accent="border-[#8b5cf6]/20"
+            icon={
+              <svg className="h-4 w-4 text-[#8b5cf6]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            }
+          />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// ─── Send Email Modal ─────────────────────────────────────────────────────────
+
+type EmailReportPayload =
+  | { kind: 'weekly';  weekLabel: string; adsRows: PdfWeeklyRow[]; guaranteeRows: PdfWeeklyRow[] }
+  | { kind: 'monthly'; monthLabel: string; rows: PdfMonthlyRow[] }
+
+function buildWeeklyText(weekLabel: string, adsRows: PdfWeeklyRow[], guaranteeRows: PdfWeeklyRow[]): string {
+  const lines: string[] = []
+  const fmt = (n: number) => n > 0 ? fmtCurrency(n) : '—'
+
+  lines.push(`Google Ads Budget Report — Week of ${weekLabel}`)
+  lines.push('')
+
+  if (adsRows.length > 0) {
+    lines.push('GOOGLE ADS — WEEKLY BUDGET')
+    lines.push('Account Name | Budget | Cost (GA) | Remaining | Wk 1 | Wk 2 | Wk 3 | Last Check 29th')
+    lines.push('-'.repeat(90))
+    adsRows.forEach(r => {
+      const remaining = r.budget > 0 ? r.budget - r.cost : 0
+      lines.push([r.accountName, fmt(r.budget), fmt(r.cost), fmtCurrency(remaining), fmt(r.week1), fmt(r.week2), fmt(r.week3), fmt(r.lastCheck)].join(' | '))
+    })
+    lines.push('')
+  }
+
+  if (guaranteeRows.length > 0) {
+    lines.push('GOOGLE GUARANTEE — WEEKLY BUDGET')
+    lines.push('Account Name | Budget | Wk 1 | Wk 2 | Wk 3 | Last Check')
+    lines.push('-'.repeat(70))
+    guaranteeRows.forEach(r => {
+      lines.push([r.accountName, fmt(r.budget), fmt(r.week1), fmt(r.week2), fmt(r.week3), r.lastCheck || '—'].join(' | '))
+    })
+  }
+
+  return lines.join('\n')
+}
+
+function buildMonthlyText(monthLabel: string, rows: PdfMonthlyRow[]): string {
+  const lines: string[] = []
+  const fmt = (n: number) => n > 0 ? fmtCurrency(n) : '—'
+  lines.push(`Budget Overview — ${monthLabel}`)
+  lines.push('')
+  lines.push('Account Name | Monthly Budget | Spend (GA) | Remaining')
+  lines.push('-'.repeat(70))
+  rows.forEach(r => {
+    const rem = r.budget > 0 ? r.budget - r.spend : 0
+    lines.push([r.accountName, fmt(r.budget), fmt(r.spend), r.budget > 0 ? fmtCurrency(rem) : '—'].join(' | '))
+  })
+  return lines.join('\n')
+}
+
+function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | null; onClose: () => void }) {
+  const [email, setEmail]         = useState('')
+  const [scheduled, setScheduled] = useState('')
+  const [note, setNote]           = useState('')
+  const [sent, setSent]           = useState(false)
+
+  useEffect(() => { if (!payload) { setEmail(''); setScheduled(''); setNote(''); setSent(false) } }, [payload])
+
+  if (!payload) return null
+
+  const reportText = payload.kind === 'weekly'
+    ? buildWeeklyText(payload.weekLabel, payload.adsRows, payload.guaranteeRows)
+    : buildMonthlyText(payload.monthLabel, payload.rows)
+
+  const label = payload.kind === 'weekly'
+    ? (payload.adsRows.length > 0 ? payload.weekLabel : payload.weekLabel)
+    : (payload as Extract<EmailReportPayload, { kind: 'monthly' }>).monthLabel
+
+  const handleSend = () => {
+    const subject = scheduled
+      ? `Budget Report — ${label} (scheduled ${new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`
+      : `Budget Report — ${label}`
+    const body = [reportText, note ? `\n\nNote:\n${note}` : ''].join('')
+    window.open(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`)
+    setSent(true)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-stroke bg-white p-6 shadow-2xl dark:border-strokedark dark:bg-boxdark">
+
+        {/* Header */}
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#16a34a]/10">
+              <svg className="h-4.5 w-4.5 text-[#16a34a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-black dark:text-white">Send Report by Email</h2>
+              <p className="text-[11px] text-body dark:text-bodydark">{label}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-body hover:bg-gray-2 hover:text-black dark:text-bodydark dark:hover:bg-meta-4 dark:hover:text-white transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {sent ? (
+          <div className="rounded-xl bg-[#f0fdf4] border border-[#bbf7d0] px-5 py-6 text-center dark:bg-[#14532d]/20 dark:border-[#16a34a]/30">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#16a34a]/15">
+              <svg className="h-5 w-5 text-[#16a34a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-[#15803d] dark:text-[#4ade80]">Email client opened</p>
+            <p className="mt-1 text-xs text-body dark:text-bodydark">The report was pre-filled in your email client. Review and send.</p>
+            {scheduled && (
+              <p className="mt-2 text-[11px] text-body/70 dark:text-bodydark/70">
+                Reminder set for {new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
+            <button onClick={onClose} className="mt-4 rounded-lg bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#15803d] transition-colors">Done</button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-white">Recipient Email <span className="text-red-400">*</span></label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@example.com"
+                className="w-full rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-white dark:focus:border-[#16a34a]" />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-white">
+                Schedule Date & Time <span className="font-normal text-body dark:text-bodydark">(optional)</span>
+              </label>
+              <input type="datetime-local" value={scheduled} onChange={e => setScheduled(e.target.value)}
+                className="w-full rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-white dark:focus:border-[#16a34a]" />
+              {scheduled && (
+                <p className="mt-1.5 flex items-center gap-1 text-[11px] text-[#16a34a]">
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Scheduled — the date will appear in the email subject
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-white">
+                Note <span className="font-normal text-body dark:text-bodydark">(optional)</span>
+              </label>
+              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Any message to add to the email…"
+                className="w-full resize-none rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-white dark:focus:border-[#16a34a]" />
+            </div>
+
+            <div className="rounded-lg border border-stroke bg-gray-2 px-3.5 py-3 dark:border-strokedark dark:bg-meta-4">
+              <p className="text-[11px] text-body dark:text-bodydark">
+                <span className="font-semibold text-black dark:text-white">Report included:</span> the table data will be pasted in the email body, ready to send from your email client.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-body hover:text-black dark:text-bodydark dark:hover:text-white transition-colors">Cancel</button>
+              <button onClick={handleSend} disabled={!email.includes('@')}
+                className="flex items-center gap-2 rounded-lg bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#15803d] disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+                {scheduled ? 'Schedule & Open Email' : 'Open in Email Client'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Weekly Budget Tab ────────────────────────────────────────────────────────
+
+function WeeklyBudgetReport({
+  accounts, costByAccount,
+}: {
+  accounts: AdsAccount[]
+  costByAccount: Record<string, number>
+}) {
+  const [weekStart, setWeekStart]         = useState<Date>(() => getWeekStart(new Date()))
+  const [adsBudgets, setAdsBudgets]       = useState<BudgetStore>(loadBudgetStore)
+  const [exporting, setExporting]         = useState(false)
+  const [emailPayload, setEmailPayload]   = useState<EmailReportPayload | null>(null)
+
+  const updateAds = (id: string, field: keyof BudgetRow, value: number | string) => {
+    setAdsBudgets(prev => { const next = { ...prev, [id]: { ...defaultRow(), ...prev[id], [field]: value } }; saveBudgetStore(next); return next })
+  }
+
+  const buildAdsRows = () => accounts.map(a => {
+    const b    = adsBudgets[a.id] ?? defaultRow()
+    const cost = costByAccount[a.id] ?? 0
+    const rem  = b.budget > 0 ? b.budget - cost : 0
+    return { status: a.status, accountName: a.name, budget: b.budget, cost, week1: rem / 22, week2: rem / 12, week3: rem / 6, lastCheck: rem / 2 }
+  })
+
+  async function handleExport() {
+    setExporting(true)
+    try { await generateWeeklyBudgetPdf({ weekLabel: formatWeekLabel(weekStart), adsRows: buildAdsRows(), guaranteeRows: [] }) }
+    finally { setExporting(false) }
+  }
+
+  function handleEmailOpen() {
+    setEmailPayload({ kind: 'weekly', weekLabel: formatWeekLabel(weekStart), adsRows: buildAdsRows(), guaranteeRows: [] })
+  }
+
+  return (
+    <div>
+      <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
+
+      {/* Controls row */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setWeekStart(d => addDays(d, -7))}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-stroke bg-white
+                       text-body hover:border-[#16a34a] hover:text-[#16a34a] dark:border-strokedark dark:bg-boxdark transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+          <WeekPickerPopover weekStart={weekStart} onChange={setWeekStart} />
+          <button onClick={() => setWeekStart(d => addDays(d, 7))}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-stroke bg-white
+                       text-body hover:border-[#16a34a] hover:text-[#16a34a] dark:border-strokedark dark:bg-boxdark transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="flex items-center gap-1 text-xs text-body dark:text-bodydark">
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+            Click any cell to edit
+          </p>
+          <button onClick={handleEmailOpen}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#3b82f6] hover:text-[#3b82f6]
+                       dark:border-strokedark dark:bg-boxdark dark:text-white">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+            </svg>
+            Send by Email
+          </button>
+          <button onClick={handleExport} disabled={exporting}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
+                       dark:border-strokedark dark:bg-boxdark dark:text-white">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            {exporting ? 'Exporting…' : 'Export PDF'}
+          </button>
+        </div>
+      </div>
+
+      {/* Google Ads table */}
+      <BudgetTableSection accounts={accounts} budgets={adsBudgets} costByAccount={costByAccount} onUpdate={updateAds} pendingCost={false} />
+    </div>
+  )
+}
+
+// ─── Google Guarantee Weekly Tab ──────────────────────────────────────────────
+
+function GuaranteeWeeklyReport({ accounts }: { accounts: AdsAccount[] }) {
+  const now = new Date()
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
+  const [selectedYear,  setSelectedYear]  = useState(now.getFullYear())
+  const [ggBudgets,     setGgBudgets]     = useState<BudgetStore>(loadGuaranteeStore)
+  const [ggMonthly,     setGgMonthly]     = useState<Record<string, { spend: number; leads: number; cost_per_lead: number }>>({})
+  const [loadingMonth,  setLoadingMonth]  = useState(false)
+
+  const updateGg = (id: string, field: keyof BudgetRow, value: number | string) => {
+    setGgBudgets(prev => { const next = { ...prev, [id]: { ...defaultRow(), ...prev[id], [field]: value } }; saveGuaranteeStore(next); return next })
+  }
+
+  const fetchGgMonth = useCallback(async (month: number, year: number) => {
+    setLoadingMonth(true)
+    try {
+      const { data, error } = await supabase
+        .from('sem_yearly_guarantee')
+        .select('account_id, spend, leads, cost_per_lead')
+        .eq('year', year)
+        .eq('month', ALL_MONTHS[month])
+      if (error) return
+      const map: Record<string, { spend: number; leads: number; cost_per_lead: number }> = {}
+      for (const r of data ?? []) map[r.account_id] = { spend: r.spend, leads: r.leads, cost_per_lead: r.cost_per_lead }
+      setGgMonthly(map)
+    } finally { setLoadingMonth(false) }
+  }, [])
+
+  useEffect(() => { fetchGgMonth(selectedMonth, selectedYear) }, [selectedMonth, selectedYear, fetchGgMonth])
+
+  const totalBudget = accounts.reduce((s, a) => s + (ggBudgets[a.id]?.budget ?? 0), 0)
+  const totalSpend  = accounts.reduce((s, a) => s + (ggMonthly[a.id]?.spend ?? 0), 0)
+  const totalLeads  = accounts.reduce((s, a) => s + (ggMonthly[a.id]?.leads ?? 0), 0)
+
+  return (
+    <div>
+      {/* Controls row */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}
+            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none focus:border-[#3b82f6] dark:border-strokedark dark:bg-boxdark dark:text-white">
+            {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+          </select>
+          <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
+            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none focus:border-[#3b82f6] dark:border-strokedark dark:bg-boxdark dark:text-white">
+            {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          {loadingMonth && (
+            <svg className="h-4 w-4 animate-spin text-[#3b82f6]" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          )}
+        </div>
+        <p className="flex items-center gap-1 text-xs text-body dark:text-bodydark">
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+          Click Budget to edit
+        </p>
+      </div>
+
+      {/* Guarantee performance table */}
+      <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
+              {['Status', 'Account Name', 'Budget', 'Monthly Spend', 'Leads', 'Cost / Lead', 'Remaining', '% Used'].map(h => (
+                <th key={h} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-stroke dark:divide-strokedark">
+            {accounts.length === 0 ? (
+              <tr><td colSpan={8} className="px-5 py-10 text-center text-sm text-body dark:text-bodydark">No accounts found.</td></tr>
+            ) : accounts.map(a => {
+              const budget    = ggBudgets[a.id]?.budget ?? 0
+              const monthly   = ggMonthly[a.id]
+              const spend     = monthly?.spend ?? 0
+              const leads     = monthly?.leads ?? 0
+              const cpl       = monthly?.cost_per_lead ?? 0
+              const remaining = budget > 0 ? budget - spend : null
+              const pct       = budget > 0 && spend > 0 ? (spend / budget) * 100 : null
+              const remNeg    = remaining !== null && remaining < 0
+              return (
+                <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
+                  <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
+                  <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-white" title={a.name}>{a.name}</td>
+                  <td className="px-5 py-4"><EditableCell value={budget} onChange={v => updateGg(a.id, 'budget', v)} /></td>
+                  <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">
+                    {spend > 0 ? fmtCurrency(spend) : <span className="opacity-40">—</span>}
+                  </td>
+                  <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">
+                    {leads > 0 ? fmtNum(leads) : <span className="opacity-40">—</span>}
+                  </td>
+                  <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">
+                    {cpl > 0 ? fmtCurrency(cpl) : <span className="opacity-40">—</span>}
+                  </td>
+                  <td className={`px-5 py-4 tabular-nums font-semibold ${remNeg ? 'text-red-500' : remaining !== null ? 'text-meta-3' : 'text-body dark:text-bodydark'}`}>
+                    {remaining !== null ? fmtCurrency(remaining) : <span className="opacity-40">—</span>}
+                  </td>
+                  <td className="px-5 py-4">
+                    {pct !== null ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-stroke dark:bg-strokedark">
+                          <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-400' : 'bg-meta-3'}`}
+                               style={{ width: `${Math.min(pct, 100)}%` }} />
+                        </div>
+                        <span className={`text-xs font-semibold tabular-nums ${pct > 90 ? 'text-red-500' : pct > 70 ? 'text-yellow-500' : 'text-meta-3'}`}>
+                          {pct.toFixed(1)}%
+                        </span>
+                      </div>
+                    ) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                  </td>
+                </tr>
+              )
+            })}
+            {accounts.length > 0 && (
+              <tr className="border-t-2 border-[#3b82f6]/30 bg-[#eff6ff] dark:bg-[#1e3a5f]/30">
+                <td className="px-5 py-4" />
+                <td className="px-5 py-4 text-xs font-bold uppercase text-[#3b82f6]">Totals</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#3b82f6]">{totalBudget > 0 ? fmtCurrency(totalBudget) : '—'}</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#3b82f6]">{totalSpend > 0 ? fmtCurrency(totalSpend) : '—'}</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#3b82f6]">{totalLeads > 0 ? fmtNum(totalLeads) : '—'}</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#3b82f6]">{totalLeads > 0 ? fmtCurrency(totalSpend / totalLeads) : '—'}</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#3b82f6]">{totalBudget > 0 ? fmtCurrency(totalBudget - totalSpend) : '—'}</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#3b82f6]">
+                  {totalBudget > 0 ? `${((totalSpend / totalBudget) * 100).toFixed(1)}%` : '—'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Analytics cards */}
+      <GuaranteeAnalyticsCards accounts={accounts} />
+    </div>
+  )
+}
+
+// ─── Monthly Overview Tab ─────────────────────────────────────────────────────
+
+function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
+  const now = new Date()
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
+  const [selectedYear,  setSelectedYear]  = useState(now.getFullYear())
+  const [monthlySpend,  setMonthlySpend]  = useState<Record<string, number>>({})
+  const [loadingMonth,  setLoadingMonth]  = useState(false)
+  const [budgets, setBudgets]             = useState<Record<string, number>>(loadMonthlyStore)
+  const [exporting, setExporting]         = useState(false)
+  const [emailPayload, setEmailPayload]   = useState<EmailReportPayload | null>(null)
+
+  const fetchMonthly = useCallback(async (month: number, year: number) => {
+    setLoadingMonth(true)
+    try {
+      const { data, error } = await supabase
+        .from('sem_yearly_ads')
+        .select('account_id, spend')
+        .eq('year', year)
+        .eq('month', ALL_MONTHS[month])
+      if (error) return
+      const map: Record<string, number> = {}
+      for (const r of data ?? []) map[r.account_id] = r.spend
+      setMonthlySpend(map)
+    } finally { setLoadingMonth(false) }
+  }, [])
+
+  useEffect(() => { fetchMonthly(selectedMonth, selectedYear) }, [selectedMonth, selectedYear, fetchMonthly])
+
+  const updateBudget = (id: string, v: number) => {
+    setBudgets(prev => { const next = { ...prev, [id]: v }; saveMonthlyStore(next); return next })
+  }
+
+  const buildMonthlyRows = () => accounts.map(a => ({
+    status: a.status, accountName: a.name, budget: budgets[a.id] ?? 0, spend: monthlySpend[a.id] ?? 0,
+  }))
+
+  async function handleExport() {
+    setExporting(true)
+    const monthLabel = `${MONTH_NAMES[selectedMonth]} ${selectedYear}`
+    try { await generateMonthlyBudgetPdf({ monthLabel, rows: buildMonthlyRows() }) }
+    finally { setExporting(false) }
+  }
+
+  function handleEmailOpen() {
+    setEmailPayload({ kind: 'monthly', monthLabel: `${MONTH_NAMES[selectedMonth]} ${selectedYear}`, rows: buildMonthlyRows() })
+  }
+
+  const totalBudget = accounts.reduce((s, a) => s + (budgets[a.id] ?? 0), 0)
+  const totalSpend  = accounts.reduce((s, a) => s + (monthlySpend[a.id] ?? 0), 0)
+
+  return (
+    <div>
+      <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
+
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}
+            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none
+                       focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-white">
+            {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+          </select>
+          <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
+            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none
+                       focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-white">
+            {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          {loadingMonth && (
+            <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="flex items-center gap-1 text-xs text-body dark:text-bodydark">
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+            Click Budget to edit
+          </p>
+          <button onClick={handleEmailOpen}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#3b82f6] hover:text-[#3b82f6]
+                       dark:border-strokedark dark:bg-boxdark dark:text-white">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+            </svg>
+            Send by Email
+          </button>
+          <button onClick={handleExport} disabled={exporting}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
+                       dark:border-strokedark dark:bg-boxdark dark:text-white">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            {exporting ? 'Exporting…' : 'Export PDF'}
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
+              {['Status', 'Account Name', 'Monthly Budget', 'Spend (GA)', 'Remaining', '% Used'].map(h => (
+                <th key={h} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-stroke dark:divide-strokedark">
+            {accounts.length === 0 ? (
+              <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-body dark:text-bodydark">No accounts found.</td></tr>
+            ) : accounts.map(a => {
+              const spend = monthlySpend[a.id] ?? 0
+              const budget = budgets[a.id] ?? 0
+              const remaining = budget > 0 ? budget - spend : null
+              const pct = budget > 0 ? (spend / budget) * 100 : null
+              const remNeg = remaining !== null && remaining < 0
+              return (
+                <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
+                  <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
+                  <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-white" title={a.name}>{a.name}</td>
+                  <td className="px-5 py-4"><EditableCell value={budget} onChange={v => updateBudget(a.id, v)} /></td>
+                  <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{spend > 0 ? fmtCurrency(spend) : <span className="opacity-40">—</span>}</td>
+                  <td className={`px-5 py-4 tabular-nums font-semibold ${remNeg ? 'text-red-500' : remaining !== null ? 'text-meta-3' : 'text-body dark:text-bodydark'}`}>
+                    {remaining !== null ? fmtCurrency(remaining) : <span className="opacity-40">—</span>}
+                  </td>
+                  <td className="px-5 py-4">
+                    {pct !== null ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-stroke dark:bg-strokedark">
+                          <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-400' : 'bg-meta-3'}`}
+                               style={{ width: `${Math.min(pct, 100)}%` }} />
+                        </div>
+                        <span className={`text-xs font-semibold tabular-nums ${pct > 90 ? 'text-red-500' : pct > 70 ? 'text-yellow-500' : 'text-meta-3'}`}>
+                          {pct.toFixed(1)}%
+                        </span>
+                      </div>
+                    ) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                  </td>
+                </tr>
+              )
+            })}
+            {accounts.length > 0 && (
+              <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
+                <td className="px-5 py-4" />
+                <td className="px-5 py-4 text-xs font-bold uppercase text-[#16a34a]">Totals</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totalBudget > 0 ? fmtCurrency(totalBudget) : '—'}</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totalSpend > 0 ? fmtCurrency(totalSpend) : '—'}</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totalBudget > 0 ? fmtCurrency(totalBudget - totalSpend) : '—'}</td>
+                <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">
+                  {totalBudget > 0 ? `${((totalSpend / totalBudget) * 100).toFixed(1)}%` : '—'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+type ReportTab = 'weekly' | 'guarantee' | 'monthly'
+
+export function SEMReportes() {
+  const [activeTab, setActiveTab]         = useState<ReportTab>('weekly')
+  const [accounts, setAccounts]           = useState<AdsAccount[]>([])
+  const [costByAccount, setCostByAccount] = useState<Record<string, number>>({})
+  const [loading, setLoading]             = useState(true)
+
+  useEffect(() => {
+    ;(async () => {
+      setLoading(true)
+      try {
+        const [acctRes, campRes] = await Promise.all([
+          supabase.from('sem_accounts').select('id, name, status').order('name'),
+          supabase.from('sem_campaigns').select('account_id, cost').eq('date_range', 'last_7'),
+        ])
+        setAccounts(acctRes.data ?? [])
+        const map: Record<string, number> = {}
+        for (const r of campRes.data ?? []) map[r.account_id] = (map[r.account_id] ?? 0) + r.cost
+        setCostByAccount(map)
+      } finally { setLoading(false) }
+    })()
+  }, [])
+
+  return (
+    <div className="mx-auto max-w-screen-2xl p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-black dark:text-white">
+          Reports
+          <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#16a34a]/20 text-[#16a34a] align-middle">
+            SEM Intelligence
+          </span>
+        </h1>
+        <p className="mt-1 text-sm text-body dark:text-bodydark">
+          Budget tracking and performance reports for all Google Ads accounts. Export to PDF for client delivery.
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="mb-6 flex w-fit gap-1 rounded-xl border border-stroke bg-gray-2 p-1 dark:border-strokedark dark:bg-meta-4">
+        {([
+          { id: 'weekly',    label: 'Google Ads Budget Weekly Report' },
+          { id: 'guarantee', label: 'Google Guarantee Weekly Report' },
+          { id: 'monthly',   label: 'Budget Overview' },
+        ] as { id: ReportTab; label: string }[]).map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            className={`rounded-lg px-5 py-2 text-sm font-semibold transition-all duration-150
+              ${activeTab === t.id
+                ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-white'
+                : 'text-body hover:text-black dark:text-bodydark dark:hover:text-white'
+              }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-8 text-sm text-body dark:text-bodydark">
+          <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Loading accounts…
+        </div>
+      ) : (
+        <>
+          {activeTab === 'weekly'    && <WeeklyBudgetReport accounts={accounts} costByAccount={costByAccount} />}
+          {activeTab === 'guarantee' && <GuaranteeWeeklyReport accounts={accounts} />}
+          {activeTab === 'monthly'   && <MonthlyBudgetOverview accounts={accounts} />}
+        </>
+      )}
+    </div>
+  )
+}

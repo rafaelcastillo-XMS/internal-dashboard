@@ -36,6 +36,11 @@ const SEMDashboard = lazy(() => import("./pages/sem/SEMDashboard").then(module =
 const SEMCampaigns = lazy(() => import("./pages/sem/SEMCampaigns").then(module => ({ default: module.SEMCampaigns })))
 const SEMKeywords = lazy(() => import("./pages/sem/SEMKeywords").then(module => ({ default: module.SEMKeywords })))
 const SEMSearchTerms = lazy(() => import("./pages/sem/SEMSearchTerms").then(module => ({ default: module.SEMSearchTerms })))
+const SEMReportes = lazy(() => import("./pages/sem/SEMReportes").then(module => ({ default: module.SEMReportes })))
+
+// Design Intelligence
+const DesignLayout = lazy(() => import("./features/design/layout/DesignLayout").then(module => ({ default: module.DesignLayout })))
+const DesignDashboard = lazy(() => import("./pages/design/DesignDashboard").then(module => ({ default: module.DesignDashboard })))
 
 // Social Media Intelligence
 const SocialLayout = lazy(() => import("./features/social/layout/SocialLayout").then(module => ({ default: module.SocialLayout })))
@@ -70,6 +75,11 @@ function SEMProtectedLayout({ session }: { session: Session | null }) {
 function SocialProtectedLayout({ session }: { session: Session | null }) {
     if (!session) return <Navigate to="/login" replace />
     return <SocialLayout />
+}
+
+function DesignProtectedLayout({ session }: { session: Session | null }) {
+    if (!session) return <Navigate to="/login" replace />
+    return <DesignLayout />
 }
 
 function App() {
@@ -119,12 +129,16 @@ function App() {
                                 <Route path="/sem/campaigns" element={<SEMCampaigns />} />
                                 <Route path="/sem/keywords" element={<SEMKeywords />} />
                                 <Route path="/sem/search-terms" element={<SEMSearchTerms />} />
+                                <Route path="/sem/reports" element={<SEMReportes />} />
                             </Route>
                             <Route element={<SocialProtectedLayout session={session} />}>
                                 <Route path="/social" element={<SocialDashboard />} />
                                 <Route path="/social/instagram" element={<InstagramDashboard />} />
                                 <Route path="/social/youtube" element={<YouTubeDashboard />} />
                                 <Route path="/social/facebook" element={<FacebookDashboard />} />
+                            </Route>
+                            <Route element={<DesignProtectedLayout session={session} />}>
+                                <Route path="/design" element={<DesignDashboard />} />
                             </Route>
                         </Routes>
                     </Suspense>

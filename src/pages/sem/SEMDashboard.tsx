@@ -99,7 +99,7 @@ export function SEMDashboard() {
   const state = useSEMDashboardState()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [activeTab, setActiveTab] = useState<'ads' | 'guarantee'>('ads')
-  
+
   // Dynamic state for Yearly Performance tables
   const [yearlyAds, setYearlyAds] = useState<YearlyAdsMetrics[]>([])
   const [yearlyGuarantee, setYearlyGuarantee] = useState<YearlyGuaranteeMetrics[]>([])
@@ -202,7 +202,7 @@ export function SEMDashboard() {
   useEffect(() => { fetchData() }, [fetchData])
 
   const summary = summarize(campaigns)
-  const topCampaigns = campaigns.slice(0, 8)
+  const topCampaigns = campaigns.filter(c => c.status !== 'PAUSED').slice(0, 8)
   const isDark = document.documentElement.classList.contains('dark')
 
   return (
@@ -336,18 +336,18 @@ export function SEMDashboard() {
               <option value="2026">2026</option>
             </select>
             <div className="flex bg-gray-2 dark:bg-meta-4 rounded-lg p-1">
-            <button
-              onClick={() => setActiveTab('ads')}
-              className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-colors ${activeTab === 'ads' ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-white' : 'text-body dark:text-bodydark hover:text-black dark:hover:text-white'}`}
-            >
-              Google Ads
-            </button>
-            <button
-              onClick={() => setActiveTab('guarantee')}
-              className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-colors ${activeTab === 'guarantee' ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-white' : 'text-body dark:text-bodydark hover:text-black dark:hover:text-white'}`}
-            >
-              Google Guarantee
-            </button>
+              <button
+                onClick={() => setActiveTab('ads')}
+                className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-colors ${activeTab === 'ads' ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-white' : 'text-body dark:text-bodydark hover:text-black dark:hover:text-white'}`}
+              >
+                Google Ads
+              </button>
+              <button
+                onClick={() => setActiveTab('guarantee')}
+                className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-colors ${activeTab === 'guarantee' ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-white' : 'text-body dark:text-bodydark hover:text-black dark:hover:text-white'}`}
+              >
+                Google Guarantee
+              </button>
             </div>
           </div>
         </div>
@@ -361,17 +361,9 @@ export function SEMDashboard() {
             Loading yearly performance…
           </div>
         )}
-        {!loadingYearly && yearlyAds.length === 0 && (
-          <div className="px-6 py-3 text-xs text-body dark:text-bodydark">
-            No data for {selectedYear}. Run:{' '}
-            <code className="rounded bg-stroke/50 px-1.5 py-0.5 font-mono text-[11px] dark:bg-strokedark">
-              python3 tools/ads_sync_yearly.py --customer-id YOUR_ID --year {selectedYear}
-            </code>
-          </div>
-        )}
 
         {activeTab === 'ads' && (
-          <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-stroke dark:border-strokedark bg-gray-2 dark:bg-meta-4 text-left">
@@ -403,9 +395,9 @@ export function SEMDashboard() {
                         <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(row.interactions)}</td>
                         <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(row.opt_score, 2)}%</td>
                         <td className="whitespace-nowrap px-5 py-4 text-center">
-                          <button 
+                          <button
                             onClick={() => setEditingNote({ key: getNoteKey(monthName), month: monthName })}
-                            className={`transition-all hover:scale-110 ${localNotes[getNoteKey(monthName)] ? 'text-[#FFD700] opacity-100' : 'text-body dark:text-bodydark opacity-25 hover:opacity-50'}`} 
+                            className={`transition-all hover:scale-110 ${localNotes[getNoteKey(monthName)] ? 'text-[#FFD700] opacity-100' : 'text-body dark:text-bodydark opacity-25 hover:opacity-50'}`}
                             title={localNotes[getNoteKey(monthName)] ? "View/Edit Note" : "Add Note"}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM6 6h12v2H6V6zm0 4h12v2H6v-2zm0 4h7v2H6v-2z"></path></svg>
@@ -418,13 +410,11 @@ export function SEMDashboard() {
                       <tr key={monthName} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                         <td className="whitespace-nowrap px-5 py-4 font-bold text-black dark:text-white uppercase text-xs bg-[#f8fafc] dark:bg-meta-4/80">{monthName}</td>
                         <td className="whitespace-nowrap px-5 py-4 text-body dark:text-bodydark bg-[#f8fafc] dark:bg-meta-4/80 border-r border-stroke/50 dark:border-strokedark/50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)] relative z-10">Google Ads</td>
-                        <td colSpan={8} className="whitespace-nowrap px-5 py-4 text-center text-body dark:text-bodydark italic text-xs opacity-60">
-                          No data yet
-                        </td>
+                        <td colSpan={8} className="whitespace-nowrap px-5 py-4 text-center text-body dark:text-bodydark italic text-xs opacity-60">No data yet</td>
                         <td className="whitespace-nowrap px-5 py-4 text-center">
-                          <button 
+                          <button
                             onClick={() => setEditingNote({ key: getNoteKey(monthName), month: monthName })}
-                            className={`transition-all hover:scale-110 ${localNotes[getNoteKey(monthName)] ? 'text-[#FFD700] opacity-100' : 'text-body dark:text-bodydark opacity-25 hover:opacity-50'}`} 
+                            className={`transition-all hover:scale-110 ${localNotes[getNoteKey(monthName)] ? 'text-[#FFD700] opacity-100' : 'text-body dark:text-bodydark opacity-25 hover:opacity-50'}`}
                             title={localNotes[getNoteKey(monthName)] ? "View/Edit Note" : "Add Note"}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM6 6h12v2H6V6zm0 4h12v2H6v-2zm0 4h7v2H6v-2z"></path></svg>
@@ -434,7 +424,6 @@ export function SEMDashboard() {
                     )
                   }
                 })}
-              {/* Totals Row — always visible */}
               {(() => {
                 const n              = yearlyAds.length
                 const totalSpend     = yearlyAds.reduce((s, r) => s + r.spend, 0)
@@ -465,15 +454,15 @@ export function SEMDashboard() {
               })()}
             </tbody>
             </table>
-          </div>
+        </div>
         )}
 
         {activeTab === 'guarantee' && (
-          <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-stroke dark:border-strokedark bg-gray-2 dark:bg-meta-4 text-left">
-                  {['Month', 'Service', 'Total Spend', 'Total Leads', 'Cost/Lead', 'Ad Impr.', 'Top Impr. Rate', 'Abs. Top Impr.', 'Notes'].map((h, idx) => {
+                  {['Month', 'Service', 'Total Spend', 'Total Leads', 'Cost/Lead', 'Ad Impr.', 'Notes'].map((h, idx) => {
                     const isStickyBg = idx === 0 || idx === 1;
                     const hasShadow = idx === 1;
                     return (
@@ -486,7 +475,7 @@ export function SEMDashboard() {
               </thead>
               <tbody className="divide-y divide-stroke dark:divide-strokedark">
                 {ALL_MONTHS.map((monthName) => {
-                  const row = yearlyGuarantee.find(r => r.month === monthName);
+                  const row = yearlyGuarantee.find(r => r.month === monthName && (r.spend > 0 || r.leads > 0));
                   if (row) {
                     return (
                       <tr key={monthName} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
@@ -494,14 +483,12 @@ export function SEMDashboard() {
                         <td className="whitespace-nowrap px-5 py-4 text-body dark:text-bodydark bg-[#f8fafc] dark:bg-meta-4/80 border-r border-stroke/50 dark:border-strokedark/50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)] relative z-10">{row.service}</td>
                         <td className="whitespace-nowrap px-5 py-4 tabular-nums font-semibold text-black dark:text-white">{fmtCurrency(row.spend)}</td>
                         <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">{row.leads}</td>
-                        <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmtCurrency(row.cost_per_lead)}</td>
+                        <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">{row.cost_per_lead > 0 ? fmtCurrency(row.cost_per_lead) : '—'}</td>
                         <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(row.ad_impressions)}</td>
-                        <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(row.top_imp_rate, 2)}%</td>
-                        <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(row.abs_top_imp_rate, 2)}%</td>
                         <td className="whitespace-nowrap px-5 py-4 text-center">
-                          <button 
+                          <button
                             onClick={() => setEditingNote({ key: getNoteKey(monthName), month: monthName })}
-                            className={`transition-all hover:scale-110 ${localNotes[getNoteKey(monthName)] ? 'text-[#FFD700] opacity-100' : 'text-body dark:text-bodydark opacity-25 hover:opacity-50'}`} 
+                            className={`transition-all hover:scale-110 ${localNotes[getNoteKey(monthName)] ? 'text-[#FFD700] opacity-100' : 'text-body dark:text-bodydark opacity-25 hover:opacity-50'}`}
                             title={localNotes[getNoteKey(monthName)] ? "View/Edit Note" : "Add Note"}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM6 6h12v2H6V6zm0 4h12v2H6v-2zm0 4h7v2H6v-2z"></path></svg>
@@ -514,13 +501,11 @@ export function SEMDashboard() {
                       <tr key={monthName} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                         <td className="whitespace-nowrap px-5 py-4 font-bold text-black dark:text-white uppercase text-xs bg-[#f8fafc] dark:bg-meta-4/80">{monthName}</td>
                         <td className="whitespace-nowrap px-5 py-4 text-body dark:text-bodydark bg-[#f8fafc] dark:bg-meta-4/80 border-r border-stroke/50 dark:border-strokedark/50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)] relative z-10">Google Guarantee</td>
-                        <td colSpan={6} className="whitespace-nowrap px-5 py-4 text-center text-body dark:text-bodydark italic text-xs opacity-60">
-                          No data yet
-                        </td>
+                        <td colSpan={4} className="whitespace-nowrap px-5 py-4 text-center text-body dark:text-bodydark italic text-xs opacity-60">No data yet</td>
                         <td className="whitespace-nowrap px-5 py-4 text-center">
-                          <button 
+                          <button
                             onClick={() => setEditingNote({ key: getNoteKey(monthName), month: monthName })}
-                            className={`transition-all hover:scale-110 ${localNotes[getNoteKey(monthName)] ? 'text-[#FFD700] opacity-100' : 'text-body dark:text-bodydark opacity-25 hover:opacity-50'}`} 
+                            className={`transition-all hover:scale-110 ${localNotes[getNoteKey(monthName)] ? 'text-[#FFD700] opacity-100' : 'text-body dark:text-bodydark opacity-25 hover:opacity-50'}`}
                             title={localNotes[getNoteKey(monthName)] ? "View/Edit Note" : "Add Note"}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM6 6h12v2H6V6zm0 4h12v2H6v-2zm0 4h7v2H6v-2z"></path></svg>
@@ -530,17 +515,13 @@ export function SEMDashboard() {
                     )
                   }
                 })}
-              {/* Totals Row — always visible */}
               {(() => {
-                const n             = yearlyGuarantee.length
-                const totalSpend    = yearlyGuarantee.reduce((s, r) => s + r.spend, 0)
-                const totalLeads    = yearlyGuarantee.reduce((s, r) => s + r.leads, 0)
-                const totalImpr     = yearlyGuarantee.reduce((s, r) => s + r.ad_impressions, 0)
-                const avgCostPerLead = totalLeads > 0 ? totalSpend / totalLeads : 0
-                const rowsWithTop   = yearlyGuarantee.filter(r => r.top_imp_rate > 0)
-                const rowsWithAbs   = yearlyGuarantee.filter(r => r.abs_top_imp_rate > 0)
-                const avgTopImp     = rowsWithTop.length > 0 ? rowsWithTop.reduce((s, r) => s + r.top_imp_rate, 0) / rowsWithTop.length : 0
-                const avgAbsTop     = rowsWithAbs.length > 0 ? rowsWithAbs.reduce((s, r) => s + r.abs_top_imp_rate, 0) / rowsWithAbs.length : 0
+                const rows          = yearlyGuarantee.filter(r => r.spend > 0 || r.leads > 0)
+                const n             = rows.length
+                const totalSpend    = rows.reduce((s, r) => s + r.spend, 0)
+                const totalLeads    = rows.reduce((s, r) => s + r.leads, 0)
+                const totalImpr     = rows.reduce((s, r) => s + r.ad_impressions, 0)
+                const avgCpl        = totalLeads > 0 ? totalSpend / totalLeads : 0
                 const dash = '—'
                 return (
                   <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
@@ -548,22 +529,20 @@ export function SEMDashboard() {
                     <td className="whitespace-nowrap px-5 py-4 text-[#16a34a]/60 dark:text-[#16a34a]/40 border-r border-stroke/50 dark:border-strokedark/50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)] relative z-10 text-xs">Google Guarantee</td>
                     <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{n > 0 ? fmtCurrency(totalSpend) : dash}</td>
                     <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{n > 0 ? fmt(totalLeads) : dash}</td>
-                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totalLeads > 0 ? fmtCurrency(avgCostPerLead) : dash}</td>
+                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totalLeads > 0 ? fmtCurrency(avgCpl) : dash}</td>
                     <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{n > 0 ? fmt(totalImpr) : dash}</td>
-                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{avgTopImp > 0 ? `${fmt(avgTopImp, 2)}%` : dash}</td>
-                    <td className="whitespace-nowrap px-5 py-4 tabular-nums font-bold text-[#16a34a]">{avgAbsTop > 0 ? `${fmt(avgAbsTop, 2)}%` : dash}</td>
                     <td className="whitespace-nowrap px-5 py-4" />
                   </tr>
                 )
               })()}
             </tbody>
             </table>
-          </div>
+        </div>
         )}
       </div>
 
       </div>
-      
+
       {/* Note Modal */}
       {editingNote && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">

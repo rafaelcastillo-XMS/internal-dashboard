@@ -1,9 +1,10 @@
 """
-tools/ads_sync_yearly.py
-Fetches monthly Google Ads metrics for a given year and upserts into Supabase sem_yearly_ads.
+tools/lsa_sync_yearly.py
+Fetches monthly Google Guarantee (Local Services Ads) metrics for a given year
+and upserts into Supabase sem_yearly_guarantee.
 
 Usage:
-  python3 tools/ads_sync_yearly.py --customer-id 1234567890 --year 2025
+  python3 tools/lsa_sync_yearly.py --customer-id 1234567890 --year 2025
 
 Args:
   --customer-id   Account ID (digits only, no dashes)
@@ -30,6 +31,13 @@ from pathlib import Path
 _ROOT            = Path(__file__).parent.parent
 CREDENTIALS_FILE = str(_ROOT / 'credentials.json')
 TOKEN_FILE       = str(_ROOT / 'token.json')
+MICROS           = 1_000_000
+
+MONTH_NAMES = {
+    1: 'JANUARY',   2: 'FEBRUARY',  3: 'MARCH',    4: 'APRIL',
+    5: 'MAY',       6: 'JUNE',      7: 'JULY',      8: 'AUGUST',
+    9: 'SEPTEMBER', 10: 'OCTOBER', 11: 'NOVEMBER', 12: 'DECEMBER',
+}
 
 # Load .env from project root
 _ENV = _ROOT / '.env'
@@ -39,14 +47,6 @@ if _ENV.exists():
         if _line and not _line.startswith('#') and '=' in _line:
             _k, _, _v = _line.partition('=')
             os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
-
-MICROS = 1_000_000
-
-MONTH_NAMES = {
-    1: 'JANUARY', 2: 'FEBRUARY',  3: 'MARCH',    4: 'APRIL',
-    5: 'MAY',     6: 'JUNE',      7: 'JULY',      8: 'AUGUST',
-    9: 'SEPTEMBER', 10: 'OCTOBER', 11: 'NOVEMBER', 12: 'DECEMBER',
-}
 
 
 def safe_float(value, divisor=1):
@@ -75,65 +75,61 @@ def get_ads_client():
     with open(TOKEN_FILE) as f:
         token = json.load(f)
 
-    config = {
+    return GoogleAdsClient.load_from_dict({
         'developer_token':   developer_token,
         'login_customer_id': mcc_id,
         'client_id':         creds['client_id'],
         'client_secret':     creds['client_secret'],
         'refresh_token':     token['refresh_token'],
         'use_proto_plus':    True,
-    }
-    return GoogleAdsClient.load_from_dict(config)
+    })
 
 
-def fetch_monthly_metrics(ga_service, customer_id: str, year: int) -> dict:
-    """Returns dict keyed by month number (1-12) with aggregated metrics."""
+def fetch_monthly_campaign_metrics(ga_service, customer_id: str, year: int) -> dict:
+    """Monthly spend + impressions from LOCAL_SERVICES campaigns."""
     query = f"""
         SELECT
           segments.month,
           metrics.cost_micros,
-          metrics.clicks,
-          metrics.conversions,
-          metrics.impressions,
-          metrics.ctr,
-          metrics.average_cpc,
-          metrics.interactions
+          metrics.impressions
         FROM campaign
         WHERE segments.year = {year}
+          AND campaign.advertising_channel_type = 'LOCAL_SERVICES'
           AND campaign.status != 'REMOVED'
         ORDER BY segments.month ASC
     """
-    monthly = defaultdict(lambda: {
-        'cost_micros': 0, 'clicks': 0, 'conversions': 0.0,
-        'impressions': 0, 'interactions': 0,
-    })
+    monthly = defaultdict(lambda: {'cost_micros': 0, 'impressions': 0})
     try:
-        response = ga_service.search(customer_id=customer_id, query=query)
-        for row in response:
-            # segments.month returns "YYYY-MM-DD" (first day of month)
+        for row in ga_service.search(customer_id=customer_id, query=query):
             month_num = int(str(row.segments.month).split('-')[1])
-            m = row.metrics
-            monthly[month_num]['cost_micros']  += m.cost_micros
-            monthly[month_num]['clicks']       += m.clicks
-            monthly[month_num]['conversions']  += float(m.conversions)
-            monthly[month_num]['impressions']  += m.impressions
-            monthly[month_num]['interactions'] += m.interactions
+            monthly[month_num]['cost_micros']  += row.metrics.cost_micros
+            monthly[month_num]['impressions']  += row.metrics.impressions
     except Exception as e:
-        print(f'[ads_sync_yearly] monthly metrics error: {e}', file=sys.stderr)
+        print(f'[lsa_sync] campaign metrics error: {e}', file=sys.stderr)
     return dict(monthly)
 
 
-def fetch_opt_score(ga_service, customer_id: str) -> float:
-    """Returns current account-level optimization score (0–100)."""
-    query = "SELECT metrics.optimization_score FROM customer"
+def fetch_monthly_leads(ga_service, customer_id: str, year: int) -> dict:
+    """Count of charged leads per month for the given year."""
+    query = f"""
+        SELECT
+          local_services_lead.creation_date_time,
+          local_services_lead.lead_charged
+        FROM local_services_lead
+        WHERE local_services_lead.creation_date_time >= '{year}-01-01 00:00:00'
+          AND local_services_lead.creation_date_time < '{year + 1}-01-01 00:00:00'
+    """
+    monthly_leads = defaultdict(int)
     try:
-        response = ga_service.search(customer_id=customer_id, query=query)
-        for row in response:
-            score = float(row.metrics.optimization_score)
-            return round(score * 100, 2)  # API returns 0.0–1.0
+        for row in ga_service.search(customer_id=customer_id, query=query):
+            lead = row.local_services_lead
+            if lead.lead_charged:
+                dt_str = str(lead.creation_date_time)
+                month_num = int(dt_str[5:7])
+                monthly_leads[month_num] += 1
     except Exception as e:
-        print(f'[ads_sync_yearly] opt_score error: {e}', file=sys.stderr)
-    return 0.0
+        print(f'[lsa_sync] leads error: {e}', file=sys.stderr)
+    return dict(monthly_leads)
 
 
 def upsert_to_supabase(rows: list) -> None:
@@ -147,7 +143,7 @@ def upsert_to_supabase(rows: list) -> None:
     if not service_key:
         raise RuntimeError('SUPABASE_SERVICE_ROLE_KEY not set')
 
-    url     = f'{supabase_url}/rest/v1/sem_yearly_ads?on_conflict=account_id,year,month'
+    url     = f'{supabase_url}/rest/v1/sem_yearly_guarantee?on_conflict=account_id,year,month'
     payload = json.dumps(rows).encode()
     req     = urllib.request.Request(
         url,
@@ -166,7 +162,7 @@ def upsert_to_supabase(rows: list) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Sync yearly Google Ads metrics to Supabase')
+    parser = argparse.ArgumentParser(description='Sync yearly Google Guarantee metrics to Supabase')
     parser.add_argument('--customer-id', required=True, help='Google Ads account ID (digits only)')
     parser.add_argument('--year', type=int, default=datetime.now().year, help='Year to sync (default: current year)')
     args = parser.parse_args()
@@ -177,42 +173,37 @@ def main():
         sys.exit(1)
 
     year = args.year
-    print(f'Syncing {year} for account {customer_id}...', file=sys.stderr)
+    print(f'Syncing {year} Google Guarantee for account {customer_id}...', file=sys.stderr)
 
     client     = get_ads_client()
     ga_service = client.get_service('GoogleAdsService')
 
-    monthly  = fetch_monthly_metrics(ga_service, customer_id, year)
-    opt_score = fetch_opt_score(ga_service, customer_id)
+    campaign_metrics = fetch_monthly_campaign_metrics(ga_service, customer_id, year)
+    lead_counts      = fetch_monthly_leads(ga_service, customer_id, year)
 
     rows = []
     for month_num, name in MONTH_NAMES.items():
-        m = monthly.get(month_num, {})
-        cost      = safe_float(m.get('cost_micros', 0), MICROS)
-        clicks    = int(m.get('clicks', 0))
-        impr      = int(m.get('impressions', 0))
-        interact  = int(m.get('interactions', 0))
-        conv      = round(float(m.get('conversions', 0.0)), 2)
-        ctr       = round(clicks / impr * 100, 4) if impr else 0.0
-        avg_cpc   = round(cost / clicks, 4)        if clicks else 0.0
+        cm           = campaign_metrics.get(month_num, {})
+        spend        = safe_float(cm.get('cost_micros', 0), MICROS)
+        impressions  = int(cm.get('impressions', 0))
+        leads        = lead_counts.get(month_num, 0)
+        cost_per_lead = round(spend / leads, 2) if leads > 0 else 0.0
         rows.append({
-            'account_id':   customer_id,
-            'year':         year,
-            'month':        name,
-            'month_index':  month_num,
-            'service':      'Google Ads',
-            'spend':        cost,
-            'clicks':       clicks,
-            'conversions':  conv,
-            'impressions':  impr,
-            'ctr':          ctr,
-            'avg_cpc':      avg_cpc,
-            'interactions': interact,
-            'opt_score':    opt_score,  # same score for all months (current snapshot)
+            'account_id':      customer_id,
+            'year':            year,
+            'month':           name,
+            'month_index':     month_num,
+            'service':         'Google Guarantee',
+            'spend':           spend,
+            'leads':           leads,
+            'cost_per_lead':   cost_per_lead,
+            'ad_impressions':  impressions,
+            'top_imp_rate':    0.0,
+            'abs_top_imp_rate': 0.0,
         })
 
     upsert_to_supabase(rows)
-    synced = sum(1 for r in rows if r['impressions'] > 0 or r['spend'] > 0)
+    synced = sum(1 for r in rows if r['spend'] > 0 or r['leads'] > 0)
     print(json.dumps({'synced': len(rows), 'months_with_data': synced, 'year': year, 'account_id': customer_id}))
 
 
