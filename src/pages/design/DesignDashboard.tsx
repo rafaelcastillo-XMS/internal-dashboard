@@ -16,6 +16,7 @@ interface PsiMetrics {
   fid: number | null
   fcp?: number | null
   ttfb?: number | null
+  [key: string]: number | null | undefined
 }
 
 interface PsiScores {
