@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   BookOpen,
   Sparkles,
-  Plus,
   Search,
   Copy,
   Check,
@@ -96,12 +95,125 @@ const PROMPT_CAT_ACCENT: Record<string, string> = {
   "Content":     "amber",
 }
 
+const FEATURED_PROMPTS = [
+  {
+    id: "featured-error-log",
+    title: "ERROR LOG — Skill Correction Capture",
+    category: "General",
+    tags: ["error-log", "skill", "correction"],
+    content: `# ERROR LOG — Skill Correction Capture
+
+## Role
+You are a prompt-engineering analyst. Your sole task is to audit the full
+conversation history of this session and extract every correction, constraint,
+or behavioral adjustment the user applied to the AI skill being tested or used.
+
+## Instructions
+
+1. Read the ENTIRE conversation from the first message to this one.
+
+2. Identify every instance where the user:
+   - Told the skill NOT to do something (prohibition)
+   - Told the skill to ALWAYS do something (obligation)
+   - Adjusted tone, style, or format (style)
+   - Changed a numeric value, limit, or threshold (parameter)
+   - Flagged a recurring error or undesired pattern (other)
+
+3. Deduplicate: if the same correction appears multiple times, log it once
+   and note it was recurring in the "trigger" field.
+
+4. For each correction, write a clear, imperative rule in the
+   "suggested_rule" field — as if writing a bullet point for the skill's
+   system prompt.
+
+5. Consolidate all rules into a single ready-to-paste block in the
+   "suggested_prompt_addition" field.
+
+## Output format
+
+Return ONLY the following JSON. No preamble, no explanation, no markdown
+fences. Raw JSON only.
+
+{
+  "skill_name": "",
+  "session_date": "",
+  "total_corrections": ,
+  "corrections": [
+    {
+      "id": 1,
+      "type": "",
+      "description": "",
+      "trigger": "",
+      "frequency": "",
+      "priority": "",
+      "suggested_rule": ""
+    }
+  ],
+  "suggested_prompt_addition": ""
+}
+
+## Priority guidelines
+
+- HIGH   → The correction was repeated more than once, or the user expressed
+           strong dissatisfaction (e.g. 'never do this again', 'always').
+- MEDIUM → The correction was made once and clearly intentional.
+- LOW    → Minor preference, phrasing tweak, or single casual mention.
+
+## Constraints
+
+- Output must be valid, parseable JSON.
+- Do not invent corrections that were not explicitly stated by the user.
+- Do not include corrections made by the AI to itself.
+- Do not modify or interpret the meaning of the user's corrections — capture
+  them faithfully.
+- If no corrections are found, return the JSON with total_corrections: 0
+  and an empty corrections array.`,
+  },
+]
+
 // ─── LocalStorage ─────────────────────────────────────────────────────────────
 
 function load<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback } catch { return fallback }
 }
 function save<T>(key: string, v: T) { try { localStorage.setItem(key, JSON.stringify(v)) } catch {} }
+
+// ─── FeaturedPromptCard ───────────────────────────────────────────────────────
+
+function FeaturedPromptCard({ prompt }: { prompt: typeof FEATURED_PROMPTS[number] }) {
+  const accent = PROMPT_CAT_ACCENT[prompt.category] ?? "slate"
+  const styles = CATEGORY_STYLES[accent]
+
+  return (
+    <div className="rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800 p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            Featured
+          </span>
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${styles.badge}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
+            {prompt.category}
+          </span>
+          {prompt.tags.map(tag => (
+            <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-700/60 px-2 py-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+              <Tag className="h-2.5 w-2.5" />{tag}
+            </span>
+          ))}
+        </div>
+        <CopyButton text={prompt.content} />
+      </div>
+      <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">{prompt.title}</h3>
+      <textarea
+        readOnly
+        value={prompt.content}
+        rows={8}
+        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2.5 text-xs font-mono text-slate-700 dark:text-slate-300 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] cursor-text select-all"
+      />
+    </div>
+  )
+}
 
 // ─── CopyButton ───────────────────────────────────────────────────────────────
 
@@ -527,34 +639,26 @@ export function Guidelines() {
                     )
                   })}
                 </div>
+              </div>
 
-                <button
-                  onClick={() => { setEditingPrompt(null); setShowPromptModal(true) }}
-                  className="ml-auto inline-flex items-center gap-2 rounded-lg bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-hover)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors cursor-pointer shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                  New Prompt
-                </button>
+              {/* Featured prompts */}
+              <div className="mb-6">
+                <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">Featured</p>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {FEATURED_PROMPTS.map(fp => <FeaturedPromptCard key={fp.id} prompt={fp} />)}
+                </div>
               </div>
 
               {/* Prompt grid */}
               {filteredPrompts.length === 0 ? (
-                <EmptyState
-                  icon={Sparkles}
-                  title={prompts.length === 0 ? "No prompts yet" : "No results found"}
-                  description={prompts.length === 0 ? "Add your first AI prompt to build your team's library." : "Try adjusting your search or filter."}
-                  action={
-                    prompts.length === 0 ? (
-                      <button onClick={() => { setEditingPrompt(null); setShowPromptModal(true) }} className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-hover)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors cursor-pointer">
-                        <Plus className="h-4 w-4" />Add first prompt
-                      </button>
-                    ) : (
-                      <button onClick={() => { setPromptSearch(""); setPromptCatFilter("All") }} className="text-xs font-medium text-[var(--brand-accent)] hover:underline cursor-pointer">
-                        Clear filters
-                      </button>
-                    )
-                  }
-                />
+                prompts.length > 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-12 text-center">
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No results found</p>
+                    <button onClick={() => { setPromptSearch(""); setPromptCatFilter("All") }} className="text-xs font-medium text-[var(--brand-accent)] hover:underline cursor-pointer">
+                      Clear filters
+                    </button>
+                  </div>
+                ) : null
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredPrompts.map((p, i) => (
@@ -596,13 +700,6 @@ export function Guidelines() {
                   )
                 })}
 
-                <button
-                  onClick={() => { setEditingGuideline(null); setShowGuidelineModal(true) }}
-                  className="ml-auto inline-flex items-center gap-2 rounded-lg bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-hover)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors cursor-pointer shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Guideline
-                </button>
               </div>
 
               {/* Category header */}
@@ -616,16 +713,21 @@ export function Guidelines() {
 
               {/* Guidelines list */}
               {currentGuidelines.length === 0 ? (
-                <EmptyState
-                  icon={BookOpen}
-                  title={`No ${activeCatMeta.label} guidelines yet`}
-                  description={`Document your ${activeCatMeta.label.toLowerCase()} rules and best practices for the team.`}
-                  action={
-                    <button onClick={() => { setEditingGuideline(null); setShowGuidelineModal(true) }} className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-hover)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors cursor-pointer">
-                      <Plus className="h-4 w-4" />Add first guideline
-                    </button>
-                  }
-                />
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col items-center justify-center py-20 gap-4 text-center"
+                >
+                  <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <BookOpen className="h-8 w-8 text-slate-400 dark:text-slate-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-white">Guidelines coming soon</p>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-xs">
+                      These guidelines are being set up and will be available shortly. Stay tuned.
+                    </p>
+                  </div>
+                </motion.div>
               ) : (
                 <div className="space-y-3">
                   {currentGuidelines.map((g, i) => (
