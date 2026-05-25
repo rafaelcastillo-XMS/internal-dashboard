@@ -212,6 +212,24 @@ If you have dashboard context, use it to give specific answers. Never make up da
   }
 })
 
+// ── SEO: PageSpeed Insights ──────────────────────────────────────────────────
+app.get('/api/seo/pagespeed', async (req, res) => {
+  const { url } = req.query
+  if (!url) return res.status(400).json({ error: 'url is required' })
+  try {
+    const key = process.env.PSI_API_KEY
+    const psiRes = await fetch(
+      `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile&key=${key}`
+    )
+    const data = await psiRes.json()
+    if (!psiRes.ok) return res.status(502).json({ error: data.error?.message ?? 'PSI error' })
+    const score = Math.round((data.lighthouseResult?.categories?.performance?.score ?? 0) * 100)
+    res.json({ score, url })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Serve Vite build + SPA fallback ─────────────────────────────────────────
 app.use(express.static(path.join(__dirname, "dist")))
 

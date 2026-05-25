@@ -44,6 +44,7 @@ interface DashboardControlsProps {
   selectedPreset: number; handlePresetChange: (idx: number) => void
   loading?: boolean; onRefresh: () => void
   pageTitle?: string
+  onExportPdf?: () => Promise<void>
 }
 
 export function DashboardControls({
@@ -54,12 +55,16 @@ export function DashboardControls({
   selectedPreset, handlePresetChange,
   loading, onRefresh,
   pageTitle = 'Dashboard',
+  onExportPdf,
 }: DashboardControlsProps) {
   const [exporting, setExporting] = useState(false)
 
   async function handleExport() {
     setExporting(true)
-    try { await exportPageToPdf(pageTitle) } finally { setExporting(false) }
+    try {
+      if (onExportPdf) { await onExportPdf() }
+      else             { await exportPageToPdf(pageTitle) }
+    } finally { setExporting(false) }
   }
 
   return (

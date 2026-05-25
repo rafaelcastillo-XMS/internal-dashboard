@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import DOMPurify from 'dompurify'
+import { GBPReport } from '../../features/seo/components/GBPReport'
+import type { GBPReportHandle } from '../../features/seo/components/GBPReport'
+import { InitialStatus } from '../../features/seo/components/InitialStatus'
+import { Comparative } from '../../features/seo/components/Comparative'
+import { useSEODashboardState } from '../../features/seo/hooks/useSEODashboardState'
+import { DashboardControls } from '../../features/seo/components/DashboardControls'
 
 const STATUS = { idle: 'idle', loading: 'loading', ready: 'ready', error: 'error' } as const
 type StatusKey = typeof STATUS[keyof typeof STATUS]
@@ -53,6 +59,7 @@ const POLL_INTERVAL = 5000
 const POLL_TIMEOUT  = 5 * 60 * 1000
 
 export function SEOOnPageAudit() {
+  const seoState = useSEODashboardState()
   const [activeTab, setActiveTab] = useState<TabKey>('run-audit')
   const [landingPageUrl, setLandingPageUrl]               = useState('')
   const [screamingFrogSheetUrl, setScreamingFrogSheetUrl] = useState('')
@@ -65,6 +72,7 @@ export function SEOOnPageAudit() {
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(0)
+  const gbpRef       = useRef<GBPReportHandle>(null)
 
   function stopPolling() {
     if (pollRef.current)  clearInterval(pollRef.current)
@@ -180,11 +188,7 @@ export function SEOOnPageAudit() {
               Baseline SEO snapshot recorded at client onboarding
             </p>
           </div>
-          <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark px-8 py-16 text-center">
-            <span className="inline-block rounded-full bg-[#1A72D9]/10 border border-[#1A72D9]/20 px-4 py-1.5 text-xs font-medium text-[#1A72D9]">
-              Coming soon
-            </span>
-          </div>
+          <InitialStatus />
         </>
       )}
 
@@ -205,36 +209,46 @@ export function SEOOnPageAudit() {
               Initial Status vs. current audit — track progress since onboarding
             </p>
           </div>
-          <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark px-8 py-16 text-center">
-            <span className="inline-block rounded-full bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 text-xs font-medium text-emerald-500">
-              Coming soon
-            </span>
-          </div>
+          <Comparative selectedGscSite={seoState.selectedGscSite} />
         </>
       )}
 
-      {/* Tab: Download Reports */}
+      {/* Tab: Download Reports — Google Business Profile Report */}
       {activeTab === 'download-reports' && (
         <>
-          <div className="mb-8">
+          <div className="mb-6">
             <div className="flex items-center gap-3 mb-1">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#F47C20]/10 border border-[#F47C20]/20">
-                <svg className="h-4 w-4 text-[#F47C20]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round"
-                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#4285F4]/10 border border-[#4285F4]/20">
+                <svg className="h-4 w-4 text-[#4285F4]" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-black dark:text-white">Download Reports</h1>
+              <h1 className="text-2xl font-bold text-black dark:text-white">GBP Report</h1>
             </div>
             <p className="text-sm text-body dark:text-bodydark ml-11">
-              Export audit results as PDF or CSV for client delivery
+              Google Business Profile · Analytics · Search Console — select a client to generate their report
             </p>
           </div>
-          <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark px-8 py-16 text-center">
-            <span className="inline-block rounded-full bg-[#F47C20]/10 border border-[#F47C20]/20 px-4 py-1.5 text-xs font-medium text-[#F47C20]">
-              Coming soon
-            </span>
+
+          {/* Client selector */}
+          <div className="mb-6">
+            <DashboardControls
+              {...seoState}
+              showGa4={true}
+              showDateRange={true}
+              pageTitle="GBP-Report"
+              onRefresh={() => {}}
+              onExportPdf={() => gbpRef.current?.triggerDownload() ?? Promise.resolve()}
+            />
           </div>
+
+          <GBPReport
+            ref={gbpRef}
+            selectedGscSite={seoState.selectedGscSite}
+            selectedGa4Id={seoState.selectedGa4Id}
+            dateRange={seoState.dateRange}
+            clientLabel={seoState.gscOptions.find(o => o.value === seoState.selectedGscSite)?.label}
+          />
         </>
       )}
 
