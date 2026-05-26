@@ -28,6 +28,12 @@ function fmtCurrency(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+const IRRELEVANT_TERMS = ['free', 'jobs', 'salary', 'training', 'diy', 'definition', 'near me']
+function hasIrrelevantTerm(query: string): boolean {
+  const q = query.toLowerCase()
+  return IRRELEVANT_TERMS.some(term => q.includes(term))
+}
+
 const COLUMNS: { key: string; label: string; sortable: boolean }[] = [
   { key: 'search_term',   label: 'Search Term',  sortable: false },
   { key: 'campaign_name', label: 'Campaign',     sortable: false },
@@ -105,31 +111,49 @@ export function SEMSearchTerms() {
     return searchTerms
       .filter(st => {
         if (topSet.has(st.search_term) || seen.has(st.search_term)) return false
-        const bad = (st.impressions > 30 && st.clicks === 0)
-          || (st.cost > 5 && st.conversions === 0 && st.clicks > 2)
+        const bad = (st.clicks >= 5 && st.conversions === 0)
+          || (st.cost >= 2 && st.clicks >= 2 && st.conversions === 0)
+          || hasIrrelevantTerm(st.search_term)
         if (bad) seen.add(st.search_term)
         return bad
       })
       .slice(0, 25)
       .map(st => ({
         label: st.search_term,
-        metric: st.impressions > 30 && st.clicks === 0
-          ? `${fmt(st.impressions)} impr`
-          : `$${st.cost.toFixed(0)}, 0 conv`,
+        metric: hasIrrelevantTerm(st.search_term)
+          ? 'Irrelevant term'
+          : st.clicks >= 5 && st.conversions === 0
+            ? `${fmt(st.clicks)} clk, 0 conv`
+            : `$${st.cost.toFixed(0)}, 0 conv`,
       }))
   }, [searchTerms, topTerms])
 
-  const recommended = useMemo(() => {
+  const reviewTerms = useMemo(() => {
     const topSet = new Set(topTerms.map(t => t.label))
     const negSet = new Set(negativeTerms.map(t => t.label))
+    const validCpcs = searchTerms.filter(st => st.avg_cpc > 0).map(st => st.avg_cpc)
+    const avgCpc = validCpcs.length > 0
+      ? validCpcs.reduce((a, b) => a + b, 0) / validCpcs.length
+      : 0
     return searchTerms
-      .filter(st =>
-        !topSet.has(st.search_term) && !negSet.has(st.search_term) &&
-        st.clicks > 2 && st.ctr > 4
-      )
-      .sort((a, b) => b.ctr - a.ctr)
+      .filter(st => {
+        if (topSet.has(st.search_term) || negSet.has(st.search_term)) return false
+        const lowCtr = st.impressions >= 50 && st.ctr < 1
+        const highCpc = avgCpc > 0 && st.avg_cpc > 1.5 * avgCpc && st.conversions === 0
+        const lowEngagement = st.impressions >= 100 && st.clicks <= 2 && st.cost < 1
+        return lowCtr || highCpc || lowEngagement
+      })
       .slice(0, 25)
-      .map(st => ({ label: st.search_term, metric: `${fmt(st.ctr, 1)}% CTR` }))
+      .map(st => {
+        const lowCtr = st.impressions >= 50 && st.ctr < 1
+        const highCpc = avgCpc > 0 && st.avg_cpc > 1.5 * avgCpc && st.conversions === 0
+        const metric = lowCtr
+          ? `${fmt(st.ctr, 2)}% CTR`
+          : highCpc
+            ? `${fmtCurrency(st.avg_cpc)} CPC`
+            : `${fmt(st.impressions)} impr, ${fmt(st.clicks)} clk`
+        return { label: st.search_term, metric }
+      })
   }, [searchTerms, topTerms, negativeTerms])
 
   const sorted = [...searchTerms].sort((a, b) => {
@@ -181,18 +205,18 @@ export function SEMSearchTerms() {
         />
         <InsightCard
           title="Negative Candidates"
-          subtitle="Burning budget with no clicks or conversions"
+          subtitle="5+ clicks or $2+ spend with 0 conversions, or irrelevant terms"
           variant="red"
           items={negativeTerms}
           emptyText="No negative candidates detected."
           loading={state.loading}
         />
         <InsightCard
-          title="Explore These Terms"
-          subtitle="High engagement — consider adding as keywords"
+          title="Needs Review"
+          subtitle="Low CTR, high CPC vs avg, or high impressions with few clicks"
           variant="blue"
-          items={recommended}
-          emptyText="No additional opportunities found."
+          items={reviewTerms}
+          emptyText="No terms flagged for review."
           loading={state.loading}
         />
       </div>
