@@ -40,6 +40,7 @@ export function ClientIntegrations() {
     const [profileMessage, setProfileMessage] = useState<{ ok: boolean; text: string } | null>(null)
     const [logoFile, setLogoFile] = useState<File | null>(null)
     const [logoPreviewUrl, setLogoPreviewUrl] = useState("")
+    const [adsBudget, setAdsBudget] = useState("")
 
     const selectedNotebook = useMemo(
         () => notebooks.find(notebook => notebook.id === config.notebooklm.notebookId),
@@ -371,7 +372,6 @@ export function ClientIntegrations() {
                                             {[
                                                 { label: "Search Console", color: "bg-blue-500" },
                                                 { label: "Google Analytics 4", color: "bg-orange-500" },
-                                                { label: "Google Ads", color: "bg-green-500" },
                                             ].map(api => (
                                                 <div key={api.label} className="flex items-center gap-2.5">
                                                     <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${googleAuthorized ? api.color : "bg-slate-300 dark:bg-slate-600"}`} />
@@ -398,6 +398,58 @@ export function ClientIntegrations() {
                                                     ? `Reconnect as ${googleStatus?.requiredEmail || "eva@xperienceusa.com"}`
                                                     : "Connect Google Account"}
                                         </button>
+                                    </div>
+                                </div>
+
+                                {/* ── Google Ads Budget card ── */}
+                                <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
+                                    <div className="flex items-start gap-4">
+                                        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                            <svg className="h-9 w-9" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M20 3.5C10.887 3.5 3.5 10.887 3.5 20S10.887 36.5 20 36.5 36.5 29.113 36.5 20 29.113 3.5 20 3.5z" fill="#fff"/>
+                                                <path d="M20 3.5C10.887 3.5 3.5 10.887 3.5 20S10.887 36.5 20 36.5 36.5 29.113 36.5 20 29.113 3.5 20 3.5z" fill="url(#ads-ring)" fillOpacity=".08"/>
+                                                <path d="M28.96 20.22c0-.68-.06-1.33-.17-1.96H20v3.71h5.15c-.22 1.19-.9 2.2-1.92 2.88v2.4h3.11c1.82-1.68 2.87-4.14 2.87-7.03z" fill="#4285F4"/>
+                                                <path d="M20 29.5c2.59 0 4.76-.86 6.34-2.32l-3.11-2.4c-.86.58-1.95.92-3.23.92-2.49 0-4.6-1.68-5.36-3.94H11.4v2.47C12.96 27.69 16.21 29.5 20 29.5z" fill="#34A853"/>
+                                                <path d="M14.64 21.76A5.55 5.55 0 0 1 14.34 20c0-.61.1-1.21.3-1.76v-2.47h-3.24A9.51 9.51 0 0 0 10.5 20c0 1.52.36 2.96 1 4.23l3.14-2.47z" fill="#FBBC05"/>
+                                                <path d="M20 14.3c1.41 0 2.67.49 3.66 1.43l2.75-2.75C24.75 11.34 22.58 10.5 20 10.5c-3.79 0-7.04 1.81-8.6 4.5l3.24 2.47C15.4 15.98 17.51 14.3 20 14.3z" fill="#EA4335"/>
+                                                <defs>
+                                                    <radialGradient id="ads-ring" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(20 20) scale(16.5)">
+                                                        <stop stopColor="#000"/>
+                                                        <stop offset="1" stopColor="#000" stopOpacity="0"/>
+                                                    </radialGradient>
+                                                </defs>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Google Ads</h3>
+                                            <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Monthly Budget</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-5 space-y-2">
+                                        <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Monthly Budget</label>
+                                        <div className="relative">
+                                            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">$</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                placeholder="0.00"
+                                                value={adsBudget}
+                                                onChange={e => setAdsBudget(e.target.value)}
+                                                className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-8 pr-4 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4">
+                                        <button
+                                            disabled
+                                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#4285F4] px-4 py-3 text-sm font-semibold text-white opacity-60 cursor-not-allowed"
+                                        >
+                                            Apply Budget
+                                        </button>
+                                        <p className="mt-2 text-center text-xs text-slate-400">Integration coming soon</p>
                                     </div>
                                 </div>
 
