@@ -1126,20 +1126,27 @@ function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
 type ReportTab = 'weekly' | 'guarantee' | 'monthly'
 
 export function SEMReportes() {
-  const [activeTab, setActiveTab]         = useState<ReportTab>('weekly')
-  const [accounts, setAccounts]           = useState<AdsAccount[]>([])
-  const [costByAccount, setCostByAccount] = useState<Record<string, number>>({})
-  const [loading, setLoading]             = useState(true)
+  const [activeTab, setActiveTab]           = useState<ReportTab>('weekly')
+  const [accounts, setAccounts]             = useState<AdsAccount[]>([])
+  const [adsAccountIds, setAdsAccountIds]   = useState<Set<string>>(new Set())
+  const [ggAccountIds, setGgAccountIds]     = useState<Set<string>>(new Set())
+  const [costByAccount, setCostByAccount]   = useState<Record<string, number>>({})
+  const [loading, setLoading]               = useState(true)
 
   useEffect(() => {
     ;(async () => {
       setLoading(true)
       try {
-        const [acctRes, campRes] = await Promise.all([
+        const year = new Date().getFullYear()
+        const [acctRes, campRes, adsRes, ggRes] = await Promise.all([
           supabase.from('sem_accounts').select('id, name, status').order('name'),
           supabase.from('sem_campaigns').select('account_id, cost').eq('date_range', 'last_7'),
+          supabase.from('sem_yearly_ads').select('account_id').eq('year', year),
+          supabase.from('sem_yearly_guarantee').select('account_id').eq('year', year),
         ])
         setAccounts(acctRes.data ?? [])
+        setAdsAccountIds(new Set((adsRes.data ?? []).map(r => r.account_id)))
+        setGgAccountIds(new Set((ggRes.data ?? []).map(r => r.account_id)))
         const map: Record<string, number> = {}
         for (const r of campRes.data ?? []) map[r.account_id] = (map[r.account_id] ?? 0) + r.cost
         setCostByAccount(map)
@@ -1190,9 +1197,9 @@ export function SEMReportes() {
         </div>
       ) : (
         <>
-          {activeTab === 'weekly'    && <WeeklyBudgetReport accounts={accounts} costByAccount={costByAccount} />}
-          {activeTab === 'guarantee' && <GuaranteeWeeklyReport accounts={accounts} />}
-          {activeTab === 'monthly'   && <MonthlyBudgetOverview accounts={accounts} />}
+          {activeTab === 'weekly'    && <WeeklyBudgetReport accounts={accounts.filter(a => adsAccountIds.has(a.id))} costByAccount={costByAccount} />}
+          {activeTab === 'guarantee' && <GuaranteeWeeklyReport accounts={accounts.filter(a => ggAccountIds.has(a.id))} />}
+          {activeTab === 'monthly'   && <MonthlyBudgetOverview accounts={accounts.filter(a => adsAccountIds.has(a.id))} />}
         </>
       )}
     </div>
