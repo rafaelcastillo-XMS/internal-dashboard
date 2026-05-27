@@ -10,6 +10,7 @@ import { createClientProfileForm, saveClientProfile, type ClientProfileForm, upl
 import { useClientRecord } from "@/features/clients/useClientRecord"
 import { useTrackPageLoading } from "@/context/PageLoadingContext"
 import notebooklmIcon from "@/assets/notebooklm-icon.svg"
+import googleAdsIcon from "@/assets/google-ads-icon.png"
 
 const tabs = ["Integrations", "Data"] as const
 type Tab = typeof tabs[number]
@@ -405,20 +406,7 @@ export function ClientIntegrations() {
                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
                                     <div className="flex items-start gap-4">
                                         <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                                            <svg className="h-9 w-9" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M20 3.5C10.887 3.5 3.5 10.887 3.5 20S10.887 36.5 20 36.5 36.5 29.113 36.5 20 29.113 3.5 20 3.5z" fill="#fff"/>
-                                                <path d="M20 3.5C10.887 3.5 3.5 10.887 3.5 20S10.887 36.5 20 36.5 36.5 29.113 36.5 20 29.113 3.5 20 3.5z" fill="url(#ads-ring)" fillOpacity=".08"/>
-                                                <path d="M28.96 20.22c0-.68-.06-1.33-.17-1.96H20v3.71h5.15c-.22 1.19-.9 2.2-1.92 2.88v2.4h3.11c1.82-1.68 2.87-4.14 2.87-7.03z" fill="#4285F4"/>
-                                                <path d="M20 29.5c2.59 0 4.76-.86 6.34-2.32l-3.11-2.4c-.86.58-1.95.92-3.23.92-2.49 0-4.6-1.68-5.36-3.94H11.4v2.47C12.96 27.69 16.21 29.5 20 29.5z" fill="#34A853"/>
-                                                <path d="M14.64 21.76A5.55 5.55 0 0 1 14.34 20c0-.61.1-1.21.3-1.76v-2.47h-3.24A9.51 9.51 0 0 0 10.5 20c0 1.52.36 2.96 1 4.23l3.14-2.47z" fill="#FBBC05"/>
-                                                <path d="M20 14.3c1.41 0 2.67.49 3.66 1.43l2.75-2.75C24.75 11.34 22.58 10.5 20 10.5c-3.79 0-7.04 1.81-8.6 4.5l3.24 2.47C15.4 15.98 17.51 14.3 20 14.3z" fill="#EA4335"/>
-                                                <defs>
-                                                    <radialGradient id="ads-ring" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(20 20) scale(16.5)">
-                                                        <stop stopColor="#000"/>
-                                                        <stop offset="1" stopColor="#000" stopOpacity="0"/>
-                                                    </radialGradient>
-                                                </defs>
-                                            </svg>
+                                            <img src={googleAdsIcon} alt="Google Ads logo" className="h-10 w-10 object-contain" />
                                         </div>
                                         <div>
                                             <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Google Ads</h3>
