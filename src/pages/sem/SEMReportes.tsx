@@ -1166,7 +1166,7 @@ export function SEMReportes() {
         {([
           { id: 'weekly',    label: 'Google Ads Budget Weekly Report' },
           { id: 'guarantee', label: 'Google Guarantee Weekly Report' },
-          { id: 'monthly',   label: 'Budget Overview' },
+          { id: 'monthly',   label: 'OpenAI Ads' },
         ] as { id: ReportTab; label: string }[]).map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
             className={`rounded-lg px-5 py-2 text-sm font-semibold transition-all duration-150
