@@ -79,7 +79,12 @@ export function SEMSearchTerms() {
       cacheSet(cacheKey, { data: rows, lastUpdated: updated.toISOString() })
       state.setLastUpdated(updated)
     } catch (err) {
-      setError((err as Error).message)
+      const raw = (err as Error).message
+      const isQuotaError = raw.includes('429') || raw.includes('RESOURCE_EXHAUSTED') || raw.includes('Too many requests')
+      setError(isQuotaError
+        ? "Google Ads API quota limit reached. You've exceeded the maximum number of requests allowed for this period. Please wait a few hours before trying again."
+        : raw
+      )
       console.error('[SEM Search Terms]', err)
     } finally {
       state.setLoading(false)
@@ -223,7 +228,7 @@ export function SEMSearchTerms() {
 
       {error && (
         <div className="mb-4 rounded-xl border border-danger/30 bg-danger/5 px-5 py-4">
-          <p className="text-sm font-semibold text-danger">Error loading search terms</p>
+          <p className="text-sm font-semibold text-danger">Unable to load search terms</p>
           <p className="mt-0.5 text-xs text-danger/80">{error}</p>
         </div>
       )}
