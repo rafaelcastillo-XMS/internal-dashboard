@@ -95,12 +95,9 @@ def fetch_monthly_metrics(ga_service, customer_id: str, year: int) -> dict:
           metrics.clicks,
           metrics.conversions,
           metrics.impressions,
-          metrics.ctr,
-          metrics.average_cpc,
           metrics.interactions
         FROM campaign
         WHERE segments.year = {year}
-          AND campaign.status != 'REMOVED'
         ORDER BY segments.month ASC
     """
     monthly = defaultdict(lambda: {
