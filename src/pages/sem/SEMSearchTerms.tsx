@@ -81,10 +81,19 @@ export function SEMSearchTerms() {
     } catch (err) {
       const raw = (err as Error).message
       const isQuotaError = raw.includes('429') || raw.includes('RESOURCE_EXHAUSTED') || raw.includes('Too many requests')
-      setError(isQuotaError
-        ? "Google Ads API quota limit reached. You've exceeded the maximum number of requests allowed for this period. Please wait a few hours before trying again."
-        : raw
-      )
+      if (isQuotaError) {
+        const delayMatch = raw.match(/"retryDelay"\s*:\s*"(\d+)s"/)
+        const base = "Google Ads API quota limit reached. You've exceeded the maximum number of requests allowed for this period."
+        if (delayMatch) {
+          const restoreAt = new Date(Date.now() + parseInt(delayMatch[1], 10) * 1000)
+          const formatted = restoreAt.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+          setError(`${base} Data will be available again around ${formatted}.`)
+        } else {
+          setError(`${base} Please wait a few hours before trying again.`)
+        }
+      } else {
+        setError(raw)
+      }
       console.error('[SEM Search Terms]', err)
     } finally {
       state.setLoading(false)
