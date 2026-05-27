@@ -7,10 +7,6 @@ export interface PdfWeeklyRow {
   accountName: string
   budget: number
   cost: number
-  week1: number
-  week2: number
-  week3: number
-  lastCheck: number
 }
 
 export interface PdfMonthlyRow {
@@ -86,10 +82,10 @@ function drawStatusDot(doc: jsPDF, active: boolean, x: number, cy: number) {
 
 // ─── Weekly Table ─────────────────────────────────────────────────────────────
 
-const WEEKLY_COLS = [20, 65, 27, 27, 27, 24, 24, 24, 27] as const
-// Total = 265mm, page usable = 269mm (14mm margins each side)
+const WEEKLY_COLS = [20, 90, 40, 40, 50, 25] as const
+// Total = 265mm
 
-const WEEKLY_HEADERS = ['STATUS', 'ACCOUNT NAME', 'BUDGET', 'COST', 'REMAINING', 'WK 1', 'WK 2', 'WK 3', 'LAST CHECK 29TH']
+const WEEKLY_HEADERS = ['STATUS', 'ACCOUNT NAME', 'BUDGET', 'PERIOD SPEND', 'REMAINING', '% USED']
 
 const ROW_H  = 8
 const HDR_H  = 9
@@ -128,9 +124,10 @@ function drawWeeklyRows(
     setColor(doc, alt ? C.rowAlt : C.white, 'fill')
     doc.rect(ML, y, USABLE, ROW_H, 'F')
 
-    const active = row.status === 'ENABLED'
+    const active    = row.status === 'ENABLED'
     const remaining = !pendingCost && row.budget > 0 ? row.budget - row.cost : null
-    const remNeg = remaining !== null && remaining < 0
+    const remNeg    = remaining !== null && remaining < 0
+    const pct       = !pendingCost && row.budget > 0 && row.cost > 0 ? (row.cost / row.budget) * 100 : null
 
     let x = ML
     const cy = y + ROW_H / 2
@@ -147,7 +144,7 @@ function drawWeeklyRows(
     cell(doc, fc(row.budget), x, y, WEEKLY_COLS[2], ROW_H, { color: row.budget > 0 ? C.dark : C.muted, align: 'right' })
     x += WEEKLY_COLS[2]
 
-    // Cost — always red
+    // Period Spend
     if (pendingCost) {
       cell(doc, 'Pending', x, y, WEEKLY_COLS[3], ROW_H, { color: C.muted, align: 'right' })
     } else {
@@ -158,23 +155,18 @@ function drawWeeklyRows(
     // Remaining
     if (remaining !== null) {
       cell(doc, fc(Math.abs(remaining)) + (remNeg ? ' ↓' : ''), x, y, WEEKLY_COLS[4], ROW_H, {
-        bold: true,
-        color: remNeg ? C.red : C.greenText,
-        align: 'right',
+        bold: true, color: remNeg ? C.red : C.greenText, align: 'right',
       })
     } else {
       cell(doc, '—', x, y, WEEKLY_COLS[4], ROW_H, { color: C.muted, align: 'right' })
     }
     x += WEEKLY_COLS[4]
 
-    // Weeks
-    ;[row.week1, row.week2, row.week3].forEach((w, wi) => {
-      cell(doc, fc(w), x, y, WEEKLY_COLS[5 + wi], ROW_H, { color: w > 0 ? C.body : C.muted, align: 'right' })
-      x += WEEKLY_COLS[5 + wi]
+    // % Used
+    cell(doc, pct !== null ? `${pct.toFixed(1)}%` : '—', x, y, WEEKLY_COLS[5], ROW_H, {
+      color: pct === null ? C.muted : pct > 90 ? C.red : pct > 70 ? [202, 138, 4] : C.greenText,
+      align: 'right',
     })
-
-    // Last Check 29th
-    cell(doc, row.lastCheck > 0 ? fc(row.lastCheck) : '—', x, y, WEEKLY_COLS[8], ROW_H, { color: row.lastCheck > 0 ? C.body : C.muted, align: 'right' })
 
     // Row separator
     setColor(doc, C.border, 'draw')
@@ -189,11 +181,9 @@ function drawWeeklyRows(
 function drawWeeklyTotals(doc: jsPDF, rows: PdfWeeklyRow[], y: number, pendingCost: boolean): number {
   const totalBudget    = rows.reduce((s, r) => s + r.budget, 0)
   const totalCost      = rows.reduce((s, r) => s + r.cost, 0)
-  const totalW1        = rows.reduce((s, r) => s + r.week1, 0)
-  const totalW2        = rows.reduce((s, r) => s + r.week2, 0)
-  const totalW3        = rows.reduce((s, r) => s + r.week3, 0)
   const totalRemaining = !pendingCost && totalBudget > 0 ? totalBudget - totalCost : null
   const remNeg         = totalRemaining !== null && totalRemaining < 0
+  const totalPct       = !pendingCost && totalBudget > 0 && totalCost > 0 ? (totalCost / totalBudget) * 100 : null
 
   setColor(doc, C.totals, 'fill')
   doc.rect(ML, y, USABLE, ROW_H + 1, 'F')
@@ -218,15 +208,12 @@ function drawWeeklyTotals(doc: jsPDF, rows: PdfWeeklyRow[], y: number, pendingCo
   }
   x += WEEKLY_COLS[4]
 
-  ;[totalW1, totalW2, totalW3].forEach((w, wi) => {
-    cell(doc, w > 0 ? fc(w) : '—', x, y, WEEKLY_COLS[5 + wi], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
-    x += WEEKLY_COLS[5 + wi]
-  })
+  cell(doc, totalPct !== null ? `${totalPct.toFixed(1)}%` : '—', x, y, WEEKLY_COLS[5], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
 
   return y + ROW_H + 1
 }
 
-function drawPageHeader(doc: jsPDF, weekLabel: string, pageNum?: number) {
+function drawPageHeader(doc: jsPDF, dateLabel: string, pageNum?: number) {
   setColor(doc, C.green, 'fill')
   doc.rect(0, 0, PAGE_W, 26, 'F')
   // Accent strip
@@ -236,12 +223,12 @@ function drawPageHeader(doc: jsPDF, weekLabel: string, pageNum?: number) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
   setColor(doc, C.white, 'text')
-  doc.text('Google Ads Budget Weekly Report', ML, 11)
+  doc.text('Google Ads Budget Report', ML, 11)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.5)
   setColor(doc, C.greenHeader, 'text')
-  doc.text(`Week of ${weekLabel}`, ML, 19)
+  doc.text(dateLabel, ML, 19)
 
   doc.setFontSize(8)
   setColor(doc, C.greenHeader, 'text')
@@ -307,46 +294,47 @@ function drawFooters(doc: jsPDF) {
 // ─── Public: Weekly PDF ───────────────────────────────────────────────────────
 
 export async function generateWeeklyBudgetPdf(params: {
-  weekLabel: string
+  dateLabel: string
   adsRows: PdfWeeklyRow[]
   guaranteeRows: PdfWeeklyRow[]
 }): Promise<void> {
-  const { weekLabel, adsRows, guaranteeRows } = params
+  const { dateLabel, adsRows, guaranteeRows } = params
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
   // Page 1 header
-  drawPageHeader(doc, weekLabel)
+  drawPageHeader(doc, dateLabel)
   let y = 32
 
   // ── Google Ads section ────────────────────────────────────────────
-  drawSectionLabel(doc, 'GOOGLE ADS', 'Cost = last 7 days · Google Ads API', y, 'ads')
+  drawSectionLabel(doc, 'GOOGLE ADS', `Period: ${dateLabel} · Google Ads API`, y, 'ads')
   y += 11
   drawWeeklyTableHeader(doc, y, C.green)
   y += HDR_H
   y = drawWeeklyRows(doc, adsRows, y, false)
   y = drawWeeklyTotals(doc, adsRows, y, false)
 
-  // Gap / page break check
-  const guaranteeHeight = HDR_H + guaranteeRows.length * ROW_H + ROW_H + 1 + 22
-  if (PAGE_H - y - 14 < guaranteeHeight) {
-    doc.addPage()
-    drawPageHeader(doc, weekLabel, 2)
-    y = 32
-  } else {
-    y += 8
-  }
+  if (guaranteeRows.length > 0) {
+    const guaranteeHeight = HDR_H + guaranteeRows.length * ROW_H + ROW_H + 1 + 22
+    if (PAGE_H - y - 14 < guaranteeHeight) {
+      doc.addPage()
+      drawPageHeader(doc, dateLabel, 2)
+      y = 32
+    } else {
+      y += 8
+    }
 
-  // ── Google Guarantee section ──────────────────────────────────────
-  drawSectionLabel(doc, 'GOOGLE GUARANTEE', 'Cost data pending sync', y, 'guarantee')
-  y += 11
-  drawWeeklyTableHeader(doc, y, C.blue)
-  y += HDR_H
-  y = drawWeeklyRows(doc, guaranteeRows, y, true)
-  drawWeeklyTotals(doc, guaranteeRows, y, true)
+    // ── Google Guarantee section ────────────────────────────────────
+    drawSectionLabel(doc, 'GOOGLE GUARANTEE', `Period: ${dateLabel}`, y, 'guarantee')
+    y += 11
+    drawWeeklyTableHeader(doc, y, C.blue)
+    y += HDR_H
+    y = drawWeeklyRows(doc, guaranteeRows, y, false)
+    drawWeeklyTotals(doc, guaranteeRows, y, false)
+  }
 
   drawFooters(doc)
 
-  const filename = `XMS-Budget-Weekly-${new Date().toISOString().slice(0, 10)}.pdf`
+  const filename = `XMS-Budget-Report-${new Date().toISOString().slice(0, 10)}.pdf`
   doc.save(filename)
 }
 
