@@ -708,21 +708,23 @@ function WeeklyBudgetReport({
   costByAccount: Record<string, number>
 }) {
   const [weekStart, setWeekStart]         = useState<Date>(() => getWeekStart(new Date()))
-  const [adsBudgets, setAdsBudgets]       = useState<BudgetStore>(loadBudgetStore)
+  const [adsBudgets, setAdsBudgets]       = useState<BudgetStore>({})
+  const [loadingBudgets, setLoadingBudgets] = useState(true)
   const [exporting, setExporting]         = useState(false)
   const [emailPayload, setEmailPayload]   = useState<EmailReportPayload | null>(null)
 
   useEffect(() => {
     if (!accounts.length) return
+    setLoadingBudgets(true)
+    const local = loadBudgetStore()
     fetchSupabaseBudgets('ads_weekly').then(map => {
-      if (!Object.keys(map).length) return
-      setAdsBudgets(prev => {
-        const next = { ...prev }
-        for (const [id, budget] of Object.entries(map)) next[id] = { ...defaultRow(), ...prev[id], budget }
-        saveBudgetStore(next)
-        return next
-      })
-    })
+      const next: BudgetStore = {}
+      for (const a of accounts) {
+        next[a.id] = { ...defaultRow(), ...local[a.id], budget: map[a.id] ?? 0 }
+      }
+      saveBudgetStore(next)
+      setAdsBudgets(next)
+    }).finally(() => setLoadingBudgets(false))
   }, [accounts])
 
   const updateAds = (id: string, field: keyof BudgetRow, value: number | string) => {
@@ -796,7 +798,10 @@ function WeeklyBudgetReport({
       </div>
 
       {/* Google Ads table */}
-      <BudgetTableSection accounts={accounts} budgets={adsBudgets} costByAccount={costByAccount} onUpdate={updateAds} pendingCost={false} />
+      {loadingBudgets
+        ? <div className="flex items-center gap-2 py-8 text-sm text-body dark:text-bodydark"><svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Loading budgets…</div>
+        : <BudgetTableSection accounts={accounts} budgets={adsBudgets} costByAccount={costByAccount} onUpdate={updateAds} pendingCost={false} />
+      }
     </div>
   )
 }
@@ -807,21 +812,23 @@ function GuaranteeWeeklyReport({ accounts }: { accounts: AdsAccount[] }) {
   const now = new Date()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
   const [selectedYear,  setSelectedYear]  = useState(now.getFullYear())
-  const [ggBudgets,     setGgBudgets]     = useState<BudgetStore>(loadGuaranteeStore)
+  const [ggBudgets,     setGgBudgets]     = useState<BudgetStore>({})
+  const [loadingBudgets, setLoadingBudgets] = useState(true)
   const [ggMonthly,     setGgMonthly]     = useState<Record<string, { spend: number; leads: number; cost_per_lead: number }>>({})
   const [loadingMonth,  setLoadingMonth]  = useState(false)
 
   useEffect(() => {
     if (!accounts.length) return
+    setLoadingBudgets(true)
+    const local = loadGuaranteeStore()
     fetchSupabaseBudgets('guarantee_weekly').then(map => {
-      if (!Object.keys(map).length) return
-      setGgBudgets(prev => {
-        const next = { ...prev }
-        for (const [id, budget] of Object.entries(map)) next[id] = { ...defaultRow(), ...prev[id], budget }
-        saveGuaranteeStore(next)
-        return next
-      })
-    })
+      const next: BudgetStore = {}
+      for (const a of accounts) {
+        next[a.id] = { ...defaultRow(), ...local[a.id], budget: map[a.id] ?? 0 }
+      }
+      saveGuaranteeStore(next)
+      setGgBudgets(next)
+    }).finally(() => setLoadingBudgets(false))
   }, [accounts])
 
   const updateGg = (id: string, field: keyof BudgetRow, value: number | string) => {
@@ -877,6 +884,7 @@ function GuaranteeWeeklyReport({ accounts }: { accounts: AdsAccount[] }) {
       </div>
 
       {/* Guarantee performance table */}
+      {loadingBudgets && <div className="flex items-center gap-2 py-4 text-sm text-body dark:text-bodydark"><svg className="h-4 w-4 animate-spin text-[#3b82f6]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Loading budgets…</div>}
       <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
         <table className="w-full text-sm">
           <thead>
