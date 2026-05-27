@@ -157,31 +157,41 @@ function BudgetTableSection({
   pendingCost?: boolean
 }) {
   const get = (id: string) => budgets[id] ?? defaultRow()
+  const rem = (id: string) => {
+    const b = get(id); const cost = costByAccount[id] ?? 0
+    return !pendingCost && b.budget > 0 ? b.budget - cost : null
+  }
 
   const totals = accounts.reduce((acc, a) => {
-    const b = get(a.id); const cost = costByAccount[a.id] ?? 0
-    return { budget: acc.budget + b.budget, cost: acc.cost + cost }
-  }, { budget: 0, cost: 0 })
+    const b = get(a.id); const cost = costByAccount[a.id] ?? 0; const r = rem(a.id)
+    return {
+      budget: acc.budget + b.budget,
+      cost:   acc.cost   + cost,
+      wk1:    r !== null ? acc.wk1 + r / 22 : acc.wk1,
+      wk2:    r !== null ? acc.wk2 + r / 12 : acc.wk2,
+      wk3:    r !== null ? acc.wk3 + r / 6  : acc.wk3,
+      lc:     r !== null ? acc.lc  + r / 2  : acc.lc,
+    }
+  }, { budget: 0, cost: 0, wk1: 0, wk2: 0, wk3: 0, lc: 0 })
 
   return (
     <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
-            {['Status', 'Account Name', 'Budget', 'Period Spend', 'Remaining', '% Used'].map(h => (
+            {['Status', 'Account Name', 'Budget', 'Period Spend', 'Remaining', 'First Week', 'Second Week', 'Third Week', 'Last Check 29th'].map(h => (
               <th key={h} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-stroke dark:divide-strokedark">
           {accounts.length === 0 ? (
-            <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-body dark:text-bodydark">No accounts found.</td></tr>
+            <tr><td colSpan={9} className="px-5 py-10 text-center text-sm text-body dark:text-bodydark">No accounts found.</td></tr>
           ) : accounts.map(a => {
             const b         = get(a.id)
             const cost      = costByAccount[a.id] ?? 0
-            const remaining = !pendingCost && b.budget > 0 ? b.budget - cost : null
+            const remaining = rem(a.id)
             const remNeg    = remaining !== null && remaining < 0
-            const pct       = !pendingCost && b.budget > 0 && cost > 0 ? (cost / b.budget) * 100 : null
             return (
               <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                 <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
@@ -196,18 +206,17 @@ function BudgetTableSection({
                 <td className={`px-5 py-4 tabular-nums font-semibold ${remNeg ? 'text-red-500' : remaining !== null ? 'text-meta-3' : 'text-body dark:text-bodydark'}`}>
                   {remaining !== null ? fmtCurrency(remaining) : <span className="opacity-40">—</span>}
                 </td>
-                <td className="px-5 py-4">
-                  {pct !== null ? (
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-stroke dark:bg-strokedark">
-                        <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-400' : 'bg-meta-3'}`}
-                             style={{ width: `${Math.min(pct, 100)}%` }} />
-                      </div>
-                      <span className={`text-xs font-semibold tabular-nums ${pct > 90 ? 'text-red-500' : pct > 70 ? 'text-yellow-500' : 'text-meta-3'}`}>
-                        {pct.toFixed(1)}%
-                      </span>
-                    </div>
-                  ) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                  {remaining !== null ? fmtCurrency(remaining / 22) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                </td>
+                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                  {remaining !== null ? fmtCurrency(remaining / 12) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                </td>
+                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                  {remaining !== null ? fmtCurrency(remaining / 6) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                </td>
+                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                  {remaining !== null ? fmtCurrency(remaining / 2) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
                 </td>
               </tr>
             )
@@ -223,11 +232,10 @@ function BudgetTableSection({
               <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">
                 {!pendingCost && totals.budget > 0 ? fmtCurrency(totals.budget - totals.cost) : '—'}
               </td>
-              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">
-                {!pendingCost && totals.budget > 0 && totals.cost > 0
-                  ? `${((totals.cost / totals.budget) * 100).toFixed(1)}%`
-                  : '—'}
-              </td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.wk1 > 0 ? fmtCurrency(totals.wk1) : '—'}</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.wk2 > 0 ? fmtCurrency(totals.wk2) : '—'}</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.wk3 > 0 ? fmtCurrency(totals.wk3) : '—'}</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.lc  > 0 ? fmtCurrency(totals.lc)  : '—'}</td>
             </tr>
           )}
         </tbody>
