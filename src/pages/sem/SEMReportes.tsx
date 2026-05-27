@@ -306,7 +306,7 @@ function GuaranteeAnalyticsCards({ accounts }: { accounts: AdsAccount[] }) {
   const selectedAccount = accounts.find(a => a.id === accountId)
 
   return (
-    <div className="mt-8">
+    <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-bold text-black dark:text-white">
@@ -810,7 +810,9 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
         </table>
       </div>
 
-      <GuaranteeAnalyticsCards accounts={accounts} />
+      <div className="mt-10 border-t border-stroke pt-8 dark:border-strokedark">
+        <GuaranteeAnalyticsCards accounts={accounts} />
+      </div>
     </div>
   )
 }
