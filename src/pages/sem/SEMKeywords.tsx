@@ -29,6 +29,12 @@ function fmtCurrency(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+const IRRELEVANT_TERMS = ['free', 'jobs', 'salary', 'training', 'diy', 'definition', 'near me']
+function hasIrrelevantTerm(query: string): boolean {
+  const q = query.toLowerCase()
+  return IRRELEVANT_TERMS.some(term => q.includes(term))
+}
+
 function QualityScore({ score }: { score: number | null }) {
   if (score == null) return <span className="text-body dark:text-bodydark">—</span>
   const color = score >= 7 ? 'text-meta-3' : score >= 5 ? 'text-warning' : 'text-danger'
@@ -121,42 +127,60 @@ export function SEMKeywords() {
     [keywords]
   )
 
-  const lowPerformers = useMemo(() => {
+  const negativeCandidates = useMemo(() => {
     const topSet = new Set(topPerformers.map(k => k.label))
     const seen = new Set<string>()
     return keywords
       .filter(k => {
         if (topSet.has(k.text) || seen.has(k.text)) return false
-        const bad = (k.quality_score != null && k.quality_score <= 3)
-          || (k.impressions > 100 && k.clicks === 0)
-          || (k.cost > 10 && k.conversions === 0 && k.clicks > 3)
+        const bad = (k.clicks >= 5 && k.conversions === 0)
+          || (k.cost >= 2 && k.clicks >= 2 && k.conversions === 0)
+          || hasIrrelevantTerm(k.text)
+          || (k.quality_score != null && k.quality_score <= 3)
         if (bad) seen.add(k.text)
         return bad
       })
       .slice(0, 25)
       .map(k => ({
         label: k.text,
-        metric: k.quality_score != null && k.quality_score <= 3
+        metric: k.quality_score != null && k.quality_score <= 3 && !hasIrrelevantTerm(k.text) && k.clicks < 5 && k.cost < 2
           ? `QS ${k.quality_score}/10`
-          : k.impressions > 100 && k.clicks === 0
-            ? `${fmt(k.impressions)} impr`
-            : `$${k.cost.toFixed(0)}, 0 conv`,
+          : hasIrrelevantTerm(k.text)
+            ? 'Irrelevant term'
+            : k.clicks >= 5 && k.conversions === 0
+              ? `${fmt(k.clicks)} clk, 0 conv`
+              : `$${k.cost.toFixed(0)}, 0 conv`,
       }))
   }, [keywords, topPerformers])
 
   const opportunities = useMemo(() => {
     const topSet = new Set(topPerformers.map(k => k.label))
-    const lowSet = new Set(lowPerformers.map(k => k.label))
+    const negSet = new Set(negativeCandidates.map(k => k.label))
+    const validCpcs = keywords.filter(k => k.avg_cpc > 0).map(k => k.avg_cpc)
+    const avgCpc = validCpcs.length > 0 ? validCpcs.reduce((a, b) => a + b, 0) / validCpcs.length : 0
     return keywords
-      .filter(k =>
-        !topSet.has(k.text) && !lowSet.has(k.text) &&
-        k.impressions > 100 && k.ctr < 1.5 &&
-        (k.quality_score == null || k.quality_score >= 5)
-      )
+      .filter(k => {
+        if (topSet.has(k.text) || negSet.has(k.text)) return false
+        const lowCtr = k.impressions >= 50 && k.ctr < 1
+        const highCpc = avgCpc > 0 && k.avg_cpc > 1.5 * avgCpc && k.conversions === 0
+        const lowEngagement = k.impressions >= 100 && k.clicks <= 2 && k.cost < 1
+        return lowCtr || highCpc || lowEngagement
+      })
       .sort((a, b) => b.impressions - a.impressions)
       .slice(0, 25)
-      .map(k => ({ label: k.text, metric: `${fmt(k.ctr, 2)}% CTR` }))
-  }, [keywords, topPerformers, lowPerformers])
+      .map(k => {
+        const lowCtr = k.impressions >= 50 && k.ctr < 1
+        const highCpc = avgCpc > 0 && k.avg_cpc > 1.5 * avgCpc && k.conversions === 0
+        return {
+          label: k.text,
+          metric: lowCtr
+            ? `${fmt(k.ctr, 2)}% CTR`
+            : highCpc
+              ? `${fmtCurrency(k.avg_cpc)} CPC`
+              : `${fmt(k.impressions)} impr, ${fmt(k.clicks)} clk`,
+        }
+      })
+  }, [keywords, topPerformers, negativeCandidates])
 
   const sorted = [...keywords].sort((a, b) => {
     const va = (a[sortKey] ?? -1) as number
@@ -206,16 +230,16 @@ export function SEMKeywords() {
           loading={state.loading}
         />
         <InsightCard
-          title="Review for Removal"
-          subtitle="Poor quality score or spending with no results"
+          title="Negative Candidates"
+          subtitle="5+ clicks or $2+ spend with 0 conv, QS ≤ 3, or irrelevant terms"
           variant="red"
-          items={lowPerformers}
-          emptyText="No low-performance keywords detected."
+          items={negativeCandidates}
+          emptyText="No negative candidates detected for this period."
           loading={state.loading}
         />
         <InsightCard
           title="Optimization Opportunities"
-          subtitle="High impressions but low CTR — improve ad copy"
+          subtitle="Low CTR with volume, high CPC vs avg, or low engagement — improve bids or ad copy"
           variant="blue"
           items={opportunities}
           emptyText="No optimization opportunities found."
