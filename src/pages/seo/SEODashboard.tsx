@@ -5,6 +5,7 @@ import { CardDataStats }      from '@/features/seo/components/CardDataStats'
 import { ChartVisibility }    from '@/features/seo/components/ChartVisibility'
 import { QueryRankingsTable } from '@/features/seo/components/QueryRankingsTable'
 import { CoreWebVitals }      from '@/features/seo/components/CoreWebVitals'
+import { SEOAIInsights }      from '@/features/seo/components/SEOAIInsights'
 import { useSEODashboardState, formatDateLabel, DATE_PRESETS, SEO_API } from '@/features/seo/hooks/useSEODashboardState'
 import { cacheGet, cacheSet } from '@/features/seo/lib/seoCache'
 
@@ -96,7 +97,7 @@ export function SEODashboard() {
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">
             SEO
             <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#1A72D9]/20 text-[#1A72D9] align-middle">
               Intelligence
@@ -114,7 +115,7 @@ export function SEODashboard() {
                     disabled={state.gscOptions.length === 0}
                     className="rounded-lg border border-stroke bg-white py-1.5 pl-3 pr-8 text-xs font-medium text-black
                                focus:border-[#1A72D9] focus:outline-none disabled:opacity-50
-                               dark:border-strokedark dark:bg-boxdark dark:text-white max-w-[220px]">
+                               dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] max-w-[220px]">
               <option value="">{!state.propertiesLoaded ? 'Loading…' : state.gscOptions.length === 0 ? 'No properties' : 'Select property…'}</option>
               {state.gscOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -125,7 +126,7 @@ export function SEODashboard() {
                     disabled={state.ga4Options.length === 0}
                     className="rounded-lg border border-stroke bg-white py-1.5 pl-3 pr-8 text-xs font-medium text-black
                                focus:border-[#1A72D9] focus:outline-none disabled:opacity-50
-                               dark:border-strokedark dark:bg-boxdark dark:text-white max-w-[220px]">
+                               dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] max-w-[220px]">
               <option value="">{!state.propertiesLoaded ? 'Loading…' : state.ga4Options.length === 0 ? 'No properties' : 'Select property…'}</option>
               {state.ga4Options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -142,7 +143,7 @@ export function SEODashboard() {
           <button onClick={() => fetchData(true)} disabled={state.loading}
                   className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium
                              shadow-card hover:border-[#1A72D9] hover:text-[#1A72D9] disabled:opacity-60
-                             dark:border-strokedark dark:bg-boxdark dark:text-white">
+                             dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             <svg className={`h-4 w-4 ${state.loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round"
                     d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -151,6 +152,15 @@ export function SEODashboard() {
           </button>
         </div>
       </div>
+
+      {/* AI Insights banner */}
+      <SEOAIInsights
+        clientName={state.gscOptions.find(o => o.value === state.selectedGscSite)?.label ?? ''}
+        gscSite={state.selectedGscSite}
+        gsc={data.gsc}
+        ga4={data.ga4}
+        psiScore={data.psi?.metrics ? null : null}
+      />
 
       {/* No-properties banner */}
       {state.propertiesLoaded && state.gscOptions.length === 0 && state.ga4Options.length === 0 && (
@@ -216,7 +226,7 @@ export function SEODashboard() {
       {/* Footer */}
       <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-stroke pt-4 dark:border-strokedark">
         <p className="text-xs text-body dark:text-bodydark">
-          Data range: <span className="font-medium text-black dark:text-white">{dateRangeLabel}</span>
+          Data range: <span className="font-medium text-black dark:text-[#E2E5E9]">{dateRangeLabel}</span>
         </p>
         <div className="flex items-center gap-4 text-xs text-body dark:text-bodydark">
           <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#1A72D9]" />Google Search Console</span>

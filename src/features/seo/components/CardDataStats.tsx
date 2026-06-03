@@ -78,7 +78,7 @@ export function CardDataStats({
           <p className="mb-0.5 text-xs font-medium uppercase tracking-wider text-body dark:text-bodydark">
             {title}
           </p>
-          <h4 className="text-2xl font-bold text-black dark:text-white tabular-nums">
+          <h4 className="text-2xl font-bold text-black dark:text-[#E2E5E9] tabular-nums">
             {value}
           </h4>
         </div>

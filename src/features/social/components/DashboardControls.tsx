@@ -48,7 +48,7 @@ export function DashboardControls({
                        py-1.5 pl-3 pr-8 text-xs font-medium text-black shadow-card
                        transition-colors hover:border-[#8B5CF6] focus:border-[#8B5CF6]
                        focus:outline-none disabled:opacity-50
-                       dark:border-strokedark dark:bg-boxdark dark:text-white
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]
                        max-w-[240px] truncate"
           >
             <option value="">{accountOptions.length === 0 ? 'Loading…' : 'Select account…'}</option>
@@ -91,7 +91,7 @@ export function DashboardControls({
         className="flex items-center gap-2 rounded-lg border border-stroke
                    bg-white px-4 py-2 text-sm font-medium text-black shadow-card
                    transition-colors hover:border-[#8B5CF6] hover:text-[#8B5CF6]
-                   disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-white"
+                   disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
       >
         <svg className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round"
@@ -106,7 +106,7 @@ export function DashboardControls({
         className="flex items-center gap-2 rounded-lg border border-stroke
                    bg-white px-4 py-2 text-sm font-medium text-black shadow-card
                    transition-colors hover:border-[#8B5CF6] hover:text-[#8B5CF6]
-                   disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-white"
+                   disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round"

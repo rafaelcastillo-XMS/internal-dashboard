@@ -62,7 +62,7 @@ export function SEOKeywords() {
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">
             Keyword Intelligence
             <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#1A72D9]/20 text-[#1A72D9] align-middle">GSC</span>
           </h1>

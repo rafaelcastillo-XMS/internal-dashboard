@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   AlertCircle,
@@ -72,12 +73,14 @@ function DueBadge({ date }: { date: string | null }) {
 
 // ─── Task card ─────────────────────────────────────────────────────────────────
 function TaskCard({ task, index }: { task: MondayTask; index: number }) {
+  const navigate = useNavigate()
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: index * 0.035 }}
-      className="group flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-[1px] dark:border-slate-700/60 dark:bg-slate-800/80"
+      onClick={() => navigate(`/tasks/${task.id}`)}
+      className="group flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-[1px] cursor-pointer dark:border-slate-700/60 dark:bg-slate-800/80"
     >
       {/* Board label + priority */}
       <div className="flex items-center justify-between gap-2">
@@ -88,7 +91,7 @@ function TaskCard({ task, index }: { task: MondayTask; index: number }) {
       </div>
 
       {/* Task name */}
-      <p className="text-sm font-semibold leading-snug text-slate-900 dark:text-white line-clamp-2">
+      <p className="text-sm font-semibold leading-snug text-slate-900 dark:text-[#E2E5E9] line-clamp-2">
         {task.name}
       </p>
 
@@ -113,6 +116,7 @@ function groupByBoard(tasks: MondayTask[]): Map<string, MondayTask[]> {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export function Tasks() {
+  const navigate = useNavigate()
   const { user, tasks, loading, error, refetch } = useMondayTasks()
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState<string>("all")
@@ -152,7 +156,7 @@ export function Tasks() {
               />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">My Tasks</h1>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9]">My Tasks</h1>
               {user && (
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                   {user.name} · {tasks.length} task{tasks.length !== 1 ? "s" : ""} assigned
@@ -175,7 +179,7 @@ export function Tasks() {
         {!loading && !error && user && (
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { label: "Total Tasks",   value: tasks.length,    color: "text-slate-900 dark:text-white",           bg: "bg-white dark:bg-slate-800" },
+              { label: "Total Tasks",   value: tasks.length,    color: "text-slate-900 dark:text-[#E2E5E9]",           bg: "bg-white dark:bg-slate-800" },
               { label: "In Progress",   value: inProgressCount, color: "text-blue-700 dark:text-blue-400",         bg: "bg-blue-50 dark:bg-blue-900/20" },
               { label: "Done",          value: doneCount,       color: "text-green-700 dark:text-green-400",       bg: "bg-green-50 dark:bg-green-900/20" },
               { label: "Overdue",       value: overdueCount,    color: "text-red-700 dark:text-red-400",           bg: "bg-red-50 dark:bg-red-900/20" },
@@ -205,7 +209,7 @@ export function Tasks() {
                 placeholder="Search tasks…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1A72D9]/50"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-sm text-slate-900 dark:text-[#E2E5E9] placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1A72D9]/50"
               />
             </div>
 
@@ -265,7 +269,7 @@ export function Tasks() {
                 <AlertCircle className="h-8 w-8 text-red-500" />
               </div>
               <div>
-                <p className="font-semibold text-slate-900 dark:text-white">Could not load tasks</p>
+                <p className="font-semibold text-slate-900 dark:text-[#E2E5E9]">Could not load tasks</p>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-sm">{error}</p>
               </div>
               <button onClick={refetch} className="inline-flex items-center gap-2 rounded-lg bg-[#1A72D9] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#1560c0] transition-colors">
@@ -282,7 +286,7 @@ export function Tasks() {
                 <img src={MONDAY_LOGO} alt="monday.com" className="relative h-10 w-auto object-contain" />
               </div>
               <div>
-                <p className="font-semibold text-slate-900 dark:text-white">No monday.com account found</p>
+                <p className="font-semibold text-slate-900 dark:text-[#E2E5E9]">No monday.com account found</p>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-sm">
                   We couldn't find a monday.com user matching your login email. Make sure you're using the same email in both platforms.
                 </p>
@@ -317,10 +321,11 @@ export function Tasks() {
                     initial={{ opacity: 0, x: -6 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.025 }}
-                    className="flex flex-wrap items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors"
+                    onClick={() => navigate(`/tasks/${task.id}`)}
+                    className="flex flex-wrap items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{task.name}</p>
+                      <p className="truncate text-sm font-medium text-slate-900 dark:text-[#E2E5E9]">{task.name}</p>
                       <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">{task.board}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">

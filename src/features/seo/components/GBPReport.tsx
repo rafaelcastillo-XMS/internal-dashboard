@@ -197,7 +197,7 @@ function SectionHeader({ color, icon, title }: { color: string; icon: React.Reac
       >
         <span style={{ color }}>{icon}</span>
       </div>
-      <h2 className="text-lg font-bold text-black dark:text-white">{title}</h2>
+      <h2 className="text-lg font-bold text-black dark:text-[#E2E5E9]">{title}</h2>
     </div>
   )
 }
@@ -370,7 +370,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
           </svg>
         </div>
-        <h3 className="text-base font-semibold text-black dark:text-white mb-1">
+        <h3 className="text-base font-semibold text-black dark:text-[#E2E5E9] mb-1">
           Select a client to generate the report
         </h3>
         <p className="text-sm text-body dark:text-bodydark max-w-xs mx-auto">
@@ -426,7 +426,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
         {/* Business Profile Interactions */}
         <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
           <div className="px-6 pt-6 pb-1">
-            <p className="text-4xl font-bold text-black dark:text-white tabular-nums">
+            <p className="text-4xl font-bold text-black dark:text-[#E2E5E9] tabular-nums">
               {d.interactions.total.toLocaleString()}
             </p>
             <p className="mt-1 text-sm text-body dark:text-bodydark">Business Profile interactions</p>
@@ -449,7 +449,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               <div>
-                <p className="text-3xl font-bold text-black dark:text-white tabular-nums">
+                <p className="text-3xl font-bold text-black dark:text-[#E2E5E9] tabular-nums">
                   {d.profileViews.total.toLocaleString()}
                 </p>
                 <p className="text-sm text-body dark:text-bodydark leading-snug">
@@ -457,7 +457,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
                 </p>
               </div>
             </div>
-            <p className="text-xs font-semibold text-black dark:text-white mb-0.5">Platform and device breakdown</p>
+            <p className="text-xs font-semibold text-black dark:text-[#E2E5E9] mb-0.5">Platform and device breakdown</p>
             <p className="text-[11px] text-body dark:text-bodydark mb-4 leading-relaxed">
               Platform and devices that people used to find your profile
             </p>
@@ -478,7 +478,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
                       <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
                       <span className="text-body dark:text-bodydark truncate">{item.label}</span>
                     </div>
-                    <span className="font-medium text-black dark:text-white shrink-0">
+                    <span className="font-medium text-black dark:text-[#E2E5E9] shrink-0">
                       {item.value.toLocaleString()} · {item.pct}%
                     </span>
                   </div>
@@ -493,7 +493,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
               <div>
-                <p className="text-3xl font-bold text-black dark:text-white tabular-nums">
+                <p className="text-3xl font-bold text-black dark:text-[#E2E5E9] tabular-nums">
                   {d.searches.total}
                 </p>
                 <p className="text-sm text-body dark:text-bodydark leading-snug">
@@ -501,7 +501,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
                 </p>
               </div>
             </div>
-            <p className="text-xs font-semibold text-black dark:text-white mb-0.5">Searches breakdown</p>
+            <p className="text-xs font-semibold text-black dark:text-[#E2E5E9] mb-0.5">Searches breakdown</p>
             <p className="text-[11px] text-body dark:text-bodydark mb-4 leading-relaxed">
               Search terms that showed your Business Profile in the search results
             </p>
@@ -509,10 +509,10 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
               {d.searches.keywords.map((kw, i) => (
                 <div key={i} className="flex items-center justify-between py-2 border-b border-stroke/50 dark:border-strokedark/50 last:border-0 text-xs gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[11px] text-black/40 dark:text-white/40 w-4 shrink-0">{i + 1}.</span>
+                    <span className="text-[11px] text-black/40 dark:text-[#E2E5E9]/40 w-4 shrink-0">{i + 1}.</span>
                     <span className="text-body dark:text-bodydark truncate">{kw.term}</span>
                   </div>
-                  <span className="font-medium text-black dark:text-white shrink-0">{kw.count}</span>
+                  <span className="font-medium text-black dark:text-[#E2E5E9] shrink-0">{kw.count}</span>
                 </div>
               ))}
             </div>
@@ -523,7 +523,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
         {/* Posts */}
         <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
           <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-            <h3 className="font-semibold text-black dark:text-white">Posts</h3>
+            <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Posts</h3>
             <p className="mt-0.5 text-xs text-body dark:text-bodydark">Recent Google Business Profile posts</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
@@ -534,7 +534,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
                     <span className="text-[10px] font-bold text-[#1A72D9]">AC</span>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-black dark:text-white">A/C Now</p>
+                    <p className="text-xs font-semibold text-black dark:text-[#E2E5E9]">A/C Now</p>
                     <p className="text-[10px] text-body dark:text-bodydark">{post.date}</p>
                   </div>
                 </div>
@@ -567,13 +567,13 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
         {/* GA4 Summary */}
         <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
           <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-            <h3 className="font-semibold text-black dark:text-white">Summary</h3>
+            <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Summary</h3>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-stroke dark:divide-strokedark border-b border-stroke dark:border-strokedark">
             {d.ga4Summary.metrics.map((m, i) => (
               <div key={i} className="px-6 py-5">
                 <p className="text-xs text-body dark:text-bodydark">{m.label}</p>
-                <p className="mt-1 text-2xl font-bold text-black dark:text-white tabular-nums">{m.value}</p>
+                <p className="mt-1 text-2xl font-bold text-black dark:text-[#E2E5E9] tabular-nums">{m.value}</p>
                 <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium text-emerald-500">
                   <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
@@ -599,7 +599,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
         {/* Event count by Event name */}
         <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
           <div className="flex items-center justify-between border-b border-stroke px-6 py-4 dark:border-strokedark">
-            <h3 className="font-semibold text-black dark:text-white">Event count by Event name over time</h3>
+            <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Event count by Event name over time</h3>
             <span className="shrink-0 ml-3 rounded border border-stroke dark:border-strokedark px-2 py-1 text-xs text-body dark:text-bodydark">Month</span>
           </div>
           <div className="px-2 py-4">
@@ -615,7 +615,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
         {/* Leads Overview */}
         <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
           <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-            <h3 className="font-semibold text-black dark:text-white">Leads overview</h3>
+            <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Leads overview</h3>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-stroke dark:divide-strokedark border-b border-stroke dark:border-strokedark">
             {[
@@ -626,7 +626,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             ].map((m, i) => (
               <div key={i} className={`px-6 py-4 ${m.active ? 'border-t-2 border-t-[#4285F4]' : ''}`}>
                 <p className={`text-xs font-medium ${m.active ? 'text-[#4285F4]' : 'text-body dark:text-bodydark'}`}>{m.label}</p>
-                <p className="mt-1 text-2xl font-bold text-black dark:text-white tabular-nums">{m.value.toLocaleString()}</p>
+                <p className="mt-1 text-2xl font-bold text-black dark:text-[#E2E5E9] tabular-nums">{m.value.toLocaleString()}</p>
               </div>
             ))}
           </div>
@@ -643,7 +643,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
         {/* Users by channel */}
         <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
           <div className="flex items-center justify-between border-b border-stroke px-6 py-4 dark:border-strokedark">
-            <h3 className="font-semibold text-black dark:text-white">
+            <h3 className="font-semibold text-black dark:text-[#E2E5E9]">
               Total users by First user primary channel (Default Channel Group) over time
             </h3>
             <span className="shrink-0 ml-3 rounded border border-stroke dark:border-strokedark px-2 py-1 text-xs text-body dark:text-bodydark">Month</span>
@@ -679,7 +679,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             ].map((m, i) => (
               <div key={i} className={`px-6 py-5 ${m.bg}`}>
                 <p className={`text-xs ${m.fg || 'text-body dark:text-bodydark'}`}>{m.label}</p>
-                <p className={`mt-1 text-2xl font-bold tabular-nums ${m.fg || 'text-black dark:text-white'}`}>{m.value}</p>
+                <p className={`mt-1 text-2xl font-bold tabular-nums ${m.fg || 'text-black dark:text-[#E2E5E9]'}`}>{m.value}</p>
               </div>
             ))}
           </div>

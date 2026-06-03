@@ -126,7 +126,7 @@ export function SEMCampaigns() {
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">Campaigns</h1>
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Campaigns</h1>
           <p className="text-sm text-body dark:text-bodydark">
             Google Ads · {state.dateRange.startDate
               ? formatDateLabel(state.dateRange.startDate, state.dateRange.endDate)
@@ -140,7 +140,7 @@ export function SEMCampaigns() {
       <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
         <div className="border-b border-stroke px-6 py-5 dark:border-strokedark flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-black dark:text-white">All Campaigns</h3>
+            <h3 className="font-semibold text-black dark:text-[#E2E5E9]">All Campaigns</h3>
             <p className="mt-0.5 text-xs text-body dark:text-bodydark">Click column headers to sort</p>
           </div>
           {!state.loading && campaigns.length > 0 && (
@@ -193,13 +193,13 @@ export function SEMCampaigns() {
               <tbody className="divide-y divide-stroke dark:divide-strokedark">
                 {sorted.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
-                    <td className="max-w-[220px] truncate px-5 py-4 font-medium text-black dark:text-white" title={c.name}>{c.name}</td>
+                    <td className="max-w-[220px] truncate px-5 py-4 font-medium text-black dark:text-[#E2E5E9]" title={c.name}>{c.name}</td>
                     <td className="px-5 py-4"><StatusBadge status={c.status} /></td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(c.impressions)}</td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(c.clicks)}</td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(c.ctr, 2)}%</td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmtCurrency(c.avg_cpc)}</td>
-                    <td className="px-5 py-4 tabular-nums font-semibold text-black dark:text-white">{fmtCurrency(c.cost)}</td>
+                    <td className="px-5 py-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{fmtCurrency(c.cost)}</td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(c.conversions, 1)}</td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">
                       {c.conversions > 0 ? fmtCurrency(c.cost_per_conversion) : '—'}

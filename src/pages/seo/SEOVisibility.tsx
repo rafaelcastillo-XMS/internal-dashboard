@@ -67,7 +67,7 @@ export function SEOVisibility() {
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">GSC Visibility</h1>
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">GSC Visibility</h1>
           <p className="text-sm text-body dark:text-bodydark">
             Search impressions &amp; clicks · {state.lastUpdated ? `Updated ${state.lastUpdated.toLocaleTimeString()}` : 'Loading data…'}
           </p>

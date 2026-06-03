@@ -67,7 +67,7 @@ export function SEOCoreWebVitals() {
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">
             Core Web Vitals
             <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#F47C20]/20 text-[#F47C20] align-middle">PSI</span>
           </h1>
@@ -92,14 +92,14 @@ export function SEOCoreWebVitals() {
         <div className="col-span-12 xl:col-span-5">
           <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark h-full">
             <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
-              <h3 className="font-semibold text-black dark:text-white">Google CWV Thresholds</h3>
+              <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Google CWV Thresholds</h3>
               <p className="mt-0.5 text-xs text-body dark:text-bodydark">Official passing criteria for Core Web Vitals</p>
             </div>
             <div className="divide-y divide-stroke px-6 dark:divide-strokedark">
               {THRESHOLDS.map(({ key, label, good, poor, format, desc }) => (
                 <div key={key} className="flex items-center justify-between py-4">
                   <div>
-                    <p className="font-semibold text-sm text-black dark:text-white">{label}</p>
+                    <p className="font-semibold text-sm text-black dark:text-[#E2E5E9]">{label}</p>
                     <p className="text-xs text-body dark:text-bodydark mt-0.5">{desc}</p>
                   </div>
                   <div className="text-right space-y-1">

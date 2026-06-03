@@ -49,7 +49,7 @@ export function SEOHeader({ sidebarOpen, setSidebarOpen }: SEOHeaderProps) {
         </button>
 
         {/* Center: title */}
-        <p className="hidden font-semibold text-black dark:text-white lg:block">
+        <p className="hidden font-semibold text-black dark:text-[#E2E5E9] lg:block">
           SEO Intelligence Dashboard
         </p>
 

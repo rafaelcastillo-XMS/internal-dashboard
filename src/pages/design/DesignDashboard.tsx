@@ -313,7 +313,7 @@ export function DesignDashboard() {
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">
             Design Intelligence
             <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#7C3AED]/20 text-[#7C3AED] align-middle">
               PSI
@@ -338,7 +338,7 @@ export function DesignDashboard() {
                            py-1.5 pl-3 pr-8 text-xs font-medium text-black shadow-card
                            transition-colors hover:border-[#7C3AED] focus:border-[#7C3AED]
                            focus:outline-none disabled:opacity-50
-                           dark:border-strokedark dark:bg-boxdark dark:text-white max-w-[200px] truncate"
+                           dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] max-w-[200px] truncate"
               >
                 <option value="">{clientOptions.length === 0 ? 'Loading…' : 'Select client…'}</option>
                 {clientOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -358,7 +358,7 @@ export function DesignDashboard() {
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white
                        px-4 py-2 text-sm font-medium text-black shadow-card
                        transition-colors hover:border-[#7C3AED] hover:text-[#7C3AED]
-                       disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-white"
+                       disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
           >
             <svg className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d={loading
@@ -377,7 +377,7 @@ export function DesignDashboard() {
               className="flex items-center gap-2 rounded-lg border border-stroke bg-white
                          px-4 py-2 text-sm font-medium text-black shadow-card
                          transition-colors hover:border-[#7C3AED] hover:text-[#7C3AED]
-                         disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-white"
+                         disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -400,7 +400,7 @@ export function DesignDashboard() {
             onChange={e => setUrl(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') runAnalysis() }}
             placeholder="https://example.com"
-            className="flex-1 bg-transparent text-sm text-black outline-none placeholder:text-body/50 dark:text-white"
+            className="flex-1 bg-transparent text-sm text-black outline-none placeholder:text-body/50 dark:text-[#E2E5E9]"
           />
           {loading && (
             <svg className="h-4 w-4 shrink-0 animate-spin text-[#7C3AED]" fill="none" viewBox="0 0 24 24">
@@ -446,7 +446,7 @@ export function DesignDashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
             </svg>
           </div>
-          <h3 className="text-base font-semibold text-black dark:text-white">No analysis yet</h3>
+          <h3 className="text-base font-semibold text-black dark:text-[#E2E5E9]">No analysis yet</h3>
           <p className="mt-1 text-sm text-body dark:text-bodydark">
             Select a client and click <strong>Analyze</strong> to run PageSpeed Insights
           </p>
@@ -501,7 +501,7 @@ export function DesignDashboard() {
           {/* Core Web Vitals */}
           <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
             <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
-              <h3 className="font-semibold text-black dark:text-white">Core Web Vitals</h3>
+              <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Core Web Vitals</h3>
               <p className="mt-0.5 text-xs text-body dark:text-bodydark">
                 Google ranking signals · Mobile strategy · {psi.auditedUrl ?? url}
               </p>
@@ -523,7 +523,7 @@ export function DesignDashboard() {
             {/* Mobile Usability */}
             <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
               <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
-                <h3 className="font-semibold text-black dark:text-white">Mobile Usability</h3>
+                <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Mobile Usability</h3>
                 <p className="mt-0.5 text-xs text-body dark:text-bodydark">Google mobile-friendly assessment</p>
               </div>
               <div className="p-6">
@@ -573,14 +573,14 @@ export function DesignDashboard() {
             {/* CWV Thresholds reference */}
             <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
               <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
-                <h3 className="font-semibold text-black dark:text-white">Google CWV Thresholds</h3>
+                <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Google CWV Thresholds</h3>
                 <p className="mt-0.5 text-xs text-body dark:text-bodydark">Official passing criteria for Core Web Vitals</p>
               </div>
               <div className="divide-y divide-stroke px-6 dark:divide-strokedark">
                 {CWV_METRICS.map(({ key, label, good, poor, format, desc }) => (
                   <div key={key} className="flex items-center justify-between py-3.5">
                     <div>
-                      <p className="text-sm font-semibold text-black dark:text-white">{label}</p>
+                      <p className="text-sm font-semibold text-black dark:text-[#E2E5E9]">{label}</p>
                       <p className="text-xs text-body dark:text-bodydark">{desc}</p>
                     </div>
                     <div className="text-right space-y-0.5">

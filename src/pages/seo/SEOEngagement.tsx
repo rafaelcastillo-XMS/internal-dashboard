@@ -71,7 +71,7 @@ function EngagementTable({ pages }: { pages: PageRow[] }) {
     <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stroke px-6 py-5 dark:border-strokedark">
         <div>
-          <h3 className="text-lg font-semibold text-black dark:text-white">Top Pages — Engagement</h3>
+          <h3 className="text-lg font-semibold text-black dark:text-[#E2E5E9]">Top Pages — Engagement</h3>
           <p className="mt-0.5 text-sm text-body dark:text-bodydark">Google Analytics 4 · {filtered.length} pages</p>
         </div>
         <div className="relative">
@@ -79,7 +79,7 @@ function EngagementTable({ pages }: { pages: PageRow[] }) {
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
           <input type="text" placeholder="Filter pages…" value={filter} onChange={(e) => setFilter(e.target.value)}
-                 className="w-48 rounded-lg border border-stroke bg-transparent py-2 pl-9 pr-4 text-sm text-black outline-none focus:border-[#1A72D9] dark:border-strokedark dark:bg-[#1d2a39] dark:text-white" />
+                 className="w-48 rounded-lg border border-stroke bg-transparent py-2 pl-9 pr-4 text-sm text-black outline-none focus:border-[#1A72D9] dark:border-strokedark dark:bg-[#1d2a39] dark:text-[#E2E5E9]" />
         </div>
       </div>
       <div className="max-h-[520px] overflow-auto">
@@ -106,9 +106,9 @@ function EngagementTable({ pages }: { pages: PageRow[] }) {
                 <tr key={row.page} className="group transition-colors hover:bg-gray-2 dark:hover:bg-meta-4">
                   <td className="px-4 py-3.5 text-xs text-body dark:text-bodydark tabular-nums">{i + 1}</td>
                   <td className="max-w-[300px] px-4 py-3.5">
-                    <span className="block truncate font-medium text-black dark:text-white group-hover:text-[#1A72D9] transition-colors" title={row.page}>{row.page}</span>
+                    <span className="block truncate font-medium text-black dark:text-[#E2E5E9] group-hover:text-[#1A72D9] transition-colors" title={row.page}>{row.page}</span>
                   </td>
-                  <td className="px-4 py-3.5 text-right tabular-nums font-semibold text-black dark:text-white">{(row.engagedSessions ?? 0).toLocaleString()}</td>
+                  <td className="px-4 py-3.5 text-right tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{(row.engagedSessions ?? 0).toLocaleString()}</td>
                   <td className="px-4 py-3.5 text-right tabular-nums text-body dark:text-bodydark">{fmtDuration(row.avgEngageTime ?? 0)}</td>
                   <td className="px-4 py-3.5 text-right tabular-nums text-body dark:text-bodydark">{(row.eventCount ?? 0).toLocaleString()}</td>
                   <td className="px-4 py-3.5 text-right">
@@ -158,7 +158,7 @@ export function SEOEngagement() {
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">GA4 Engagement</h1>
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">GA4 Engagement</h1>
           <p className="text-sm text-body dark:text-bodydark">
             Page-level engagement metrics · {state.lastUpdated ? `Updated ${state.lastUpdated.toLocaleTimeString()}` : 'Loading data…'}
           </p>

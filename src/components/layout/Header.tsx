@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Sparkles, Moon, Sun, ChevronDown, Bug, X, LogOut, User, ArrowUp, PanelLeft, MoreVertical } from "lucide-react"
+import { Sparkles, Moon, Sun, ChevronDown, X, LogOut, User, ArrowUp, PanelLeft, MoreVertical } from "lucide-react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useTheme } from "@/context/useTheme"
@@ -17,7 +17,6 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
     const { collapsed, toggle: toggleSidebar, toggleMobile } = useSidebar()
     const navigate = useNavigate()
     const { pathname } = useLocation()
-    const isSEO = pathname.startsWith('/seo') || pathname.startsWith('/sem') || pathname.startsWith('/social')
 
     const [userName, setUserName] = useState("Rafael A.")
     const [userAvatar, setUserAvatar] = useState("")
@@ -39,15 +38,11 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
 
     const [dropdownOpen, setDropdownOpen] = useState(false)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-    const [bugOpen, setBugOpen] = useState(false)
-    const [bugText, setBugText] = useState("")
-    const [bugSent, setBugSent] = useState(false)
     const [aiOpen, setAiOpen] = useState(false)
     const [aiQuery, setAiQuery] = useState("")
     const [aiResponse, setAiResponse] = useState("")
     const [aiLoading, setAiLoading] = useState(false)
     const aiInputRef = useRef<HTMLTextAreaElement>(null)
-    const bugTextareaRef = useRef<HTMLTextAreaElement>(null)
     const dropdownRef = useRef<HTMLDivElement>(null)
     const mobileMenuRef = useRef<HTMLDivElement>(null)
 
@@ -65,10 +60,6 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
     }, [])
 
     useEffect(() => {
-        if (bugOpen) setTimeout(() => bugTextareaRef.current?.focus(), 80)
-    }, [bugOpen])
-
-    useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "k") {
                 e.preventDefault()
@@ -76,32 +67,12 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
             }
             if (e.key === "Escape") {
                 setAiOpen(false)
-                setBugOpen(false)
                 setMobileMenuOpen(false)
             }
         }
         document.addEventListener("keydown", handleKeyDown)
         return () => document.removeEventListener("keydown", handleKeyDown)
     }, [])
-
-    const handleSendBug = async () => {
-        if (!bugText.trim()) return
-        const { data: { session } } = await supabase.auth.getSession()
-        const { error } = await supabase.from("bug_reports").insert({
-            description: bugText,
-            user_email: session?.user?.email ?? null,
-            created_at: new Date().toISOString(),
-        })
-        if (error) {
-            console.error("[BugReport] Failed to submit:", error.message)
-        }
-        setBugSent(true)
-        setTimeout(() => {
-            setBugOpen(false)
-            setBugText("")
-            setBugSent(false)
-        }, 1800)
-    }
 
     const handleAskAI = async () => {
         if (!aiQuery.trim() || aiLoading) return
@@ -165,40 +136,26 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
 
     return (
         <>
-            <header className="h-16 border-b border-[var(--sidebar-border)] bg-[var(--bg-surface)]/90 backdrop-blur-md flex items-center px-6 justify-between shrink-0 shadow-sm z-[100] sticky top-0">
+            <header className="h-16 bg-white/90 dark:bg-[#1C2438]/90 backdrop-blur-md border-b border-[var(--sidebar-border)] flex items-center px-6 justify-between shrink-0 z-[100] sticky top-0">
                 <div className="flex items-center gap-2">
                     {/* Sidebar toggle - Mobile */}
-                    {(!isSEO || onMobileMenuClick) && (
-                        <button
-                            onClick={onMobileMenuClick ?? toggleMobile}
-                            aria-label="Toggle mobile sidebar"
-                            className="lg:hidden p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        >
-                            <PanelLeft className="w-5 h-5" />
-                        </button>
-                    )}
-
-                    {/* Sidebar toggle - Desktop (hidden on SEO routes) */}
-                    {!isSEO && (
-                        <button
-                            onClick={toggleSidebar}
-                            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                            className="hidden lg:flex p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        >
-                            <PanelLeft className="w-5 h-5" />
-                        </button>
-                    )}
-
-                    {/* AI Assistant button */}
                     <button
-                        onClick={openAI}
-                        className="flex h-10 items-center gap-2.5 rounded-full border border-blue-100 bg-gradient-to-r from-blue-50 to-violet-50 pl-3.5 pr-4 text-[var(--text-muted)] transition-all group hover:border-[var(--brand-accent-subtle-border)] hover:text-[var(--brand-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-blue-800/50 dark:from-blue-900/20 dark:to-violet-900/20"
-                        aria-label="Ask AI"
+                        onClick={onMobileMenuClick ?? toggleMobile}
+                        aria-label="Toggle mobile sidebar"
+                        className="lg:hidden p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     >
-                        <Sparkles className="w-4 h-4 text-blue-500 group-hover:text-blue-600 transition-colors" />
-                        <span className="text-sm text-[var(--text-muted)] group-hover:text-[var(--brand-accent)] transition-colors">Ask AI anything...</span>
-                        <span className="hidden sm:inline-flex items-center gap-1 ml-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-500 dark:text-blue-400">⌘K</span>
+                        <PanelLeft className="w-5 h-5" />
                     </button>
+
+                    {/* Sidebar toggle - Desktop */}
+                    <button
+                        onClick={toggleSidebar}
+                        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        className="hidden lg:flex p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
+                        <PanelLeft className="w-5 h-5" />
+                    </button>
+
                 </div>
 
                 <div className="flex items-center gap-1">
@@ -217,17 +174,17 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                             )}
                         </button>
 
-                        {/* Bug report button */}
+                        {/* My Profile button */}
                         <div className="relative group">
                             <button
-                                onClick={() => setBugOpen(true)}
-                                aria-label="Report a bug"
+                                onClick={() => navigate("/profile")}
+                                aria-label="My Profile"
                                 className="p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                                <Bug className="w-5 h-5" />
+                                <User className="w-5 h-5" />
                             </button>
                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2.5 py-1 bg-[var(--text-primary)] text-[var(--bg-surface)] text-[11px] font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-lg z-50">
-                                Report a bug
+                                My Profile
                                 <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[var(--text-primary)] rotate-45" />
                             </div>
                         </div>
@@ -263,11 +220,11 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                                             </span>
                                         </button>
                                         <button
-                                            onClick={() => { setBugOpen(true); setMobileMenuOpen(false); }}
+                                            onClick={() => { navigate("/profile"); setMobileMenuOpen(false); }}
                                             className="w-full px-4 py-2.5 text-sm text-left flex items-center gap-2 text-[var(--text-secondary)] hover:bg-[var(--hover-bg)]"
                                         >
-                                            <Bug className="w-4 h-4" />
-                                            Report a bug
+                                            <User className="w-4 h-4" />
+                                            My Profile
                                         </button>
                                     </div>
                                 </motion.div>
@@ -440,96 +397,6 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                 }
             </AnimatePresence >
 
-            {/* Bug report modal */}
-            <AnimatePresence>
-                {
-                    bugOpen && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-                            onClick={e => { if (e.target === e.currentTarget) setBugOpen(false) }}
-                        >
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95, y: 8 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.95, y: 8 }}
-                                transition={{ duration: 0.2 }}
-                                role="dialog"
-                                aria-modal="true"
-                                aria-label="Report a bug"
-                                className="bg-[var(--bg-raised)] rounded-2xl shadow-2xl w-full max-w-md border border-[var(--border)] overflow-hidden"
-                            >
-                                <div className="p-6">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2.5">
-                                            <div className="w-9 h-9 bg-[var(--brand-accent-subtle)] rounded-xl flex items-center justify-center">
-                                                <Bug className="w-5 h-5 text-[var(--brand-accent)]" />
-                                            </div>
-                                            <div>
-                                                <h2 className="font-semibold text-[var(--text-primary)] text-sm">Report a Bug</h2>
-                                                <p className="text-[11px] text-[var(--text-muted)]">Help us improve XMS</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => setBugOpen(false)}
-                                            className="p-1.5 rounded-lg hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </div>
-
-                                    {bugSent ? (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 8 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="py-8 text-center"
-                                        >
-                                            <div className="w-14 h-14 bg-[var(--success-bg)] rounded-full flex items-center justify-center mx-auto mb-3">
-                                                <svg className="w-7 h-7 text-[var(--success)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                </svg>
-                                            </div>
-                                            <p className="font-semibold text-[var(--text-primary)] text-sm">Report sent!</p>
-                                            <p className="text-xs text-[var(--text-muted)] mt-1">Our support team will review it shortly.</p>
-                                        </motion.div>
-                                    ) : (
-                                        <>
-                                            <p className="text-sm text-[var(--text-muted)] mb-4">
-                                                Describe the issue you encountered and our support team will work on a fix.
-                                            </p>
-                                            <textarea
-                                                ref={bugTextareaRef}
-                                                value={bugText}
-                                                onChange={e => setBugText(e.target.value)}
-                                                placeholder="What went wrong? What did you expect to happen?"
-                                                rows={5}
-                                                className="w-full text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-primary)] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4 placeholder:text-[var(--text-muted)]"
-                                            />
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={handleSendBug}
-                                                    disabled={!bugText.trim()}
-                                                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
-                                                >
-                                                    Send Report
-                                                </button>
-                                                <button
-                                                    onClick={() => setBugOpen(false)}
-                                                    className="px-4 py-2.5 rounded-xl text-sm font-medium border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] transition-colors"
-                                                >
-                                                    Cancel
-                                                </button>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </motion.div>
-                        </motion.div>
-                    )
-                }
-            </AnimatePresence >
         </>
     )
 }

@@ -98,7 +98,7 @@ export function QueryRankingsTable({ rows = [], pageSize = 15 }: { rows?: QueryR
       <div className="flex flex-wrap items-center justify-between gap-3
                       border-b border-stroke px-6 py-5 dark:border-strokedark">
         <div>
-          <h3 className="text-lg font-semibold text-black dark:text-white">
+          <h3 className="text-lg font-semibold text-black dark:text-[#E2E5E9]">
             Keyword &amp; Query Rankings
           </h3>
           <p className="mt-0.5 text-sm text-body dark:text-bodydark">
@@ -120,7 +120,7 @@ export function QueryRankingsTable({ rows = [], pageSize = 15 }: { rows?: QueryR
             className="w-48 rounded-lg border border-stroke bg-transparent
                        py-2 pl-9 pr-4 text-sm text-black outline-none
                        focus:border-[#1A72D9] dark:border-strokedark
-                       dark:bg-[#1d2a39] dark:text-white"
+                       dark:bg-[#1d2a39] dark:text-[#E2E5E9]"
           />
         </div>
       </div>
@@ -150,12 +150,12 @@ export function QueryRankingsTable({ rows = [], pageSize = 15 }: { rows?: QueryR
                 <tr key={row.query} className="group transition-colors hover:bg-gray-2 dark:hover:bg-meta-4">
                   <td className="px-4 py-3.5 text-xs text-body dark:text-bodydark tabular-nums w-8">{globalRank}</td>
                   <td className="max-w-[280px] px-4 py-3.5">
-                    <span className="block truncate font-medium text-black dark:text-white
+                    <span className="block truncate font-medium text-black dark:text-[#E2E5E9]
                                      group-hover:text-[#1A72D9] transition-colors" title={row.query}>
                       {row.query}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5 text-right tabular-nums font-semibold text-black dark:text-white">
+                  <td className="px-4 py-3.5 text-right tabular-nums font-semibold text-black dark:text-[#E2E5E9]">
                     {row.clicks.toLocaleString()}
                   </td>
                   <td className="px-4 py-3.5 text-right tabular-nums text-body dark:text-bodydark">

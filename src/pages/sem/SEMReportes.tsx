@@ -95,12 +95,12 @@ function EditableCell({ value, onChange }: { value: number; onChange: (v: number
       onChange={e => setRaw(e.target.value)}
       onBlur={e => commit(e.target.value)}
       onKeyDown={e => { if (e.key === 'Enter') commit(raw) }}
-      className="w-24 rounded border border-[#16a34a] bg-white px-2 py-1 text-xs tabular-nums outline-none dark:bg-boxdark dark:text-white"
+      className="w-24 rounded border border-[#16a34a] bg-white px-2 py-1 text-xs tabular-nums outline-none dark:bg-boxdark dark:text-[#E2E5E9]"
     />
   )
   return (
     <button onClick={start} title="Click to edit"
-      className="group flex items-center gap-1 rounded px-1 py-0.5 text-left tabular-nums hover:bg-[#16a34a]/10 transition-colors text-xs font-medium text-black dark:text-white"
+      className="group flex items-center gap-1 rounded px-1 py-0.5 text-left tabular-nums hover:bg-[#16a34a]/10 transition-colors text-xs font-medium text-black dark:text-[#E2E5E9]"
     >
       {value > 0
         ? `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -133,13 +133,13 @@ function DateRangePicker({
       <input
         type="date" value={from} max={to}
         onChange={e => onChange(e.target.value, to)}
-        className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-white"
+        className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
       />
       <span className="text-xs text-body dark:text-bodydark">To</span>
       <input
         type="date" value={to} min={from} max={today}
         onChange={e => onChange(from, e.target.value)}
-        className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-white"
+        className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
       />
     </div>
   )
@@ -195,7 +195,7 @@ function BudgetTableSection({
             return (
               <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                 <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
-                <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-white" title={a.name}>{a.name}</td>
+                <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={a.name}>{a.name}</td>
                 <td className="px-5 py-4"><EditableCell value={b.budget} onChange={v => onUpdate(a.id, v)} /></td>
                 <td className="px-5 py-4 tabular-nums font-medium text-red-500">
                   {pendingCost
@@ -206,16 +206,16 @@ function BudgetTableSection({
                 <td className={`px-5 py-4 tabular-nums font-semibold ${remNeg ? 'text-red-500' : remaining !== null ? 'text-meta-3' : 'text-body dark:text-bodydark'}`}>
                   {remaining !== null ? fmtCurrency(remaining) : <span className="opacity-40">—</span>}
                 </td>
-                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">
                   {remaining !== null ? fmtCurrency(remaining / 22) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
                 </td>
-                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">
                   {remaining !== null ? fmtCurrency(remaining / 12) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
                 </td>
-                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">
                   {remaining !== null ? fmtCurrency(remaining / 6) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
                 </td>
-                <td className="px-5 py-4 tabular-nums text-black dark:text-white">
+                <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">
                   {remaining !== null ? fmtCurrency(remaining / 2) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
                 </td>
               </tr>
@@ -259,7 +259,7 @@ function KpiCard({
           {icon}
         </div>
       </div>
-      <p className="text-2xl font-bold tabular-nums text-black dark:text-white">{value}</p>
+      <p className="text-2xl font-bold tabular-nums text-black dark:text-[#E2E5E9]">{value}</p>
       {sub && <p className="mt-1 text-[11px] text-body dark:text-bodydark">{sub}</p>}
     </div>
   )
@@ -309,7 +309,7 @@ function GuaranteeAnalyticsCards({ accounts }: { accounts: AdsAccount[] }) {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-sm font-bold text-black dark:text-white">
+          <h3 className="flex items-center gap-2 text-sm font-bold text-black dark:text-[#E2E5E9]">
             <span className="h-2 w-2 rounded-full bg-[#3b82f6]" />
             Google Guarantee Analytics
           </h3>
@@ -319,11 +319,11 @@ function GuaranteeAnalyticsCards({ accounts }: { accounts: AdsAccount[] }) {
         </div>
         <div className="flex items-center gap-2">
           <select value={accountId} onChange={e => setAccountId(e.target.value)}
-            className="h-8 max-w-[220px] truncate rounded-lg border border-stroke bg-white px-3 text-xs font-medium outline-none hover:border-[#3b82f6] focus:border-[#3b82f6] dark:border-strokedark dark:bg-boxdark dark:text-white">
+            className="h-8 max-w-[220px] truncate rounded-lg border border-stroke bg-white px-3 text-xs font-medium outline-none hover:border-[#3b82f6] focus:border-[#3b82f6] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
           <select value={year} onChange={e => setYear(e.target.value)}
-            className="h-8 rounded-lg border border-stroke bg-white px-3 text-xs font-medium outline-none hover:border-[#3b82f6] focus:border-[#3b82f6] dark:border-strokedark dark:bg-boxdark dark:text-white">
+            className="h-8 rounded-lg border border-stroke bg-white px-3 text-xs font-medium outline-none hover:border-[#3b82f6] focus:border-[#3b82f6] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             {['2024','2025','2026'].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           {loading && (
@@ -483,7 +483,7 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
               </svg>
             </div>
             <div>
-              <h2 className="text-sm font-bold text-black dark:text-white">Send Report by Email</h2>
+              <h2 className="text-sm font-bold text-black dark:text-[#E2E5E9]">Send Report by Email</h2>
               <p className="text-[11px] text-body dark:text-bodydark">{label}</p>
             </div>
           </div>
@@ -513,16 +513,16 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
         ) : (
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-white">Recipient Email <span className="text-red-400">*</span></label>
+              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-[#E2E5E9]">Recipient Email <span className="text-red-400">*</span></label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@example.com"
-                className="w-full rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-white dark:focus:border-[#16a34a]" />
+                className="w-full rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-[#E2E5E9] dark:focus:border-[#16a34a]" />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-white">
+              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-[#E2E5E9]">
                 Schedule Date & Time <span className="font-normal text-body dark:text-bodydark">(optional)</span>
               </label>
               <input type="datetime-local" value={scheduled} onChange={e => setScheduled(e.target.value)}
-                className="w-full rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-white dark:focus:border-[#16a34a]" />
+                className="w-full rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-[#E2E5E9] dark:focus:border-[#16a34a]" />
               {scheduled && (
                 <p className="mt-1.5 flex items-center gap-1 text-[11px] text-[#16a34a]">
                   <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -533,15 +533,15 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
               )}
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-white">
+              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-[#E2E5E9]">
                 Note <span className="font-normal text-body dark:text-bodydark">(optional)</span>
               </label>
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Any message to add to the email…"
-                className="w-full resize-none rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-white dark:focus:border-[#16a34a]" />
+                className="w-full resize-none rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-[#E2E5E9] dark:focus:border-[#16a34a]" />
             </div>
             <div className="rounded-lg border border-stroke bg-gray-2 px-3.5 py-3 dark:border-strokedark dark:bg-meta-4">
               <p className="text-[11px] text-body dark:text-bodydark">
-                <span className="font-semibold text-black dark:text-white">Report included:</span> the table data will be pasted in the email body, ready to send from your email client.
+                <span className="font-semibold text-black dark:text-[#E2E5E9]">Report included:</span> the table data will be pasted in the email body, ready to send from your email client.
               </p>
             </div>
             <div className="flex items-center justify-end gap-3 pt-1">
@@ -642,7 +642,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
           <button onClick={() => setEmailPayload({ kind: 'weekly', dateLabel, adsRows: buildRows(), guaranteeRows: [] })}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
                        transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
-                       dark:border-strokedark dark:bg-boxdark dark:text-white">
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
             </svg>
@@ -651,7 +651,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
           <button onClick={handleExport} disabled={exporting}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
                        transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
-                       dark:border-strokedark dark:bg-boxdark dark:text-white">
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
@@ -762,7 +762,7 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
               return (
                 <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                   <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
-                  <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-white" title={a.name}>{a.name}</td>
+                  <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={a.name}>{a.name}</td>
                   <td className="px-5 py-4"><EditableCell value={budget} onChange={v => updateGg(a.id, v)} /></td>
                   <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">
                     {loadingPeriod ? <span className="text-xs italic opacity-50">Loading…</span> : spend > 0 ? fmtCurrency(spend) : <span className="opacity-40">—</span>}
@@ -881,12 +881,12 @@ function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
         <div className="flex items-center gap-2">
           <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}
             className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none
-                       focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-white">
+                       focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
           </select>
           <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
             className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none
-                       focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-white">
+                       focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           {loadingMonth && (
@@ -900,7 +900,7 @@ function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
           <button onClick={() => setEmailPayload({ kind: 'monthly', monthLabel: `${MONTH_NAMES[selectedMonth]} ${selectedYear}`, rows: buildMonthlyRows() })}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
                        transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
-                       dark:border-strokedark dark:bg-boxdark dark:text-white">
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
             </svg>
@@ -909,7 +909,7 @@ function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
           <button onClick={handleExport} disabled={exporting}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
                        transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
-                       dark:border-strokedark dark:bg-boxdark dark:text-white">
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
@@ -939,7 +939,7 @@ function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
               return (
                 <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                   <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
-                  <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-white" title={a.name}>{a.name}</td>
+                  <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={a.name}>{a.name}</td>
                   <td className="px-5 py-4"><EditableCell value={budget} onChange={v => updateBudget(a.id, v)} /></td>
                   <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{spend > 0 ? fmtCurrency(spend) : <span className="opacity-40">—</span>}</td>
                   <td className={`px-5 py-4 tabular-nums font-semibold ${remNeg ? 'text-red-500' : remaining !== null ? 'text-meta-3' : 'text-body dark:text-bodydark'}`}>
@@ -1011,7 +1011,7 @@ export function SEMReportes() {
   return (
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-black dark:text-white">
+        <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">
           Reports
           <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#16a34a]/20 text-[#16a34a] align-middle">
             SEM Intelligence
@@ -1032,7 +1032,7 @@ export function SEMReportes() {
           <button key={t.id} onClick={() => setActiveTab(t.id)}
             className={`rounded-lg px-5 py-2 text-sm font-semibold transition-all duration-150
               ${activeTab === t.id
-                ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-white'
+                ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-[#E2E5E9]'
                 : 'text-body hover:text-black dark:text-bodydark dark:hover:text-white'
               }`}
           >

@@ -209,7 +209,7 @@ export function SEMKeywords() {
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">Keywords</h1>
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Keywords</h1>
           <p className="text-sm text-body dark:text-bodydark">
             Google Ads · {state.dateRange.startDate
               ? formatDateLabel(state.dateRange.startDate, state.dateRange.endDate)
@@ -265,7 +265,7 @@ export function SEMKeywords() {
       <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
         <div className="border-b border-stroke px-6 py-5 dark:border-strokedark flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-black dark:text-white">Top Keywords</h3>
+            <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Top Keywords</h3>
             <p className="mt-0.5 text-xs text-body dark:text-bodydark">Top 100 by spend · Click column headers to sort</p>
           </div>
           {!state.loading && keywords.length > 0 && (
@@ -320,14 +320,14 @@ export function SEMKeywords() {
               <tbody className="divide-y divide-stroke dark:divide-strokedark">
                 {paginated.map((kw, i) => (
                   <tr key={`${kw.text}-${kw.match_type}-${i}`} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
-                    <td className="max-w-[200px] truncate px-5 py-4 font-medium text-black dark:text-white" title={kw.text}>{kw.text}</td>
+                    <td className="max-w-[200px] truncate px-5 py-4 font-medium text-black dark:text-[#E2E5E9]" title={kw.text}>{kw.text}</td>
                     <td className="px-5 py-4"><MatchTypeBadge type={kw.match_type} /></td>
                     <td className="px-5 py-4"><QualityScore score={kw.quality_score} /></td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(kw.impressions)}</td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(kw.clicks)}</td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(kw.ctr, 2)}%</td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmtCurrency(kw.avg_cpc)}</td>
-                    <td className="px-5 py-4 tabular-nums font-semibold text-black dark:text-white">{fmtCurrency(kw.cost)}</td>
+                    <td className="px-5 py-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{fmtCurrency(kw.cost)}</td>
                     <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(kw.conversions, 1)}</td>
                   </tr>
                 ))}

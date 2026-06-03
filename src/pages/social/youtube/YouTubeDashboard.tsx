@@ -97,7 +97,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
   return (
     <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
       <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-        <h3 className="font-semibold text-black dark:text-white">{title}</h3>
+        <h3 className="font-semibold text-black dark:text-[#E2E5E9]">{title}</h3>
       </div>
       <div className="p-6">{children}</div>
     </div>
@@ -120,11 +120,11 @@ function VideoTable({ videos }: { videos: typeof MOCK_VIDEOS }) {
         <tbody className="divide-y divide-stroke dark:divide-strokedark">
           {videos.map(v => (
             <tr key={v.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
-              <td className="max-w-[260px] truncate py-3.5 pr-4 font-medium text-black dark:text-white" title={v.title}>{v.title}</td>
+              <td className="max-w-[260px] truncate py-3.5 pr-4 font-medium text-black dark:text-[#E2E5E9]" title={v.title}>{v.title}</td>
               <td className="whitespace-nowrap py-3.5 px-4 text-body dark:text-bodydark">
                 {new Date(v.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
               </td>
-              <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-white">{fmt(v.views)}</td>
+              <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{fmt(v.views)}</td>
               <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{fmt(v.likes)}</td>
               <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{v.dislikes}</td>
               <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{v.comments}</td>
@@ -293,7 +293,7 @@ export function YouTubeDashboard() {
                 <tbody className="divide-y divide-stroke dark:divide-strokedark">
                   {COMPETITORS.map(c => (
                     <tr key={c.name} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
-                      <td className="py-3.5 pr-4 font-semibold text-black dark:text-white first:pl-0">
+                      <td className="py-3.5 pr-4 font-semibold text-black dark:text-[#E2E5E9] first:pl-0">
                         <div className="flex items-center gap-2">
                           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/20 text-xs font-bold text-red-600">
                             {c.name.charAt(0)}
@@ -301,7 +301,7 @@ export function YouTubeDashboard() {
                           {c.name}
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-white">{c.videoViews > 0 ? fmt(c.videoViews) : '0'}</td>
+                      <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{c.videoViews > 0 ? fmt(c.videoViews) : '0'}</td>
                       <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{c.subscribers > 0 ? fmt(c.subscribers) : '0'}</td>
                       <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{c.videos}</td>
                       <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{c.likes > 0 ? c.likes.toFixed(1) : '0'}</td>

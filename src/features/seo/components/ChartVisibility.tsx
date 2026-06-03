@@ -125,7 +125,7 @@ export function ChartVisibility({
       <div className="flex flex-wrap items-start justify-between gap-3
                       border-b border-stroke px-6 py-5 dark:border-strokedark">
         <div>
-          <h3 className="text-lg font-semibold text-black dark:text-white">
+          <h3 className="text-lg font-semibold text-black dark:text-[#E2E5E9]">
             Search Visibility vs. Action
           </h3>
           <p className="mt-0.5 text-sm text-body dark:text-bodydark">
@@ -170,7 +170,7 @@ export function ChartVisibility({
             <p className="text-[11px] uppercase tracking-wider text-body dark:text-bodydark">
               Total Impressions
             </p>
-            <p className="mt-0.5 text-lg font-bold text-black dark:text-white tabular-nums">
+            <p className="mt-0.5 text-lg font-bold text-black dark:text-[#E2E5E9] tabular-nums">
               {impressions.reduce((a, b) => a + b, 0).toLocaleString()}
             </p>
           </div>
@@ -178,7 +178,7 @@ export function ChartVisibility({
             <p className="text-[11px] uppercase tracking-wider text-body dark:text-bodydark">
               Total Clicks
             </p>
-            <p className="mt-0.5 text-lg font-bold text-black dark:text-white tabular-nums">
+            <p className="mt-0.5 text-lg font-bold text-black dark:text-[#E2E5E9] tabular-nums">
               {clicks.reduce((a, b) => a + b, 0).toLocaleString()}
             </p>
           </div>

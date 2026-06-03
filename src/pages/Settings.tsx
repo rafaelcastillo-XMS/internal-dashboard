@@ -11,7 +11,7 @@ export function Settings() {
         <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">
             <div className="mx-auto max-w-screen-2xl p-6 space-y-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Settings</h1>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9]">Settings</h1>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Dashboard preferences and integrations</p>
                 </div>
 
@@ -20,7 +20,7 @@ export function Settings() {
                     className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden"
                 >
                     <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700">
-                        <h2 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                        <h2 className="font-semibold text-slate-900 dark:text-[#E2E5E9] flex items-center gap-2">
                             <Puzzle className="w-4 h-4 text-slate-500" />
                             API Integrations
                         </h2>

@@ -1,0 +1,7 @@
+google-ads==24.1.0
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0
+google-api-python-client==2.127.0
+google-analytics-data==0.18.9
+google-analytics-admin==0.22.9
+reportlab==4.2.0

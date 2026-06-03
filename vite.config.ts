@@ -500,6 +500,51 @@ function seoDevPlugin() {
           return
         }
 
+        // Ahrefs snapshot — uses its own API key, no Google auth needed
+        if (req.url.startsWith("/api/seo/ahrefs-snapshot") && req.method === "GET") {
+          const ahrefsApiKey = process.env.AHREFS_API_KEY ?? ""
+          if (!ahrefsApiKey) {
+            sendJson(res, 503, { error: "AHREFS_API_KEY is not configured in .env" })
+            return
+          }
+          const { searchParams: sp } = new URL(req.url, "http://localhost")
+          const target = sp.get("target") ?? ""
+          if (!target) {
+            sendJson(res, 400, { error: "target param is required" })
+            return
+          }
+          const cleanTarget = target.replace(/^https?:\/\//, "").replace(/\/+$/, "").split("/")[0]
+          const date = new Date().toISOString().slice(0, 10)
+          try {
+            const ahrefsRes = await fetch(
+              `https://api.ahrefs.com/v3/site-explorer/overview?target=${encodeURIComponent(cleanTarget)}&date=${date}&mode=domain`,
+              { headers: { Authorization: `Bearer ${ahrefsApiKey}` } }
+            )
+            if (!ahrefsRes.ok) {
+              const errText = await ahrefsRes.text()
+              console.error("[seo-api/ahrefs]", ahrefsRes.status, errText)
+              sendJson(res, 502, { error: `Ahrefs API error: ${ahrefsRes.status}` })
+              return
+            }
+            const d = await ahrefsRes.json() as Record<string, unknown>
+            sendJson(res, 200, {
+              domain:            cleanTarget,
+              snapshot_date:     date,
+              domain_rating:     d.domain_rating     ?? null,
+              ahrefs_rank:       d.ahrefs_rank        ?? null,
+              organic_keywords:  d.org_keywords       ?? d.organic_keywords  ?? null,
+              organic_traffic:   d.org_traffic        ?? d.organic_traffic   ?? null,
+              backlinks:         d.backlinks          ?? null,
+              referring_domains: d.refdomains         ?? d.referring_domains ?? null,
+            })
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Ahrefs request failed"
+            console.error("[seo-api/ahrefs]", msg)
+            sendJson(res, 500, { error: msg })
+          }
+          return
+        }
+
         if (!(await enforceRequiredGoogleAccount(res, "SEO"))) return
 
         const { searchParams } = new URL(req.url, "http://localhost")
@@ -827,6 +872,7 @@ function mondayPlugin() {
           )
           const sessionEmail = url.searchParams.get("email") ?? ""
           const mondayEmail = emailMap[sessionEmail] ?? sessionEmail
+          const bust = url.searchParams.get("bust") === "1"
 
           async function mondayGraphQL(query: string, variables: Record<string, unknown> = {}) {
             const resp = await fetch("https://api.monday.com/v2", {
@@ -860,7 +906,8 @@ function mondayPlugin() {
               return
             }
 
-            // Serve from cache if fresh (5 min TTL)
+            // Serve from cache if fresh (5 min TTL); skip when client requests a bust
+            if (bust) mondayTaskCache.delete(user.id)
             const cached = mondayTaskCache.get(user.id)
             if (cached && Date.now() - cached.at < MONDAY_CACHE_TTL_MS) {
               sendJson(res, 200, cached.payload)
@@ -964,6 +1011,67 @@ function mondayPlugin() {
           return
         }
 
+        // GET /api/monday/tasks/:taskId — item detail + updates
+        if (/^\/api\/monday\/tasks\/\d+$/.test(url.pathname) && req.method === "GET") {
+          const taskId = url.pathname.split("/").pop()!
+          const mGQL = async (query: string, variables: Record<string, unknown> = {}) => {
+            const r = await fetch("https://api.monday.com/v2", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: mondayToken, "API-Version": "2024-01" },
+              body: JSON.stringify({ query, variables }),
+            })
+            if (!r.ok) throw new Error(`Monday API HTTP ${r.status}`)
+            const j = await r.json() as { data?: unknown; errors?: { message: string }[] }
+            if (j.errors?.length) throw new Error(j.errors.map((e: { message: string }) => e.message).join("; "))
+            return j.data
+          }
+          try {
+            const data = await mGQL(`
+              query GetItemDetail($ids: [ID!]) {
+                me { account { slug } }
+                items(ids: $ids, newest_first: true) {
+                  id name
+                  board { id name }
+                  updates(limit: 5) {
+                    id body created_at
+                    creator { name photo_thumb_small }
+                  }
+                }
+              }
+            `, { ids: [taskId] }) as {
+              me?: { account?: { slug?: string } }
+              items?: {
+                id: string; name: string;
+                board: { id: string; name: string };
+                updates: { id: string; body: string; created_at: string; creator: { name: string; photo_thumb_small: string } }[]
+              }[]
+            }
+            const item = data?.items?.[0] ?? null
+            if (!item) { sendJson(res, 404, { error: "Task not found" }); return }
+            const accountSlug = data?.me?.account?.slug ?? null
+            const boardId = item.board?.id ?? null
+            const mondayUrl = accountSlug && boardId
+              ? `https://${accountSlug}.monday.com/boards/${boardId}/pulses/${item.id}`
+              : null
+            sendJson(res, 200, {
+              id: item.id,
+              boardId,
+              boardName: item.board?.name ?? "Unknown Board",
+              mondayUrl,
+              updates: (item.updates ?? []).map(u => ({
+                id: u.id, body: u.body, createdAt: u.created_at,
+                creatorName: u.creator?.name ?? "Unknown",
+                creatorAvatar: u.creator?.photo_thumb_small ?? null,
+              })),
+            })
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Monday API error"
+            console.error("[monday-detail]", message)
+            sendJson(res, 500, { error: message })
+          }
+          return
+        }
+
         next()
       })
     },
@@ -977,7 +1085,12 @@ function aiPlugin() {
     name: "ai-api",
     configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
       server.middlewares.use(async (req, res, next) => {
-        if (req.url !== "/api/ai/ask" || req.method !== "POST") { next(); return }
+        const isAsk           = req.url === "/api/ai/ask"              && req.method === "POST"
+        const isInsight       = req.url === "/api/ai/task-insight"     && req.method === "POST"
+        const isSemInsight    = req.url === "/api/ai/sem-insights"     && req.method === "POST"
+        const isSeoInsight    = req.url === "/api/ai/seo-insights"     && req.method === "POST"
+        const isSocialInsight = req.url === "/api/ai/social-insights"  && req.method === "POST"
+        if (!isAsk && !isInsight && !isSemInsight && !isSeoInsight && !isSocialInsight) { next(); return }
 
         if (!process.env.ANTHROPIC_API_KEY) {
           sendJson(res, 503, { error: "ANTHROPIC_API_KEY not configured in .env" })
@@ -985,9 +1098,198 @@ function aiPlugin() {
         }
 
         try {
-          const body = await readJsonBody(req) as { query?: string; context?: unknown }
-          const { query, context } = body
+          const body = await readJsonBody(req) as Record<string, unknown>
 
+          // ── /api/ai/task-insight ──────────────────────────────────────────
+          if (isInsight) {
+            const task    = body.task    as Record<string, string> | undefined
+            const updates = body.updates as Array<Record<string, string>> | undefined
+            if (!task?.name) { sendJson(res, 400, { error: "task is required" }); return }
+
+            const today = new Date().toLocaleDateString("en-US", {
+              weekday: "long", year: "numeric", month: "long", day: "numeric",
+            })
+            const updatesText = updates?.length
+              ? updates.map(u =>
+                  `[${new Date(u.createdAt).toLocaleDateString()}] ${u.creatorName}: ${u.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()}`
+                ).join("\n")
+              : "No updates yet."
+
+            const userPrompt = `Task: "${task.name}"
+Status: ${task.status}
+Priority: ${task.priority ?? "Not set"}
+Due date: ${task.dueDate ?? "Not set"}
+Board: ${task.board}
+Today: ${today}
+
+Recent updates/comments:
+${updatesText}
+
+Based on this task context, what should I do RIGHT NOW to move this forward? Give me 2–4 immediate next steps.`
+
+            const msg = await anthropic.messages.create({
+              model: "claude-sonnet-4-6",
+              max_tokens: 512,
+              system: `You are XMS AI, embedded in a marketing agency dashboard. Analyze task details and give concise, actionable next-step recommendations.
+Respond in the same language as the task content (Spanish or English).
+Format: 2–4 bullet points using "·" as the bullet character. Each point = one clear immediate action.
+No intro sentence, no conclusion. Just the actions. Keep each bullet under 20 words.`,
+              messages: [{ role: "user", content: userPrompt }],
+            })
+            const text = msg.content.find(b => b.type === "text")?.text ?? ""
+            sendJson(res, 200, { insight: text })
+            return
+          }
+
+          // ── /api/ai/sem-insights ─────────────────────────────────────────
+          if (isSemInsight) {
+            const { accountName, summary, campaigns } = body as {
+              accountName?: string
+              summary?: Record<string, number>
+              campaigns?: Record<string, unknown>[]
+            }
+            if (!accountName) { sendJson(res, 400, { error: "accountName is required" }); return }
+
+            const campaignText = (campaigns ?? []).slice(0, 8).map(c =>
+              `• ${c.name}: ${Number(c.impressions).toLocaleString()} impr, ${c.clicks} clicks, ${Number(c.ctr).toFixed(2)}% CTR, $${Number(c.avg_cpc).toFixed(2)} CPC, $${Number(c.cost).toFixed(2)} spend, ${c.conversions} conv`
+            ).join("\n") || "No campaign data available"
+
+            const userPrompt = `Account: ${accountName}
+
+Performance Summary:
+• Impressions: ${Number(summary?.impressions ?? 0).toLocaleString()}
+• Clicks: ${Number(summary?.clicks ?? 0).toLocaleString()}
+• CTR: ${Number(summary?.ctr ?? 0).toFixed(2)}%
+• Avg CPC: $${Number(summary?.avg_cpc ?? 0).toFixed(2)}
+• Total Spend: $${Number(summary?.cost ?? 0).toFixed(2)}
+• Conversions: ${summary?.conversions ?? 0}
+• Cost per Conversion: ${(summary?.conversions ?? 0) > 0 ? "$" + Number(summary?.cost_per_conversion ?? 0).toFixed(2) : "N/A"}
+
+Top Campaigns by Spend:
+${campaignText}
+
+Provide 2-3 specific, data-driven action items per timeframe. Reference actual numbers from the data. Return ONLY valid JSON (no markdown, no explanation):
+{"short_term":[{"action":"...","impact":"high|medium|low"}],"medium_term":[{"action":"...","impact":"high|medium|low"}],"long_term":[{"action":"...","impact":"high|medium|low"}]}`
+
+            const semMsg = await anthropic.messages.create({
+              model: "claude-sonnet-4-6",
+              max_tokens: 1024,
+              system: `You are a senior Google Ads strategist with 10+ years of agency experience. Analyze SEM performance data and provide specific, data-driven action items for each timeframe:
+SHORT-TERM (7-14 days): immediate bid adjustments, budget reallocation, pausing underperformers.
+MEDIUM-TERM (30-60 days): A/B tests, audience refinements, ad copy experiments, keyword expansion.
+LONG-TERM (3-6 months): account restructuring, automation setup, campaign type diversification.
+Each action must cite specific metrics from the provided data. Always respond in English.
+Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
+              messages: [{ role: "user", content: userPrompt }],
+            })
+            const semText = semMsg.content.find(b => b.type === "text")?.text ?? "{}"
+            const cleaned = semText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
+            sendJson(res, 200, JSON.parse(cleaned))
+            return
+          }
+
+          // ── /api/ai/social-insights ──────────────────────────────────────
+          if (isSocialInsight) {
+            const { accountName, platforms, metrics, posts } = body as {
+              accountName?: string; platforms?: string[]
+              metrics?: Record<string, number>; posts?: Record<string, unknown>[]
+            }
+            if (!platforms?.length) { sendJson(res, 400, { error: "platforms is required" }); return }
+
+            const engagementRate = (metrics?.impresiones ?? 0) > 0
+              ? (((metrics?.interacciones ?? 0) / (metrics?.impresiones ?? 1)) * 100).toFixed(2)
+              : "0.00"
+            const topPosts = (posts ?? []).slice(0, 8).map(p =>
+              `• [${p.platform}] ${p.type} — "${p.title}": ${Number(p.impresiones).toLocaleString()} impr, ${p.interacciones} interactions`
+            ).join("\n") || "No post data"
+
+            const socialPrompt = `Account: ${accountName || "Social Media Account"}
+Active platforms: ${platforms.join(", ")}
+Followers: ${Number(metrics?.seguidores ?? 0).toLocaleString()}
+Impressions: ${Number(metrics?.impresiones ?? 0).toLocaleString()}
+Reach: ${Number(metrics?.alcance ?? 0).toLocaleString()}
+Interactions: ${Number(metrics?.interacciones ?? 0).toLocaleString()}
+Engagement Rate: ${engagementRate}%
+Profile Visits: ${Number(metrics?.visitasPerfil ?? 0).toLocaleString()}
+
+Top posts:
+${topPosts}
+
+Return ONLY valid JSON: {"short_term":[{"action":"...","impact":"high|medium|low"}],"medium_term":[...],"long_term":[]}`
+
+            const socialMsg = await anthropic.messages.create({
+              model: "claude-sonnet-4-6",
+              max_tokens: 1024,
+              system: `You are a senior social media strategist. Analyze performance data and provide 2-3 specific, data-driven action items per timeframe:
+SHORT-TERM (7-14 days): posting frequency, content format optimization, best times to post, engagement tactics.
+MEDIUM-TERM (30-60 days): content calendar, A/B testing, cross-platform repurposing, hashtag strategy.
+LONG-TERM (3-6 months): audience growth, brand voice, influencer collabs, platform-specific strategy.
+Cite specific numbers and platform names. Always respond in English.
+Return ONLY the JSON object. No markdown, no code fences.`,
+              messages: [{ role: "user", content: socialPrompt }],
+            })
+            const socialText = socialMsg.content.find(b => b.type === "text")?.text ?? "{}"
+            const socialClean = socialText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
+            sendJson(res, 200, JSON.parse(socialClean))
+            return
+          }
+
+          // ── /api/ai/seo-insights ─────────────────────────────────────────
+          if (isSeoInsight) {
+            const { clientName, gscSite, gsc, ga4, psiScore } = body as {
+              clientName?: string; gscSite?: string
+              gsc?: Record<string, unknown>; ga4?: Record<string, unknown>; psiScore?: number | null
+            }
+            if (!gscSite) { sendJson(res, 400, { error: "gscSite is required" }); return }
+
+            const displayName = clientName || String(gscSite).replace(/^https?:\/\//, "").replace(/\/$/, "")
+            const queries = (gsc?.queries as Record<string, unknown>[] | undefined ?? []).slice(0, 8)
+            const topQueries = queries.map(q =>
+              `• "${q.query}": ${q.clicks} clicks, ${q.impressions} impr, pos ${Number(q.position).toFixed(1)}, ${Number(Number(q.ctr) * 100).toFixed(1)}% CTR`
+            ).join("\n") || "No query data"
+            const pages = (ga4?.topPages as Record<string, unknown>[] | undefined ?? []).slice(0, 5)
+            const topPages = pages.map(p => `• ${p.page}${p.sessions ? `: ${p.sessions} sessions` : ""}`).join("\n") || "No page data"
+
+            const userPrompt = `Website: ${displayName} (${gscSite})
+
+Google Search Console:
+• Total Clicks: ${Number(gsc?.totalClicks ?? 0).toLocaleString()}
+• Total Impressions: ${Number(gsc?.totalImpressions ?? 0).toLocaleString()}
+• Avg. Position: ${Number(gsc?.avgPosition ?? 0).toFixed(1)}
+
+Top Queries:
+${topQueries}
+
+Google Analytics 4:
+• Engaged Sessions: ${Number(ga4?.engagedSessions ?? 0).toLocaleString()}
+• Conversion Rate: ${Number(ga4?.conversionRate ?? 0).toFixed(2)}%
+
+Top Pages:
+${topPages}
+
+${psiScore != null ? `PageSpeed Score (mobile): ${psiScore}/100` : ""}
+
+Return ONLY valid JSON: {"short_term":[{"action":"...","impact":"high|medium|low"}],"medium_term":[...],"long_term":[]}`
+
+            const seoMsg = await anthropic.messages.create({
+              model: "claude-sonnet-4-6",
+              max_tokens: 1024,
+              system: `You are a senior SEO strategist. Analyze organic search data and provide 2-3 specific, data-driven action items per timeframe:
+SHORT-TERM (7-14 days): meta descriptions for high-impression/low-CTR queries, internal linking, quick fixes.
+MEDIUM-TERM (30-60 days): content for near-first-page keywords, structured data, page speed.
+LONG-TERM (3-6 months): authority building, content clusters, Core Web Vitals, site architecture.
+Cite specific query names and numbers. Always respond in English.
+Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
+              messages: [{ role: "user", content: userPrompt }],
+            })
+            const seoText = seoMsg.content.find(b => b.type === "text")?.text ?? "{}"
+            const seoClean = seoText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
+            sendJson(res, 200, JSON.parse(seoClean))
+            return
+          }
+
+          // ── /api/ai/ask ───────────────────────────────────────────────────
+          const { query, context } = body as { query?: string; context?: unknown }
           if (!query?.trim()) {
             sendJson(res, 400, { error: "query is required" })
             return

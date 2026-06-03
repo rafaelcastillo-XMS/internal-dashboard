@@ -56,7 +56,7 @@ export function SEOMobile() {
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">Mobile Usability</h1>
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Mobile Usability</h1>
           <p className="text-sm text-body dark:text-bodydark">
             Google Search Console · Mobile-friendliness audit · {state.lastUpdated ? `Updated ${state.lastUpdated.toLocaleTimeString()}` : 'Loading data…'}
           </p>
@@ -91,7 +91,7 @@ export function SEOMobile() {
           <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
             <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-black dark:text-white">Detected Issues</h3>
+                <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Detected Issues</h3>
                 {issues.length > 0
                   ? <span className="rounded-full bg-danger/10 px-2 py-0.5 text-xs font-bold text-danger">{issues.length} issue{issues.length !== 1 ? 's' : ''}</span>
                   : <span className="rounded-full bg-meta-3/10 px-2 py-0.5 text-xs font-bold text-meta-3">None</span>}
@@ -112,7 +112,7 @@ export function SEOMobile() {
                       <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger/20">
                         <svg className="h-3 w-3 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                       </span>
-                      <span className="text-sm text-black dark:text-white">{issue}</span>
+                      <span className="text-sm text-black dark:text-[#E2E5E9]">{issue}</span>
                     </li>
                   ))}
                 </ul>
@@ -125,7 +125,7 @@ export function SEOMobile() {
         <div className="col-span-12 xl:col-span-7">
           <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark h-full">
             <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
-              <h3 className="font-semibold text-black dark:text-white">Mobile Best Practices</h3>
+              <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Mobile Best Practices</h3>
               <p className="mt-0.5 text-xs text-body dark:text-bodydark">Google's mobile usability requirements for search ranking</p>
             </div>
             <div className="divide-y divide-stroke px-6 dark:divide-strokedark">
@@ -141,7 +141,7 @@ export function SEOMobile() {
                         <svg className={`h-3.5 w-3.5 ${mobile.verdict ? 'text-meta-3' : 'text-body dark:text-bodydark'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
                       )}
                     </span>
-                    <p className={`text-sm ${isIssue ? 'text-danger' : 'text-black dark:text-white'}`}>{bp}</p>
+                    <p className={`text-sm ${isIssue ? 'text-danger' : 'text-black dark:text-[#E2E5E9]'}`}>{bp}</p>
                     {isIssue && <span className="ml-auto shrink-0 rounded px-2 py-0.5 text-[11px] font-bold bg-danger/10 text-danger">Issue</span>}
                   </div>
                 )

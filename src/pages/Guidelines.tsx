@@ -97,9 +97,89 @@ const PROMPT_CAT_ACCENT: Record<string, string> = {
 
 const FEATURED_PROMPTS = [
   {
+    id: "featured-approved-output",
+    title: "APPROVED OUTPUT — Skill Reinforcement Capture",
+    category: "General",
+    badge: { label: "Approved Outputs", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300", dot: "bg-emerald-500" },
+    tags: ["approved-output", "skill", "reinforcement"],
+    content: `# APPROVED OUTPUT — Skill Reinforcement Capture
+
+## Role
+You are a prompt-engineering analyst. Your sole task is to audit the full
+conversation history of this session and extract every instance where the user
+explicitly or implicitly approved, praised, or confirmed that the AI skill
+produced a correct, desirable, or high-quality output.
+
+## Instructions
+
+1. Read the ENTIRE conversation from the first message to this one.
+
+2. Identify every instance where the user:
+   - Explicitly approved a result ("perfect", "yes exactly", "great", "this is what I wanted")
+   - Accepted an output without requesting changes (implicit approval after reviewing)
+   - Asked the skill to REPEAT or KEEP doing something that worked
+   - Confirmed that a format, tone, or style was correct
+   - Validated a specific value, structure, or approach as the right one
+
+3. Deduplicate: if the same pattern was approved multiple times, log it once
+   and note it was recurring in the "trigger" field.
+
+4. For each approved output, write a clear, imperative rule in the
+   "suggested_rule" field — as if writing a positive reinforcement bullet
+   for the skill's system prompt (e.g. "Always use X format when Y").
+
+5. Consolidate all rules into a single ready-to-paste block in the
+   "suggested_prompt_reinforcement" field.
+
+## Output format
+
+Return ONLY the following JSON. No preamble, no explanation, no markdown
+fences. Raw JSON only.
+
+{
+  "skill_name": "",
+  "session_date": "",
+  "total_approvals": ,
+  "approvals": [
+    {
+      "id": 1,
+      "type": "",
+      "description": "",
+      "trigger": "",
+      "frequency": "",
+      "priority": "",
+      "suggested_rule": ""
+    }
+  ],
+  "suggested_prompt_reinforcement": ""
+}
+
+## Priority guidelines
+
+- HIGH   → The approval was repeated more than once, or the user expressed
+           strong satisfaction (e.g. 'always do this', 'exactly like this').
+- MEDIUM → The approval was given once and clearly intentional.
+- LOW    → Minor positive signal, casual acceptance, or single light mention.
+
+## Type values
+
+Use one of: "format" | "tone" | "style" | "structure" | "value" | "behavior" | "other"
+
+## Constraints
+
+- Output must be valid, parseable JSON.
+- Do not invent approvals that were not explicitly or clearly implicitly stated.
+- Do not include self-corrections or self-praise made by the AI.
+- Do not interpret silence as approval — only log observable positive signals
+  from the user.
+- If no approvals are found, return the JSON with total_approvals: 0
+  and an empty approvals array.`,
+  },
+  {
     id: "featured-error-log",
     title: "ERROR LOG — Skill Correction Capture",
     category: "General",
+    badge: { label: "Error Log", className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300", dot: "bg-red-500" },
     tags: ["error-log", "skill", "correction"],
     content: `# ERROR LOG — Skill Correction Capture
 
@@ -181,20 +261,13 @@ function save<T>(key: string, v: T) { try { localStorage.setItem(key, JSON.strin
 // ─── FeaturedPromptCard ───────────────────────────────────────────────────────
 
 function FeaturedPromptCard({ prompt }: { prompt: typeof FEATURED_PROMPTS[number] }) {
-  const accent = PROMPT_CAT_ACCENT[prompt.category] ?? "slate"
-  const styles = CATEGORY_STYLES[accent]
-
   return (
     <div className="rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800 p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-            Featured
-          </span>
-          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${styles.badge}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
-            {prompt.category}
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${prompt.badge.className}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${prompt.badge.dot}`} />
+            {prompt.badge.label}
           </span>
           {prompt.tags.map(tag => (
             <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-700/60 px-2 py-0.5 text-[10px] text-slate-500 dark:text-slate-400">
@@ -204,7 +277,7 @@ function FeaturedPromptCard({ prompt }: { prompt: typeof FEATURED_PROMPTS[number
         </div>
         <CopyButton text={prompt.content} />
       </div>
-      <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">{prompt.title}</h3>
+      <h3 className="text-sm font-semibold text-slate-900 dark:text-[#E2E5E9] mb-3">{prompt.title}</h3>
       <textarea
         readOnly
         value={prompt.content}
@@ -254,7 +327,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700/60">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-[#E2E5E9]">{title}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
             <X className="h-4 w-4" />
           </button>
@@ -277,7 +350,7 @@ function PromptForm({ initial, onSave, onClose }: {
   const [tags, setTags]         = useState(initial?.tags.join(", ") ?? "")
   const [content, setContent]   = useState(initial?.content ?? "")
 
-  const inputCls = "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
+  const inputCls = "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-[#E2E5E9] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -334,7 +407,7 @@ function GuidelineForm({ initial, onSave, onClose }: {
   const [title, setTitle]     = useState(initial?.title ?? "")
   const [content, setContent] = useState(initial?.content ?? "")
 
-  const inputCls = "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
+  const inputCls = "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-[#E2E5E9] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -404,7 +477,7 @@ function PromptCard({ prompt, index, onEdit, onDelete }: {
         </div>
       </div>
 
-      <h3 className="text-sm font-semibold text-slate-900 dark:text-white leading-snug">{prompt.title}</h3>
+      <h3 className="text-sm font-semibold text-slate-900 dark:text-[#E2E5E9] leading-snug">{prompt.title}</h3>
       <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-3 flex-1">{prompt.content}</p>
 
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60">
@@ -437,7 +510,7 @@ function GuidelineItem({ guideline, index, onEdit, onDelete }: {
     >
       <div className="flex items-start gap-3 p-4">
         <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-1.5">{guideline.title}</h4>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-[#E2E5E9] mb-1.5">{guideline.title}</h4>
           <p className={`text-xs text-slate-500 dark:text-slate-400 leading-relaxed whitespace-pre-wrap ${!expanded && isLong ? "line-clamp-3" : ""}`}>
             {guideline.content}
           </p>
@@ -486,7 +559,7 @@ function EmptyState({ icon: Icon, title, description, action }: {
         <Icon className="h-8 w-8 text-slate-400 dark:text-slate-500" />
       </div>
       <div>
-        <p className="font-semibold text-slate-900 dark:text-white">{title}</p>
+        <p className="font-semibold text-slate-900 dark:text-[#E2E5E9]">{title}</p>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-xs">{description}</p>
       </div>
       {action}
@@ -567,7 +640,7 @@ export function Guidelines() {
 
         {/* ── Page header ── */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Guidelines & Prompts</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9] tracking-tight">Guidelines & Prompts</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Team playbook and AI prompt library</p>
         </div>
 
@@ -612,7 +685,7 @@ export function Guidelines() {
                     placeholder="Search prompts…"
                     value={promptSearch}
                     onChange={e => setPromptSearch(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-sm text-slate-900 dark:text-[#E2E5E9] placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
                   />
                 </div>
 
@@ -722,7 +795,7 @@ export function Guidelines() {
                     <BookOpen className="h-8 w-8 text-slate-400 dark:text-slate-500" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900 dark:text-white">Guidelines coming soon</p>
+                    <p className="font-semibold text-slate-900 dark:text-[#E2E5E9]">Guidelines coming soon</p>
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-xs">
                       These guidelines are being set up and will be available shortly. Stay tuned.
                     </p>

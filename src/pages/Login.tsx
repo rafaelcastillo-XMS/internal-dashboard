@@ -74,7 +74,7 @@ export function Login() {
                             <XMSLogo mode={theme === "dark" ? "dark" : "light"} height={52} />
                         </div>
 
-                        <h1 className="text-2xl font-bold text-center text-slate-900 dark:text-white mb-1">
+                        <h1 className="text-2xl font-bold text-center text-slate-900 dark:text-[#E2E5E9] mb-1">
                             Welcome back
                         </h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400 text-center mb-8">
@@ -113,7 +113,7 @@ export function Login() {
                                         onChange={e => setEmail(e.target.value)}
                                         placeholder="you@xms-marketing.com"
                                         required
-                                        className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                        className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-[#E2E5E9] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                                     />
                                 </div>
                             </div>
@@ -148,7 +148,7 @@ export function Login() {
                                         onChange={e => setPassword(e.target.value)}
                                         placeholder="••••••••"
                                         required
-                                        className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                        className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-[#E2E5E9] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                                     />
                                     <button
                                         type="button"

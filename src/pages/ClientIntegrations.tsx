@@ -177,7 +177,7 @@ export function ClientIntegrations() {
                                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
                                     Client Integrations
                                 </p>
-                                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{client.name}</h1>
+                                <h1 className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9]">{client.name}</h1>
                             </div>
                         </div>
                     </div>
@@ -248,7 +248,7 @@ export function ClientIntegrations() {
                                                 />
                                             </div>
                                             <div>
-                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">NotebookLM</h3>
+                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">NotebookLM</h3>
                                                 <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${integrationEnabled
                                                     ? "text-emerald-600 dark:text-emerald-400"
                                                     : "text-slate-400"
@@ -312,7 +312,7 @@ export function ClientIntegrations() {
 
                                     {selectedNotebook && (
                                         <div className="mt-4">
-                                            <p className="text-sm font-semibold text-slate-900 dark:text-white">{selectedNotebook.title}</p>
+                                            <p className="text-sm font-semibold text-slate-900 dark:text-[#E2E5E9]">{selectedNotebook.title}</p>
                                             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{selectedNotebook.source_count} sources indexed</p>
                                         </div>
                                     )}
@@ -334,7 +334,7 @@ export function ClientIntegrations() {
                                                 </svg>
                                             </div>
                                             <div>
-                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Google APIs</h3>
+                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">Google APIs</h3>
                                                 <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
                                                     loadingGoogle ? "text-slate-400" :
                                                     googleAuthorized ? "text-emerald-600 dark:text-emerald-400" :
@@ -409,7 +409,7 @@ export function ClientIntegrations() {
                                             <img src={googleAdsIcon} alt="Google Ads logo" className="h-10 w-10 object-contain" />
                                         </div>
                                         <div>
-                                            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Google Ads</h3>
+                                            <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">Google Ads</h3>
                                             <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Monthly Budget</p>
                                         </div>
                                     </div>
@@ -458,7 +458,7 @@ export function ClientIntegrations() {
                                         )}
                                     </div>
                                     <div className="flex-1">
-                                        <p className="text-sm font-semibold text-slate-900 dark:text-white">Client Logo</p>
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-[#E2E5E9]">Client Logo</p>
                                         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Upload a logo file and save it to Supabase Storage.</p>
                                     </div>
                                     <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
@@ -470,7 +470,7 @@ export function ClientIntegrations() {
                                     <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Logo File</label>
                                     <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60 md:flex-row md:items-center md:justify-between">
                                         <div>
-                                            <p className="text-sm font-medium text-slate-900 dark:text-white">
+                                            <p className="text-sm font-medium text-slate-900 dark:text-[#E2E5E9]">
                                                 {logoFile ? logoFile.name : profile?.logo_storage_path ? "Current logo stored in Supabase Storage" : "No file selected yet"}
                                             </p>
                                             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">

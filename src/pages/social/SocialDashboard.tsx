@@ -4,6 +4,7 @@ import type { ApexOptions } from 'apexcharts'
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
 import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/social/components/DashboardControls'
+import { SocialAIInsights } from '@/features/social/components/SocialAIInsights'
 import {
   useSocialDashboardState,
   PLATFORMS,
@@ -217,7 +218,7 @@ function MetricSection({
       <div className="flex items-start justify-between px-5 pt-5 pb-3">
         <div>
           <p className="text-sm font-semibold text-body dark:text-bodydark">{title}</p>
-          <p className="mt-1 text-3xl font-bold tabular-nums text-black dark:text-white">{fmt(value)}</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums text-black dark:text-[#E2E5E9]">{fmt(value)}</p>
         </div>
         <span
           className="mt-0.5 h-2 w-2 rounded-full"
@@ -276,7 +277,7 @@ export function SocialDashboard() {
         {/* ── Header ── */}
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-black dark:text-white">
+            <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">
               Social Media
               <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#8B5CF6]/20 text-[#8B5CF6] align-middle">
                 Intelligence
@@ -293,6 +294,15 @@ export function SocialDashboard() {
             pageTitle="Social-Intelligence"
           />
         </div>
+
+        {/* ── AI Insights ── */}
+        <SocialAIInsights
+          accountName="Holts"
+          accountId={state.selectedAccountId}
+          platforms={state.selectedPlatforms}
+          metrics={metrics}
+          posts={filteredPosts}
+        />
 
         {/* ── Tab nav (scroll anchors) ── */}
         <div className="mb-6 flex items-center gap-1 border-b border-stroke dark:border-strokedark">
@@ -382,7 +392,7 @@ export function SocialDashboard() {
         {state.selectedPlatforms.length > 1 && (
           <div className="mt-6 rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
             <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
-              <h3 className="font-semibold text-black dark:text-white">Platform Breakdown</h3>
+              <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Platform Breakdown</h3>
               <p className="mt-0.5 text-xs text-body dark:text-bodydark">Metrics comparison by social network</p>
             </div>
             <div className="overflow-x-auto">
@@ -404,10 +414,10 @@ export function SocialDashboard() {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
                             <PlatformDot id={pid} />
-                            <span className="font-semibold text-black dark:text-white">{platformLabel(pid)}</span>
+                            <span className="font-semibold text-black dark:text-[#E2E5E9]">{platformLabel(pid)}</span>
                           </div>
                         </td>
-                        <td className="px-5 py-4 tabular-nums text-black dark:text-white font-semibold">{fmt(m.seguidores)}</td>
+                        <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9] font-semibold">{fmt(m.seguidores)}</td>
                         <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(m.impresiones)}</td>
                         <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(m.alcance)}</td>
                         <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(m.interacciones)}</td>
@@ -425,7 +435,7 @@ export function SocialDashboard() {
         <div ref={postsRef} className="mt-10 scroll-mt-6">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold text-black dark:text-white">Posts</h2>
+              <h2 className="text-lg font-bold text-black dark:text-[#E2E5E9]">Posts</h2>
               <p className="text-sm text-body dark:text-bodydark">Published content performance</p>
             </div>
             {filteredPosts.length > 0 && (
@@ -470,7 +480,7 @@ export function SocialDashboard() {
                         <td className="px-5 py-4">
                           <PostTypeBadge type={post.type} />
                         </td>
-                        <td className="max-w-[240px] truncate px-5 py-4 font-medium text-black dark:text-white" title={post.title}>
+                        <td className="max-w-[240px] truncate px-5 py-4 font-medium text-black dark:text-[#E2E5E9]" title={post.title}>
                           {post.title}
                         </td>
                         <td className="whitespace-nowrap px-5 py-4 text-body dark:text-bodydark">
@@ -478,7 +488,7 @@ export function SocialDashboard() {
                         </td>
                         <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(post.impresiones)}</td>
                         <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmt(post.alcance)}</td>
-                        <td className="px-5 py-4 tabular-nums font-semibold text-black dark:text-white">{fmt(post.interacciones)}</td>
+                        <td className="px-5 py-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{fmt(post.interacciones)}</td>
                         <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">
                           {post.guardados > 0 ? fmt(post.guardados) : '—'}
                         </td>

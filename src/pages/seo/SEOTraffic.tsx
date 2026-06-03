@@ -69,7 +69,7 @@ function AcquisitionTable({ sources }: { sources: SourceRow[] }) {
   return (
     <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
       <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
-        <h3 className="text-lg font-semibold text-black dark:text-white">Traffic Acquisition Sources</h3>
+        <h3 className="text-lg font-semibold text-black dark:text-[#E2E5E9]">Traffic Acquisition Sources</h3>
         <p className="mt-0.5 text-sm text-body dark:text-bodydark">Google Analytics 4 · {sources.length} source / medium combinations</p>
       </div>
       <div className="max-h-[520px] overflow-auto">
@@ -92,11 +92,11 @@ function AcquisitionTable({ sources }: { sources: SourceRow[] }) {
               return (
                 <tr key={`${row.source}-${row.medium}-${i}`} className="group transition-colors hover:bg-gray-2 dark:hover:bg-meta-4">
                   <td className="px-4 py-3.5 text-xs text-body dark:text-bodydark tabular-nums">{i + 1}</td>
-                  <td className="px-4 py-3.5"><span className="font-medium text-black dark:text-white">{row.source || '(direct)'}</span></td>
+                  <td className="px-4 py-3.5"><span className="font-medium text-black dark:text-[#E2E5E9]">{row.source || '(direct)'}</span></td>
                   <td className="px-4 py-3.5">
                     <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${mediumBadge(row.medium)}`}>{row.medium || 'none'}</span>
                   </td>
-                  <td className="px-4 py-3.5 text-right tabular-nums font-semibold text-black dark:text-white">{(row.sessions ?? 0).toLocaleString()}</td>
+                  <td className="px-4 py-3.5 text-right tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{(row.sessions ?? 0).toLocaleString()}</td>
                   <td className="px-4 py-3.5 text-right tabular-nums text-body dark:text-bodydark">{(row.conversions ?? 0).toLocaleString()}</td>
                   <td className="px-4 py-3.5 text-right">
                     <span className={`tabular-nums font-semibold text-sm ${convRate >= 0.05 ? 'text-meta-3' : convRate >= 0.02 ? 'text-[#1A72D9]' : 'text-body dark:text-bodydark'}`}>
@@ -147,7 +147,7 @@ export function SEOTraffic() {
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">Traffic Quality</h1>
+          <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Traffic Quality</h1>
           <p className="text-sm text-body dark:text-bodydark">
             Acquisition sources &amp; conversion performance · {state.lastUpdated ? `Updated ${state.lastUpdated.toLocaleTimeString()}` : 'Loading data…'}
           </p>

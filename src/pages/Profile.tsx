@@ -102,7 +102,7 @@ export function Profile() {
 
                         <div className="flex items-start justify-between flex-wrap gap-4">
                             <div>
-                                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{fullName || "—"}</h1>
+                                <h1 className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9]">{fullName || "—"}</h1>
                                 <p className="text-blue-600 dark:text-blue-400 font-medium text-sm mt-0.5">{profile.role || "—"}</p>
                                 <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">{profile.company || "—"}</p>
                                 <div className="flex items-center gap-4 mt-3 text-sm text-slate-500 dark:text-slate-400 flex-wrap">
@@ -149,7 +149,7 @@ export function Profile() {
                                 <s.icon className="w-5 h-5" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold text-slate-900 dark:text-white">{s.value}</p>
+                                <p className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9]">{s.value}</p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">{s.label}</p>
                             </div>
                         </motion.div>
@@ -185,14 +185,14 @@ export function Profile() {
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 <div className="lg:col-span-2 space-y-6">
                                     <div>
-                                        <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-2">About</h3>
+                                        <h3 className="text-sm font-semibold text-slate-800 dark:text-[#E2E5E9] mb-2">About</h3>
                                         <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                                             {profile.bio || <span className="italic text-slate-400">No bio yet. Go to Edit Profile to add one.</span>}
                                         </p>
                                     </div>
 
                                     <div>
-                                        <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-3">My Tasks</h3>
+                                        <h3 className="text-sm font-semibold text-slate-800 dark:text-[#E2E5E9] mb-3">My Tasks</h3>
                                         {loadingTasks ? (
                                             <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
                                                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
@@ -234,7 +234,7 @@ export function Profile() {
                                 </div>
 
                                 <div className="space-y-4">
-                                    <h3 className="text-sm font-semibold text-slate-800 dark:text-white">Contact Information</h3>
+                                    <h3 className="text-sm font-semibold text-slate-800 dark:text-[#E2E5E9]">Contact Information</h3>
                                     <div className="space-y-3">
                                         {[
                                             { icon: Mail, label: "Email", value: profile.email },
@@ -263,39 +263,39 @@ export function Profile() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">First Name</label>
-                                        <Input value={profile.first_name} onChange={e => handleChange("first_name", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                        <Input value={profile.first_name} onChange={e => handleChange("first_name", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-[#E2E5E9]" />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Last Name</label>
-                                        <Input value={profile.last_name} onChange={e => handleChange("last_name", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                        <Input value={profile.last_name} onChange={e => handleChange("last_name", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-[#E2E5E9]" />
                                     </div>
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Email</label>
-                                    <Input type="email" value={profile.email} disabled className="dark:bg-slate-700 dark:border-slate-600 dark:text-white opacity-60 cursor-not-allowed" />
+                                    <Input type="email" value={profile.email} disabled className="dark:bg-slate-700 dark:border-slate-600 dark:text-[#E2E5E9] opacity-60 cursor-not-allowed" />
                                     <p className="text-[11px] text-slate-400">Email is managed by your login account.</p>
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Phone</label>
-                                    <Input value={profile.phone} onChange={e => handleChange("phone", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                    <Input value={profile.phone} onChange={e => handleChange("phone", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-[#E2E5E9]" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Role</label>
-                                        <Input value={profile.role} onChange={e => handleChange("role", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                        <Input value={profile.role} onChange={e => handleChange("role", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-[#E2E5E9]" />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Location</label>
-                                        <Input value={profile.location} onChange={e => handleChange("location", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                        <Input value={profile.location} onChange={e => handleChange("location", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-[#E2E5E9]" />
                                     </div>
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Company</label>
-                                    <Input value={profile.company} onChange={e => handleChange("company", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                    <Input value={profile.company} onChange={e => handleChange("company", e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 dark:text-[#E2E5E9]" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Website</label>
-                                    <Input value={profile.website} onChange={e => handleChange("website", e.target.value)} placeholder="yoursite.com" className="dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                                    <Input value={profile.website} onChange={e => handleChange("website", e.target.value)} placeholder="yoursite.com" className="dark:bg-slate-700 dark:border-slate-600 dark:text-[#E2E5E9]" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Bio</label>
@@ -303,7 +303,7 @@ export function Profile() {
                                         value={profile.bio}
                                         onChange={e => handleChange("bio", e.target.value)}
                                         rows={4}
-                                        className="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                        className="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-[#E2E5E9] px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                                     />
                                 </div>
 
@@ -323,7 +323,7 @@ export function Profile() {
                                                     value={profile[s.field]}
                                                     onChange={e => handleChange(s.field, e.target.value)}
                                                     placeholder={s.placeholder}
-                                                    className="dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                                    className="dark:bg-slate-700 dark:border-slate-600 dark:text-[#E2E5E9]"
                                                 />
                                             </div>
                                         ))}

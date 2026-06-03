@@ -18,9 +18,17 @@ const FALLBACK_COLORS = ["bg-blue-500", "bg-purple-500", "bg-green-500", "bg-ora
 
 export function mapGoogleCalendarEvent(event: GoogleCalendarEvent, index: number): CalendarEvent {
     const startValue = event.start?.dateTime ?? event.start?.date ?? ""
+    const endValue   = event.end?.dateTime   ?? event.end?.date   ?? null
+
+    const meetLink =
+        event.hangoutLink ??
+        event.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ??
+        null
+
     return {
         id: event.id,
         title: event.summary ?? "(No title)",
+        description: event.description ?? null,
         date: startValue.slice(0, 10),
         time: event.start?.dateTime
             ? new Date(event.start.dateTime).toLocaleTimeString("en-US", {
@@ -29,6 +37,14 @@ export function mapGoogleCalendarEvent(event: GoogleCalendarEvent, index: number
                 hour12: true,
             })
             : "All day",
+        endTime: event.end?.dateTime
+            ? new Date(event.end.dateTime).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+            })
+            : endValue,
+        meetLink,
         type: "meeting",
         color: GCAL_COLORS[event.colorId ?? ""] ?? FALLBACK_COLORS[index % FALLBACK_COLORS.length],
     }

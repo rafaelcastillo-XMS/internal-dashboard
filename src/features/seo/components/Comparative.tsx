@@ -21,6 +21,20 @@ interface Baseline {
   date: string
 }
 
+interface AhrefsSnapshotRow {
+  id: string
+  client: string
+  domain: string
+  snapshot_date: string
+  domain_rating: number | null
+  ahrefs_rank: number | null
+  organic_traffic: number | null
+  organic_keywords: number | null
+  backlinks: number | null
+  referring_domains: number | null
+  created_at: string
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const COMPARE_WITH = ['Current Date', 'Last Month', 'Last Quarter', 'Last Year']
@@ -98,7 +112,7 @@ const FILTER_CLS =
   'w-full appearance-none rounded-lg border border-stroke bg-white ' +
   'pl-3 py-2 pr-8 text-sm text-black outline-none ' +
   'transition focus:border-[#1A72D9] focus:ring-1 focus:ring-[#1A72D9]/30 ' +
-  'dark:border-strokedark dark:bg-boxdark dark:text-white ' +
+  'dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] ' +
   'dark:focus:border-[#1A72D9]'
 
 function FilterSelect({
@@ -109,7 +123,7 @@ function FilterSelect({
 }) {
   return (
     <div className={`flex flex-col gap-1 ${wide ? 'min-w-[200px]' : 'min-w-[140px]'}`}>
-      <span className="text-xs font-semibold text-black dark:text-white">{label}</span>
+      <span className="text-xs font-semibold text-black dark:text-[#E2E5E9]">{label}</span>
       <div className="relative">
         <select value={value} onChange={e => onChange(e.target.value)} className={FILTER_CLS}>
           {options.map(o => <option key={o} value={o}>{o}</option>)}
@@ -139,11 +153,13 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
   const [seoAreaFilter,    setSeoAreaFilter]    = useState(SEO_AREAS[0])
   const [ownerFilter,      setOwnerFilter]      = useState(OWNERS[0])
 
-  const [findings,     setFindings]     = useState<FindingRow[]>([])
-  const [psiScore,     setPsiScore]     = useState<number | null>(null)
-  const [loadingData,  setLoadingData]  = useState(false)
-  const [loadingPsi,   setLoadingPsi]   = useState(false)
-  const [hasRealData,  setHasRealData]  = useState(false)
+  const [findings,        setFindings]        = useState<FindingRow[]>([])
+  const [psiScore,        setPsiScore]        = useState<number | null>(null)
+  const [loadingData,     setLoadingData]     = useState(false)
+  const [loadingPsi,      setLoadingPsi]      = useState(false)
+  const [hasRealData,     setHasRealData]     = useState(false)
+  const [ahrefsSnapshots, setAhrefsSnapshots] = useState<AhrefsSnapshotRow[]>([])
+  const [loadingAhrefs,   setLoadingAhrefs]   = useState(false)
 
   // ── Load baselines on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -175,7 +191,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
     loadBaselines()
   }, [])
 
-  // ── Load findings when baseline changes ───────────────────────────────────
+  // ── Load findings + Ahrefs snapshots when baseline changes ──────────────
   useEffect(() => {
     if (!selectedBaseline) return
     const bl = baselines.find(b => b.label === selectedBaseline)
@@ -196,7 +212,20 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
       if (data) setFindings(data as FindingRow[])
       setLoadingData(false)
     }
+
+    async function loadAhrefsSnapshots() {
+      setLoadingAhrefs(true)
+      const { data } = await supabase
+        .from('seo_ahrefs_snapshots')
+        .select('*')
+        .eq('client', bl!.client)
+        .order('snapshot_date', { ascending: true })
+      if (data) setAhrefsSnapshots(data as AhrefsSnapshotRow[])
+      setLoadingAhrefs(false)
+    }
+
     loadFindings()
+    loadAhrefsSnapshots()
   }, [selectedBaseline, baselines])
 
   // ── Fetch PSI score when GSC site is available ────────────────────────────
@@ -241,7 +270,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
 
       {/* ══ CONTROLS CARD ══════════════════════════════════════════════════ */}
       <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark px-6 py-6">
-        <h3 className="text-lg font-bold text-black dark:text-white">Compare SEO Progress</h3>
+        <h3 className="text-lg font-bold text-black dark:text-[#E2E5E9]">Compare SEO Progress</h3>
         <p className="mt-0.5 mb-5 text-sm text-body dark:text-bodydark">
           Compare the client's initial SEO baseline against current or historical results.
         </p>
@@ -265,7 +294,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
             className="flex items-center gap-2 rounded-lg border border-stroke px-4 py-2.5
                        text-sm font-medium text-black transition
                        hover:border-[#1A72D9] hover:text-[#1A72D9]
-                       dark:border-strokedark dark:text-white
+                       dark:border-strokedark dark:text-[#E2E5E9]
                        dark:hover:border-[#1A72D9] dark:hover:text-[#1A72D9]"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -309,7 +338,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
               {card.label}
             </p>
             <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-              <span className="text-xl font-bold text-black dark:text-white tabular-nums">
+              <span className="text-xl font-bold text-black dark:text-[#E2E5E9] tabular-nums">
                 {card.initial}%
               </span>
               <svg className="h-4 w-4 shrink-0 text-body dark:text-bodydark" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -318,7 +347,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
               <span className={`text-xl font-bold tabular-nums ${
                 card.key === 'Technical SEO' && loadingPsi
                   ? 'text-body dark:text-bodydark'
-                  : 'text-black dark:text-white'
+                  : 'text-black dark:text-[#E2E5E9]'
               }`}>
                 {card.key === 'Technical SEO' && loadingPsi ? '…' : `${card.current}%`}
               </span>
@@ -343,10 +372,137 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
         ))}
       </div>
 
+      {/* ══ AHREFS METRICS HISTORY ══════════════════════════════════════════ */}
+      <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+        <div className="border-b border-stroke px-6 py-5 dark:border-strokedark flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h3 className="text-lg font-bold text-black dark:text-[#E2E5E9]">Ahrefs Authority Metrics</h3>
+            <p className="mt-0.5 text-sm text-body dark:text-bodydark">First snapshot vs latest — domain authority progress</p>
+          </div>
+          {ahrefsSnapshots.length > 0 && (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              {ahrefsSnapshots.length} snapshot{ahrefsSnapshots.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+
+        {loadingAhrefs ? (
+          <div className="px-6 py-10 text-center text-sm text-body dark:text-bodydark">Loading…</div>
+        ) : ahrefsSnapshots.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <p className="text-sm text-body dark:text-bodydark">No Ahrefs snapshots yet for this client.</p>
+            <p className="mt-1 text-xs text-body dark:text-bodydark opacity-60">
+              Go to Initial Status → Ahrefs Domain Snapshot to save the first baseline.
+            </p>
+          </div>
+        ) : (() => {
+          const first  = ahrefsSnapshots[0]
+          const latest = ahrefsSnapshots[ahrefsSnapshots.length - 1]
+          const isSame = first.id === latest.id
+
+          const metrics: { label: string; key: keyof AhrefsSnapshotRow; color: string; lowerIsBetter?: boolean }[] = [
+            { label: 'Domain Rating',    key: 'domain_rating',    color: 'text-orange-500' },
+            { label: 'Ahrefs Rank',      key: 'ahrefs_rank',      color: 'text-[#1A72D9]', lowerIsBetter: true },
+            { label: 'Organic Traffic',  key: 'organic_traffic',  color: 'text-emerald-500' },
+            { label: 'Organic Keywords', key: 'organic_keywords', color: 'text-emerald-500' },
+            { label: 'Backlinks',        key: 'backlinks',        color: 'text-purple-500' },
+            { label: 'Ref. Domains',     key: 'referring_domains', color: 'text-purple-500' },
+          ]
+
+          return (
+            <div className="px-6 py-5 space-y-5">
+              <div className="flex flex-wrap items-center gap-4 text-xs text-body dark:text-bodydark">
+                <span><span className="font-semibold text-black dark:text-[#E2E5E9]">Baseline:</span> {first.domain} · {first.snapshot_date}</span>
+                {!isSame && <span><span className="font-semibold text-black dark:text-[#E2E5E9]">Latest:</span> {latest.snapshot_date}</span>}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {metrics.map(m => {
+                  const v0 = first[m.key] as number | null
+                  const v1 = latest[m.key] as number | null
+                  const delta = v0 !== null && v1 !== null ? v1 - v0 : null
+                  const positive = delta !== null
+                    ? (m.lowerIsBetter ? delta < 0 : delta > 0)
+                    : null
+
+                  return (
+                    <div key={m.label}
+                         className="rounded-lg border border-stroke bg-gray-50/50 px-3 py-3
+                                    dark:border-strokedark dark:bg-black/10 text-center">
+                      <p className="text-[10px] font-medium text-body dark:text-bodydark mb-1.5 leading-tight">{m.label}</p>
+                      {isSame ? (
+                        <p className={`text-base font-bold tabular-nums ${m.color}`}>
+                          {v0 !== null ? Number(v0).toLocaleString() : '—'}
+                        </p>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-center gap-1.5 mb-1">
+                            <span className="text-xs text-body dark:text-bodydark tabular-nums">
+                              {v0 !== null ? Number(v0).toLocaleString() : '—'}
+                            </span>
+                            <svg className="h-3 w-3 text-body dark:text-bodydark" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                            </svg>
+                            <span className={`text-base font-bold tabular-nums ${m.color}`}>
+                              {v1 !== null ? Number(v1).toLocaleString() : '—'}
+                            </span>
+                          </div>
+                          {delta !== null && (
+                            <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-semibold
+                              ${positive
+                                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
+                                : positive === false
+                                  ? 'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400'
+                                  : 'bg-gray-100 text-gray-500 dark:bg-gray-500/15 dark:text-gray-400'
+                              }`}>
+                              {delta > 0 ? '+' : ''}{Number(delta).toLocaleString()}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {ahrefsSnapshots.length > 2 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[540px] text-sm">
+                    <thead>
+                      <tr className="border-b border-stroke dark:border-strokedark">
+                        {['Date', 'DR', 'Rank', 'Traffic', 'Keywords', 'Backlinks', 'Ref. Domains'].map(col => (
+                          <th key={col} className="pb-3 pr-4 text-left text-[11px] font-semibold uppercase tracking-wider text-body dark:text-bodydark whitespace-nowrap">
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                      {ahrefsSnapshots.map(s => (
+                        <tr key={s.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
+                          <td className="py-2.5 pr-4 text-xs text-body dark:text-bodydark whitespace-nowrap">{s.snapshot_date}</td>
+                          <td className="py-2.5 pr-4 font-bold text-orange-500 tabular-nums">{s.domain_rating ?? '—'}</td>
+                          <td className="py-2.5 pr-4 text-body dark:text-bodydark tabular-nums">{s.ahrefs_rank?.toLocaleString() ?? '—'}</td>
+                          <td className="py-2.5 pr-4 text-emerald-600 dark:text-emerald-400 tabular-nums">{s.organic_traffic?.toLocaleString() ?? '—'}</td>
+                          <td className="py-2.5 pr-4 text-emerald-600 dark:text-emerald-400 tabular-nums">{s.organic_keywords?.toLocaleString() ?? '—'}</td>
+                          <td className="py-2.5 pr-4 text-purple-500 tabular-nums">{s.backlinks?.toLocaleString() ?? '—'}</td>
+                          <td className="py-2.5 pr-4 text-purple-500 tabular-nums">{s.referring_domains?.toLocaleString() ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+      </div>
+
       {/* ══ FINDINGS TABLE ═════════════════════════════════════════════════ */}
       <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
         <div className="border-b border-stroke px-6 py-5 dark:border-strokedark flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="text-lg font-bold text-black dark:text-white">Initial vs Current Findings</h3>
+          <h3 className="text-lg font-bold text-black dark:text-[#E2E5E9]">Initial vs Current Findings</h3>
           {hasRealData && (
             <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -392,7 +548,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
                 return (
                   <tr key={row.id}
                       className="transition-colors hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
-                    <td className="px-5 py-4 text-sm font-bold text-black dark:text-white whitespace-nowrap">
+                    <td className="px-5 py-4 text-sm font-bold text-black dark:text-[#E2E5E9] whitespace-nowrap">
                       {row.seo_category ?? '—'}
                     </td>
                     <td className="px-5 py-4 text-sm text-body dark:text-bodydark">
@@ -401,7 +557,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
                     <td className="px-5 py-4 text-sm text-body dark:text-bodydark">
                       {row.initial_status ?? '—'}
                     </td>
-                    <td className="px-5 py-4 text-sm font-semibold text-black dark:text-white">
+                    <td className="px-5 py-4 text-sm font-semibold text-black dark:text-[#E2E5E9]">
                       {currentVal}
                     </td>
                     <td className="px-5 py-4">
@@ -420,12 +576,12 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
                 return (
                   <tr key={row.id}
                       className="transition-colors hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
-                    <td className="px-5 py-4 text-sm font-bold text-black dark:text-white whitespace-nowrap">
+                    <td className="px-5 py-4 text-sm font-bold text-black dark:text-[#E2E5E9] whitespace-nowrap">
                       {row.area}
                     </td>
                     <td className="px-5 py-4 text-sm text-body dark:text-bodydark">{row.metric}</td>
                     <td className="px-5 py-4 text-sm text-body dark:text-bodydark">{row.initial}</td>
-                    <td className="px-5 py-4 text-sm font-semibold text-black dark:text-white">{row.current}</td>
+                    <td className="px-5 py-4 text-sm font-semibold text-black dark:text-[#E2E5E9]">{row.current}</td>
                     <td className="px-5 py-4"><ChangeText value={change.text} type={change.type} /></td>
                     <td className="px-5 py-4"><StatusBadge status={status} /></td>
                   </tr>

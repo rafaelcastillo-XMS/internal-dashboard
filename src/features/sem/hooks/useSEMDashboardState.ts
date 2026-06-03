@@ -86,6 +86,18 @@ export function useSEMDashboardState(defaultPreset = 1) {
     })()
   }, [])
 
+  // Listen for account changes from external sources (e.g. sidebar)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ accountId: string }>).detail
+      if (detail?.accountId) {
+        setSelectedAccountIdRaw(prev => prev !== detail.accountId ? detail.accountId : prev)
+      }
+    }
+    window.addEventListener('sem:account-changed', handler)
+    return () => window.removeEventListener('sem:account-changed', handler)
+  }, [])
+
   // Persist selection + notify sidebar
   useEffect(() => {
     if (selectedAccountId) {

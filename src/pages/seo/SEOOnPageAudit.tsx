@@ -56,7 +56,7 @@ const TABS: { id: TabKey; label: string; icon: React.ReactNode }[] = [
 ]
 
 const POLL_INTERVAL = 5000
-const POLL_TIMEOUT  = 5 * 60 * 1000
+const POLL_TIMEOUT  = 10 * 60 * 1000
 
 export function SEOOnPageAudit() {
   const seoState = useSEODashboardState()
@@ -112,7 +112,7 @@ export function SEOOnPageAudit() {
     pollRef.current = setInterval(async () => {
       if (Date.now() - startTimeRef.current > POLL_TIMEOUT) {
         stopPolling()
-        setErrorMsg('Audit timed out after 5 minutes. Please try again.')
+        setErrorMsg('Audit timed out after 10 minutes. Please try again.')
         setStatus(STATUS.error)
         return
       }
@@ -182,7 +182,7 @@ export function SEOOnPageAudit() {
                         d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-black dark:text-white">Initial Status</h1>
+              <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Initial Status</h1>
             </div>
             <p className="text-sm text-body dark:text-bodydark ml-11">
               Baseline SEO snapshot recorded at client onboarding
@@ -203,7 +203,7 @@ export function SEOOnPageAudit() {
                         d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-black dark:text-white">Comparative</h1>
+              <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Comparative</h1>
             </div>
             <p className="text-sm text-body dark:text-bodydark ml-11">
               Initial Status vs. current audit — track progress since onboarding
@@ -223,7 +223,7 @@ export function SEOOnPageAudit() {
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-black dark:text-white">GBP Report</h1>
+              <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">GBP Report</h1>
             </div>
             <p className="text-sm text-body dark:text-bodydark ml-11">
               Google Business Profile · Analytics · Search Console — select a client to generate their report
@@ -262,7 +262,7 @@ export function SEOOnPageAudit() {
                       d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-black dark:text-white">On-Page SEO Audit</h1>
+            <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">On-Page SEO Audit</h1>
           </div>
           <p className="text-sm text-body dark:text-bodydark ml-11">
             Technical · Content · Screaming Frog analysis — results displayed here
@@ -360,10 +360,10 @@ export function SEOOnPageAudit() {
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                 </div>
-                <h2 className="text-xl font-bold text-black dark:text-white mb-2">Running Audit…</h2>
+                <h2 className="text-xl font-bold text-black dark:text-[#E2E5E9] mb-2">Running Audit…</h2>
                 <p className="text-sm text-body dark:text-bodydark mb-1">
                   The workflow is processing. This typically takes{' '}
-                  <span className="text-black dark:text-white font-medium">2–4 minutes</span>.
+                  <span className="text-black dark:text-[#E2E5E9] font-medium">3–8 minutes</span>.
                 </p>
                 <p className="text-sm text-body dark:text-bodydark mb-8">
                   Results will appear here automatically — no need to refresh.
@@ -382,7 +382,7 @@ export function SEOOnPageAudit() {
                 <div className="rounded-xl border border-stroke bg-white shadow-default
                                 dark:border-strokedark dark:bg-boxdark">
                   <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
-                    <h3 className="font-semibold text-black dark:text-white">Audit Inputs</h3>
+                    <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Audit Inputs</h3>
                     <p className="mt-0.5 text-xs text-body dark:text-bodydark">
                       Provide the landing page and your Screaming Frog export sheet
                     </p>
@@ -392,7 +392,7 @@ export function SEOOnPageAudit() {
 
                     {/* Landing Page URL */}
                     <div>
-                      <label className="mb-2 block text-sm font-medium text-black dark:text-white">
+                      <label className="mb-2 block text-sm font-medium text-black dark:text-[#E2E5E9]">
                         Landing Page URL
                         <span className="ml-1 text-danger">*</span>
                       </label>
@@ -412,7 +412,7 @@ export function SEOOnPageAudit() {
                           className="w-full rounded-lg border border-stroke bg-transparent pl-10 pr-4 py-3
                                      text-sm text-black placeholder-body outline-none
                                      transition focus:border-[#1A72D9] focus:ring-1 focus:ring-[#1A72D9]/30
-                                     dark:border-strokedark dark:text-white dark:placeholder-bodydark
+                                     dark:border-strokedark dark:text-[#E2E5E9] dark:placeholder-bodydark
                                      dark:focus:border-[#1A72D9]"
                         />
                       </div>
@@ -423,7 +423,7 @@ export function SEOOnPageAudit() {
 
                     {/* Screaming Frog Sheet */}
                     <div>
-                      <label className="mb-2 block text-sm font-medium text-black dark:text-white">
+                      <label className="mb-2 block text-sm font-medium text-black dark:text-[#E2E5E9]">
                         Screaming Frog Google Sheet URL
                         <span className="ml-1 text-danger">*</span>
                       </label>
@@ -443,7 +443,7 @@ export function SEOOnPageAudit() {
                           className="w-full rounded-lg border border-stroke bg-transparent pl-10 pr-4 py-3
                                      text-sm text-black placeholder-body outline-none
                                      transition focus:border-[#1A72D9] focus:ring-1 focus:ring-[#1A72D9]/30
-                                     dark:border-strokedark dark:text-white dark:placeholder-bodydark
+                                     dark:border-strokedark dark:text-[#E2E5E9] dark:placeholder-bodydark
                                      dark:focus:border-[#1A72D9]"
                         />
                       </div>
@@ -466,7 +466,7 @@ export function SEOOnPageAudit() {
                   {/* Footer */}
                   <div className="border-t border-stroke px-6 py-4 dark:border-strokedark flex items-center justify-between gap-4">
                     <p className="text-xs text-body dark:text-bodydark">
-                      Audit takes ~2–4 min · Results appear in this page
+                      Audit takes ~3–8 min · Results appear in this page
                     </p>
                     <button
                       type="submit"
@@ -492,7 +492,7 @@ export function SEOOnPageAudit() {
             <div className="rounded-xl border border-stroke bg-white shadow-default
                             dark:border-strokedark dark:bg-boxdark">
               <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-                <h3 className="font-semibold text-black dark:text-white">What's Included</h3>
+                <h3 className="font-semibold text-black dark:text-[#E2E5E9]">What's Included</h3>
                 <p className="mt-0.5 text-xs text-body dark:text-bodydark">
                   Three AI-powered audit modules run in parallel
                 </p>
@@ -538,7 +538,7 @@ export function SEOOnPageAudit() {
                       {item.icon}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-black dark:text-white">{item.label}</p>
+                      <p className="text-sm font-medium text-black dark:text-[#E2E5E9]">{item.label}</p>
                       <p className="mt-0.5 text-xs text-body dark:text-bodydark leading-relaxed">{item.desc}</p>
                     </div>
                   </div>
@@ -549,7 +549,7 @@ export function SEOOnPageAudit() {
             <div className="rounded-xl border border-stroke bg-white shadow-default
                             dark:border-strokedark dark:bg-boxdark">
               <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-                <h3 className="font-semibold text-black dark:text-white">Screaming Frog Setup</h3>
+                <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Screaming Frog Setup</h3>
               </div>
               <div className="px-6 py-5 space-y-3">
                 {[

@@ -88,6 +88,7 @@ export function useMondayTasks(): MondayTasksResult {
     let cancelled = false
 
     async function load() {
+      if (tick > 0) localStorage.removeItem(CACHE_KEY)
       cache ? setSyncing(true) : setLoading(true)
       setError(null)
 
@@ -95,10 +96,12 @@ export function useMondayTasks(): MondayTasksResult {
         const { data: { session } } = await supabase.auth.getSession()
         const email = session?.user?.email ?? ""
 
-        const res = await fetch(
-          `/api/monday/tasks?email=${encodeURIComponent(email)}`,
-          { headers: { Accept: "application/json" } },
-        )
+        // When the user explicitly hits Refresh (tick > 0), bust the server cache too
+        const url = tick > 0
+          ? `/api/monday/tasks?email=${encodeURIComponent(email)}&bust=1`
+          : `/api/monday/tasks?email=${encodeURIComponent(email)}`
+
+        const res = await fetch(url, { headers: { Accept: "application/json" } })
 
         if (!res.ok) {
           const body = await res.json().catch(() => ({})) as { error?: string }

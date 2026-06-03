@@ -97,7 +97,7 @@ function MetricPill({ label, value, color }: { label: string; value: string; col
 function SmallStatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-stroke bg-white px-4 py-3 dark:border-strokedark dark:bg-boxdark">
-      <p className="text-xl font-bold tabular-nums text-black dark:text-white">{value}</p>
+      <p className="text-xl font-bold tabular-nums text-black dark:text-[#E2E5E9]">{value}</p>
       <p className="mt-0.5 text-[11px] text-body dark:text-bodydark">{label}</p>
     </div>
   )
@@ -107,7 +107,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
   return (
     <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
       <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-        <h3 className="font-semibold text-black dark:text-white">{title}</h3>
+        <h3 className="font-semibold text-black dark:text-[#E2E5E9]">{title}</h3>
       </div>
       <div className="p-6">{children}</div>
     </div>
@@ -136,7 +136,7 @@ function DonutChart({ data, title }: { data: { label: string; value: number; col
         {data.map(d => (
           <div key={d.label} className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-            <span className="text-sm text-black dark:text-white">{d.label}</span>
+            <span className="text-sm text-black dark:text-[#E2E5E9]">{d.label}</span>
             <span className="ml-2 text-sm font-semibold tabular-nums text-body dark:text-bodydark">{d.value}%</span>
           </div>
         ))}
@@ -269,7 +269,7 @@ export function InstagramDashboard() {
                   <tbody className="divide-y divide-stroke dark:divide-strokedark">
                     {CITY_DATA.map((row) => (
                       <tr key={row.city} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
-                        <td className="py-3 text-black dark:text-white">{row.city}</td>
+                        <td className="py-3 text-black dark:text-[#E2E5E9]">{row.city}</td>
                         <td className="py-3 text-right tabular-nums font-semibold text-body dark:text-bodydark">{row.pct}</td>
                       </tr>
                     ))}

@@ -3,17 +3,18 @@ import { createPortal } from "react-dom"
 import { NavLink } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import {
-    LayoutDashboard, Users, CheckSquare, Calendar,
+    Home, Users, CheckSquare, Calendar,
     ChevronDown, Search as SearchIcon,
-    BarChart2, Share2, Palette, User, FileText
+    BarChart2, Share2, Palette, FileText,
+    Bug, X
 } from "lucide-react"
 import { XMSLogo } from "@/components/ui/XMSLogo"
 import { useSidebar } from "@/context/useSidebar"
-import { useTheme } from "@/context/useTheme"
 import { getClients } from "@/features/clients/repository"
+import { supabase } from "@/lib/supabase"
 
-const activeClass = "bg-slate-700 text-white border border-slate-700 shadow-sm dark:bg-slate-600 dark:text-white dark:border-slate-500"
-const inactiveClass = "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-item-hover)] hover:text-[var(--text-primary)] border border-transparent"
+const activeClass = "bg-[#1F2937] text-white border border-transparent shadow-sm"
+const inactiveClass = "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-item-hover)] border border-transparent"
 
 function Tooltip({ label }: { label: string }) {
     const ref = useRef<HTMLDivElement>(null)
@@ -23,14 +24,12 @@ function Tooltip({ label }: { label: string }) {
     useEffect(() => {
         const parent = ref.current?.parentElement
         if (!parent) return
-
         const handleEnter = () => {
             const rect = parent.getBoundingClientRect()
             setCoords({ top: rect.top + rect.height / 2, left: rect.right })
             setVisible(true)
         }
         const handleLeave = () => setVisible(false)
-
         parent.addEventListener("mouseenter", handleEnter)
         parent.addEventListener("mouseleave", handleLeave)
         return () => {
@@ -68,13 +67,45 @@ function SectionLabel({ label, collapsed }: { label: string; collapsed: boolean 
 
 export function Sidebar() {
     const [clientsOpen, setClientsOpen] = useState(false)
+    const [bugOpen, setBugOpen] = useState(false)
+    const [bugText, setBugText] = useState("")
+    const [bugSent, setBugSent] = useState(false)
+    const bugTextareaRef = useRef<HTMLTextAreaElement>(null)
     const { collapsed, isMobileOpen, closeMobile } = useSidebar()
-    const { theme } = useTheme()
     const clients = getClients()
 
+    useEffect(() => {
+        if (bugOpen) setTimeout(() => bugTextareaRef.current?.focus(), 80)
+    }, [bugOpen])
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setBugOpen(false)
+        }
+        document.addEventListener("keydown", handleKeyDown)
+        return () => document.removeEventListener("keydown", handleKeyDown)
+    }, [])
+
+    const handleSendBug = async () => {
+        if (!bugText.trim()) return
+        const { data: { session } } = await supabase.auth.getSession()
+        const { error } = await supabase.from("bug_reports").insert({
+            description: bugText,
+            user_email: session?.user?.email ?? null,
+            created_at: new Date().toISOString(),
+        })
+        if (error) console.error("[BugReport] Failed to submit:", error.message)
+        setBugSent(true)
+        setTimeout(() => {
+            setBugOpen(false)
+            setBugText("")
+            setBugSent(false)
+        }, 1800)
+    }
+
     const navItemClass = collapsed
-        ? "relative group flex items-center justify-center w-10 h-10 mx-auto rounded-xl transition-all text-sm font-medium"
-        : "relative group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium w-full"
+        ? "relative group flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all text-sm font-semibold"
+        : "relative group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-semibold w-full"
 
     return (
         <>
@@ -92,8 +123,8 @@ export function Sidebar() {
             </AnimatePresence>
 
             <aside
-                className={`fixed inset-y-0 left-0 z-50 flex flex-col h-screen border-r shrink-0 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 overflow-x-visible bg-[var(--sidebar-bg)] border-[var(--sidebar-border)] ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}`}
-                style={{ width: collapsed ? 64 : 288 }}
+                className={`fixed inset-y-0 left-0 z-50 flex flex-col h-screen border-r shrink-0 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 overflow-x-visible bg-[var(--sidebar-bg)] border-[var(--sidebar-border)] sidebar-shadow ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+                style={{ width: collapsed ? 64 : 232 }}
             >
                 {/* Logo */}
                 <div className={`h-16 border-b border-[var(--sidebar-border)] flex items-center transition-all duration-200 ${collapsed ? "justify-center px-3" : "px-5 justify-between"}`}>
@@ -106,8 +137,8 @@ export function Sidebar() {
                         />
                     ) : (
                         <>
-                            <XMSLogo mode={theme === "dark" ? "dark" : "light"} height={55} className="max-w-[170px]" />
-                            <span className="text-[9px] font-bold text-[var(--brand-accent)] bg-[var(--brand-accent-subtle)] border border-[var(--brand-accent-subtle-border)] px-1.5 py-0.5 rounded-full tracking-widest uppercase shrink-0">Beta</span>
+                            <XMSLogo mode="auto" height={55} className="max-w-[160px]" />
+                            <span className="text-[8px] font-semibold opacity-40 text-[var(--brand-accent)] bg-[var(--brand-accent-subtle)] px-1 py-0.5 rounded-full tracking-widest uppercase shrink-0">Beta</span>
                         </>
                     )}
                 </div>
@@ -116,28 +147,42 @@ export function Sidebar() {
 
                     <SectionLabel label="Menu" collapsed={collapsed} />
 
-                    {/* Dashboard */}
                     <div className="relative group">
-                        <NavLink
-                            to="/"
-                            end
-                            onClick={closeMobile}
-                            className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}
-                        >
-                            <LayoutDashboard className="w-4 h-4 shrink-0" />
-                            {!collapsed && "Dashboard"}
+                        <NavLink to="/" end onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                            <Home className="w-4 h-4 shrink-0" />
+                            {!collapsed && "Home"}
                         </NavLink>
-                        {collapsed && <Tooltip label="Dashboard" />}
+                        {collapsed && <Tooltip label="Home" />}
+                    </div>
+
+                    <div className="relative group">
+                        <NavLink to="/calendar" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                            <Calendar className="w-4 h-4 shrink-0" />
+                            {!collapsed && "Calendar"}
+                        </NavLink>
+                        {collapsed && <Tooltip label="Calendar" />}
+                    </div>
+
+                    <div className="relative group">
+                        <NavLink to="/tasks" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                            <CheckSquare className="w-4 h-4 shrink-0" />
+                            {!collapsed && "Tasks"}
+                        </NavLink>
+                        {collapsed && <Tooltip label="Tasks" />}
+                    </div>
+
+                    <div className="relative group">
+                        <NavLink to="/guidelines" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                            <FileText className="w-4 h-4 shrink-0" />
+                            {!collapsed && "Guidelines"}
+                        </NavLink>
+                        {collapsed && <Tooltip label="Guidelines" />}
                     </div>
 
                     {/* Clients */}
                     {collapsed ? (
                         <div className="relative group">
-                            <NavLink
-                                to="/clients/coca-cola"
-                                onClick={closeMobile}
-                                className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}
-                            >
+                            <NavLink to="/clients/coca-cola" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
                                 <Users className="w-4 h-4 shrink-0" />
                             </NavLink>
                             <Tooltip label="Clients" />
@@ -146,7 +191,7 @@ export function Sidebar() {
                         <div>
                             <button
                                 onClick={() => setClientsOpen(o => !o)}
-                                className={`relative group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium w-full ${inactiveClass} justify-between`}
+                                className={`relative group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-semibold w-full ${inactiveClass} justify-between`}
                             >
                                 <span className="flex items-center gap-3">
                                     <Users className="w-4 h-4 shrink-0" />
@@ -173,16 +218,16 @@ export function Sidebar() {
                                                     end
                                                     onClick={closeMobile}
                                                     className={({ isActive }) =>
-                                                        `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all ${isActive
-                                                            ? "text-[var(--sidebar-item-active-text)] bg-[var(--sidebar-item-active-bg)]"
-                                                            : "text-[var(--sidebar-item-text)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
+                                                        `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all ${isActive
+                                                            ? "bg-[#1F2937] text-white"
+                                                            : "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-item-hover)]"
                                                         }`
                                                     }
                                                 >
-                                                    <div className="w-6 h-6 rounded-md bg-[var(--bg-subtle)] flex items-center justify-center text-[var(--text-muted)] shrink-0">
+                                                    <div className="w-6 h-6 rounded-md bg-black/10 dark:bg-white/10 flex items-center justify-center shrink-0">
                                                         <Users className="w-3.5 h-3.5" />
                                                     </div>
-                                                    <span className="truncate font-medium">All Clients</span>
+                                                    <span className="truncate">All Clients</span>
                                                 </NavLink>
                                             </li>
                                             {clients.map(client => (
@@ -191,9 +236,9 @@ export function Sidebar() {
                                                         to={`/clients/${client.id}`}
                                                         onClick={closeMobile}
                                                         className={({ isActive }) =>
-                                                            `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all ${isActive
-                                                                ? "text-[var(--sidebar-item-active-text)] bg-[var(--sidebar-item-active-bg)]"
-                                                                : "text-[var(--sidebar-item-text)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
+                                                            `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all ${isActive
+                                                                ? "bg-[#1F2937] text-white"
+                                                                : "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-item-hover)]"
                                                             }`
                                                         }
                                                     >
@@ -212,46 +257,6 @@ export function Sidebar() {
                         </div>
                     )}
 
-                    {/* Tasks */}
-                    <div className="relative group">
-                        <NavLink
-                            to="/tasks"
-                            onClick={closeMobile}
-                            className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}
-                        >
-                            <CheckSquare className="w-4 h-4 shrink-0" />
-                            {!collapsed && "Tasks"}
-                        </NavLink>
-                        {collapsed && <Tooltip label="Tasks" />}
-                    </div>
-
-                    {/* Calendar */}
-                    <div className="relative group">
-                        <NavLink
-                            to="/calendar"
-                            onClick={closeMobile}
-                            className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}
-                        >
-                            <Calendar className="w-4 h-4 shrink-0" />
-                            {!collapsed && "Calendar"}
-                        </NavLink>
-                        {collapsed && <Tooltip label="Calendar" />}
-                    </div>
-
-                    {/* Guidelines */}
-                    <div className="relative group">
-                        <NavLink
-                            to="/guidelines"
-                            onClick={closeMobile}
-                            className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}
-                        >
-                            <FileText className="w-4 h-4 shrink-0" />
-                            {!collapsed && "Guidelines"}
-                        </NavLink>
-                        {collapsed && <Tooltip label="Guidelines" />}
-                    </div>
-
-                    {/* APPS section */}
                     <SectionLabel label="Apps" collapsed={collapsed} />
 
                     <div className="relative group">
@@ -283,31 +288,120 @@ export function Sidebar() {
                             <Palette className="w-4 h-4 shrink-0" />
                             {!collapsed && (
                                 <span className="flex items-center gap-2 flex-1">
-                                    Design Intelligence
+                                    Design
                                     <span className="text-[10px] font-semibold bg-yellow-400/20 text-yellow-500 px-1.5 py-0.5 rounded-full leading-none">Working</span>
                                 </span>
                             )}
                         </div>
-                        {collapsed && <Tooltip label="Design Intelligence (Working)" />}
+                        {collapsed && <Tooltip label="Design (Working)" />}
                     </div>
 
                 </nav>
 
-                {/* Bottom: Profile + Settings */}
+                {/* Bottom: Report a Bug */}
                 <div className={`${collapsed ? "px-0 py-3" : "px-3 pb-4 pt-3"} border-t border-[var(--sidebar-border)] space-y-0.5`}>
                     <div className="relative group">
-                        <NavLink
-                            to="/profile"
-                            onClick={closeMobile}
-                            className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}
+                        <button
+                            onClick={() => setBugOpen(true)}
+                            className={`${navItemClass} ${inactiveClass} w-full`}
                         >
-                            <User className="w-4 h-4 shrink-0" />
-                            {!collapsed && "My Profile"}
-                        </NavLink>
-                        {collapsed && <Tooltip label="My Profile" />}
+                            <Bug className="w-4 h-4 shrink-0" />
+                            {!collapsed && "Report a Bug"}
+                        </button>
+                        {collapsed && <Tooltip label="Report a Bug" />}
                     </div>
                 </div>
             </aside>
+
+            {/* Bug report modal */}
+            <AnimatePresence>
+                {bugOpen && createPortal(
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+                        onClick={e => { if (e.target === e.currentTarget) setBugOpen(false) }}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                            transition={{ duration: 0.2 }}
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Report a bug"
+                            className="bg-[var(--bg-raised)] rounded-2xl shadow-2xl w-full max-w-md border border-[var(--border)] overflow-hidden"
+                        >
+                            <div className="p-6">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-9 h-9 bg-[var(--brand-accent-subtle)] rounded-xl flex items-center justify-center">
+                                            <Bug className="w-5 h-5 text-[var(--brand-accent)]" />
+                                        </div>
+                                        <div>
+                                            <h2 className="font-semibold text-[var(--text-primary)] text-sm">Report a Bug</h2>
+                                            <p className="text-[11px] text-[var(--text-muted)]">Help us improve XMS</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setBugOpen(false)}
+                                        className="p-1.5 rounded-lg hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                {bugSent ? (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="py-8 text-center"
+                                    >
+                                        <div className="w-14 h-14 bg-[var(--success-bg)] rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <svg className="w-7 h-7 text-[var(--success)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                        <p className="font-semibold text-[var(--text-primary)] text-sm">Report sent!</p>
+                                        <p className="text-xs text-[var(--text-muted)] mt-1">Our support team will review it shortly.</p>
+                                    </motion.div>
+                                ) : (
+                                    <>
+                                        <p className="text-sm text-[var(--text-muted)] mb-4">
+                                            Describe the issue you encountered and our support team will work on a fix.
+                                        </p>
+                                        <textarea
+                                            ref={bugTextareaRef}
+                                            value={bugText}
+                                            onChange={e => setBugText(e.target.value)}
+                                            placeholder="What went wrong? What did you expect to happen?"
+                                            rows={5}
+                                            className="w-full text-sm rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-primary)] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4 placeholder:text-[var(--text-muted)]"
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={handleSendBug}
+                                                disabled={!bugText.trim()}
+                                                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
+                                            >
+                                                Send Report
+                                            </button>
+                                            <button
+                                                onClick={() => setBugOpen(false)}
+                                                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>,
+                    document.body
+                )}
+            </AnimatePresence>
         </>
     )
 }

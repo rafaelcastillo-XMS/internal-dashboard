@@ -13,6 +13,7 @@ const AllClients = lazy(() => import("./pages/AllClients").then(module => ({ def
 const Clients = lazy(() => import("./pages/Clients").then(module => ({ default: module.Clients })))
 const ClientIntegrations = lazy(() => import("./pages/ClientIntegrations").then(module => ({ default: module.ClientIntegrations })))
 const Tasks = lazy(() => import("./pages/Tasks").then(module => ({ default: module.Tasks })))
+const TaskDetail = lazy(() => import("./pages/TaskDetail").then(module => ({ default: module.TaskDetail })))
 const CalendarPage = lazy(() => import("./pages/Calendar").then(module => ({ default: module.CalendarPage })))
 const Profile = lazy(() => import("./pages/Profile").then(module => ({ default: module.Profile })))
 const Settings = lazy(() => import("./pages/Settings").then(module => ({ default: module.Settings })))
@@ -108,6 +109,7 @@ function App() {
                                 <Route path="/clients/:clientId/integrations" element={<ClientIntegrations />} />
                                 <Route path="/clients/:clientId" element={<Clients />} />
                                 <Route path="/tasks" element={<Tasks />} />
+                <Route path="/tasks/:taskId" element={<TaskDetail />} />
                                 <Route path="/calendar" element={<CalendarPage />} />
                                 <Route path="/profile" element={<Profile />} />
                                 <Route path="/settings" element={<Settings />} />

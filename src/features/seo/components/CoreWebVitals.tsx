@@ -28,11 +28,11 @@ function MetricRow({ config, value }: { config: typeof METRICS_CONFIG[0]; value:
     <div>
       <div className="mb-1.5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-black dark:text-white w-8">{config.label}</span>
+          <span className="text-sm font-semibold text-black dark:text-[#E2E5E9] w-8">{config.label}</span>
           <span className="hidden text-xs text-body dark:text-bodydark sm:inline">{config.fullLabel}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="tabular-nums text-sm font-medium text-black dark:text-white">
+          <span className="tabular-nums text-sm font-medium text-black dark:text-[#E2E5E9]">
             {value != null ? display : '—'}
           </span>
           {status && <span className={`text-[10px] font-bold ${st.textClass}`}>{st.label}</span>}
@@ -91,7 +91,7 @@ function MobileUsabilityRow({ verdict, issues = [] }: { verdict: string | null; 
             <path strokeLinecap="round" strokeLinejoin="round"
                   d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
-          <span className="text-sm font-semibold text-black dark:text-white">Mobile Usability</span>
+          <span className="text-sm font-semibold text-black dark:text-[#E2E5E9]">Mobile Usability</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className={`h-2 w-2 rounded-full ${dotClass}`} />
@@ -127,7 +127,7 @@ export function CoreWebVitals({ metrics = {}, mobile = { verdict: null, issues: 
       <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="font-semibold text-black dark:text-white">Core Web Vitals</h3>
+            <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Core Web Vitals</h3>
             <p className="mt-0.5 text-xs text-body dark:text-bodydark">PageSpeed Insights · Mobile Strategy</p>
           </div>
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#F47C20]/10">

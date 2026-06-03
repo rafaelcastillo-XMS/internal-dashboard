@@ -69,7 +69,7 @@ export function InsightCard({
               <li key={i} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-meta-4/30 transition-colors">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.dot}`} />
-                  <span className="truncate text-xs text-black dark:text-white" title={item.label}>{item.label}</span>
+                  <span className="truncate text-xs text-black dark:text-[#E2E5E9]" title={item.label}>{item.label}</span>
                 </div>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.badge}`}>{item.metric}</span>
               </li>

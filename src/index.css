@@ -38,6 +38,30 @@
   }
 }
 
+/* App background — subtle gradient like Meta Business Suite */
+.app-bg {
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(37, 99, 235, 0.10) 0%, transparent 52%),
+    radial-gradient(ellipse at 100% 100%, rgba(139, 92, 246, 0.07) 0%, transparent 48%),
+    linear-gradient(160deg, #f4f7ff 0%, #f1f4fa 100%);
+}
+
+.dark .app-bg {
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(59, 130, 246, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 100%, rgba(139, 92, 246, 0.04) 0%, transparent 45%),
+    linear-gradient(160deg, #111827 0%, #0f1320 100%);
+}
+
+/* Sidebar — faint parallel shadow */
+.sidebar-shadow {
+  box-shadow: 4px 0 24px -4px rgba(0, 0, 0, 0.06), 1px 0 4px rgba(0, 0, 0, 0.04);
+}
+
+.dark .sidebar-shadow {
+  box-shadow: 4px 0 24px -4px rgba(0, 0, 0, 0.35), 1px 0 6px rgba(0, 0, 0, 0.25);
+}
+
 @layer base {
   :root {
   /* Foundations */
@@ -46,8 +70,8 @@
   --bg-raised:           #FFFFFF;
   --bg-sidebar:          #ECEEF3;
   --bg-subtle:           #F0F2F7;
-  --border:              #DDE1EB;
-  --border-strong:       #C4CAD8;
+  --border:              #EAECF2;
+  --border-strong:       #D5DAE6;
 
   /* Text */
   --text-primary:        #0F1523;
@@ -85,14 +109,14 @@
   --info-text:           #1E40AF;
   --info-border:         #BFDBFE;
 
-  /* Sidebar */
-  --sidebar-bg:                  #ECEEF3;
-  --sidebar-border:              #DDE1EB;
-  --sidebar-item-active-bg:      #DBEAFE;
-  --sidebar-item-active-text:    #1E40AF;
-  --sidebar-item-active-border:  #BFDBFE;
-  --sidebar-item-hover:          #E4E7F0;
-  --sidebar-item-text:           #4B5563;
+  /* Sidebar — white in light mode */
+  --sidebar-bg:                  #FFFFFF;
+  --sidebar-border:              #EDF0F6;
+  --sidebar-item-active-bg:      #1A72D9;
+  --sidebar-item-active-text:    #FFFFFF;
+  --sidebar-item-active-border:  #1A72D9;
+  --sidebar-item-hover:          #F1F5F9;
+  --sidebar-item-text:           #374151;
   --sidebar-section-label:       #9CA3AF;
 
   /* Charts */
@@ -134,13 +158,13 @@
 
   .dark {
   /* Foundations */
-  --bg-app:              #0D1017;
-  --bg-surface:          #141926;
-  --bg-raised:           #1A2235;
-  --bg-sidebar:          #121827;
+  --bg-app:              #0F1320;
+  --bg-surface:          #161D2E;
+  --bg-raised:           #1C2438;
+  --bg-sidebar:          #141926;
   --bg-subtle:           #1B2438;
-  --border:              #2F3A4F;
-  --border-strong:       #43516C;
+  --border:              #28344A;
+  --border-strong:       #3A4D68;
 
   /* Text */
   --text-primary:        #E8EEF8;
@@ -178,15 +202,15 @@
   --info-text:           #60A5FA;
   --info-border:         #1E3A5F;
 
-  /* Sidebar */
-  --sidebar-bg:                  #121827;
-  --sidebar-border:              #283247;
-  --sidebar-item-active-bg:      #1B2848;
-  --sidebar-item-active-text:    #6BA8FF;
-  --sidebar-item-active-border:  #41598E;
-  --sidebar-item-hover:          #212C43;
-  --sidebar-item-text:           #8C9AB1;
-  --sidebar-section-label:       #61728D;
+  /* Sidebar — dark slate in dark mode (matches card surface) */
+  --sidebar-bg:                  #161D2E;
+  --sidebar-border:              #243048;
+  --sidebar-item-active-bg:      #1A72D9;
+  --sidebar-item-active-text:    #FFFFFF;
+  --sidebar-item-active-border:  #1A72D9;
+  --sidebar-item-hover:          #1C2B42;
+  --sidebar-item-text:           #C8D3E8;
+  --sidebar-section-label:       #4D6080;
 
   /* Charts */
   --chart-1: #3B7EF6;

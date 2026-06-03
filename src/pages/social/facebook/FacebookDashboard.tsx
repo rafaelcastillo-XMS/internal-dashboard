@@ -151,7 +151,7 @@ function MetricPill({ label, value, color }: { label: string; value: string; col
 function SmallStatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-stroke bg-white px-4 py-3 dark:border-strokedark dark:bg-boxdark">
-      <p className="text-xl font-bold tabular-nums text-black dark:text-white">{value}</p>
+      <p className="text-xl font-bold tabular-nums text-black dark:text-[#E2E5E9]">{value}</p>
       <p className="mt-0.5 text-[11px] text-body dark:text-bodydark">{label}</p>
     </div>
   )
@@ -161,7 +161,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
   return (
     <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
       <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-        <h3 className="font-semibold text-black dark:text-white">{title}</h3>
+        <h3 className="font-semibold text-black dark:text-[#E2E5E9]">{title}</h3>
       </div>
       <div className="p-6">{children}</div>
     </div>
@@ -189,7 +189,7 @@ function DonutChart({ data }: { data: { label: string; value: number; color: str
         {data.map(d => (
           <div key={d.label} className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-            <span className="text-sm text-black dark:text-white">{d.label}</span>
+            <span className="text-sm text-black dark:text-[#E2E5E9]">{d.label}</span>
             <span className="ml-auto pl-4 text-sm font-semibold tabular-nums text-body dark:text-bodydark">{d.value}%</span>
           </div>
         ))}
@@ -223,7 +223,7 @@ function PostTable({ posts }: { posts: typeof MOCK_POSTS }) {
                   {p.type}
                 </span>
               </td>
-              <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-white">{fmt(p.reach)}</td>
+              <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{fmt(p.reach)}</td>
               <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{fmt(p.views)}</td>
               <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{p.reactions}</td>
               <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{p.likes}</td>
@@ -254,11 +254,11 @@ function ReelTable({ reels }: { reels: typeof MOCK_REELS }) {
         <tbody className="divide-y divide-stroke dark:divide-strokedark">
           {reels.map(r => (
             <tr key={r.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
-              <td className="max-w-[260px] truncate py-3.5 pr-4 font-medium text-black dark:text-white" title={r.title}>{r.title}</td>
+              <td className="max-w-[260px] truncate py-3.5 pr-4 font-medium text-black dark:text-[#E2E5E9]" title={r.title}>{r.title}</td>
               <td className="whitespace-nowrap py-3.5 px-4 text-body dark:text-bodydark">
                 {new Date(r.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
               </td>
-              <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-white">{fmt(r.reach)}</td>
+              <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{fmt(r.reach)}</td>
               <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{fmt(r.views)}</td>
               <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{r.reactions}</td>
               <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{r.comments}</td>
@@ -560,10 +560,10 @@ export function FacebookDashboard() {
                                 style={{ backgroundColor: FB }}>
                             {c.name[0]}
                           </span>
-                          <span className="font-medium text-black dark:text-white">{c.name}</span>
+                          <span className="font-medium text-black dark:text-[#E2E5E9]">{c.name}</span>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-white">{fmt(c.followers)}</td>
+                      <td className="py-3.5 px-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">{fmt(c.followers)}</td>
                       <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{c.likes || '—'}</td>
                       <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{c.comments || '—'}</td>
                       <td className="py-3.5 px-4 tabular-nums text-body dark:text-bodydark">{c.shares || '—'}</td>

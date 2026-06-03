@@ -1,20 +1,20 @@
-import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { DesignSidebar } from './DesignSidebar'
 import { Header } from '@/components/layout/Header'
+import { SidebarProvider } from '@/context/SidebarContext'
 
 export function DesignLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-
   return (
-    <div className="flex h-screen overflow-hidden bg-white dark:bg-slate-900">
-      <DesignSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-      <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
-        <Header onMobileMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1">
-          <Outlet />
-        </main>
+    <SidebarProvider>
+      <div className="flex h-screen w-full app-bg overflow-hidden font-sans">
+        <DesignSidebar />
+        <div className="flex flex-col flex-1 h-full min-w-0 relative">
+          <Header />
+          <main className="flex-1 overflow-y-auto relative">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </SidebarProvider>
   )
 }
