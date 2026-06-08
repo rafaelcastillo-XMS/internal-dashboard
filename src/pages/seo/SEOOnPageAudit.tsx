@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import DOMPurify from 'dompurify'
 import { GBPReport } from '../../features/seo/components/GBPReport'
+import { RunAhrefsCard } from '../../features/seo/components/RunAhrefsCard'
 import type { GBPReportHandle } from '../../features/seo/components/GBPReport'
 import { InitialStatus } from '../../features/seo/components/InitialStatus'
 import { Comparative } from '../../features/seo/components/Comparative'
@@ -345,39 +346,40 @@ export function SEOOnPageAudit() {
           </div>
         </div>
       ) : activeTab === 'run-audit' ? (
-        <div className="grid grid-cols-12 gap-6">
+        <div className="space-y-6">
 
-          {/* Left: Form or loading */}
-          <div className="col-span-12 xl:col-span-7">
+          {/* Ahrefs Run Card */}
+          <RunAhrefsCard />
 
-            {status === STATUS.loading ? (
-              <div className="rounded-xl border border-[#1A72D9]/20 bg-[#1A72D9]/5 px-8 py-12 text-center">
-                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center
-                                rounded-full bg-[#1A72D9]/10 border border-[#1A72D9]/20">
-                  <svg className="h-8 w-8 text-[#1A72D9] animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                </div>
-                <h2 className="text-xl font-bold text-black dark:text-[#E2E5E9] mb-2">Running Audit…</h2>
-                <p className="text-sm text-body dark:text-bodydark mb-1">
-                  The workflow is processing. This typically takes{' '}
-                  <span className="text-black dark:text-[#E2E5E9] font-medium">3–8 minutes</span>.
-                </p>
-                <p className="text-sm text-body dark:text-bodydark mb-8">
-                  Results will appear here automatically — no need to refresh.
-                </p>
-                <div className="rounded-lg bg-white/5 border border-white/5 px-4 py-3 mb-4 inline-block min-w-[220px]">
-                  <p className="text-[11px] uppercase tracking-wider text-white/25 mb-1">Elapsed</p>
-                  <p className="font-mono text-2xl font-bold text-[#1A72D9]">{mins}:{secs}</p>
-                </div>
-                <div className="rounded-lg bg-white/5 border border-white/5 px-4 py-3 text-left mt-2">
-                  <p className="text-[11px] uppercase tracking-wider text-white/25 mb-1">Auditing</p>
-                  <p className="font-mono text-sm text-white/70 truncate">{submittedUrl}</p>
-                </div>
+          {status === STATUS.loading ? (
+            <div className="rounded-xl border border-[#1A72D9]/20 bg-[#1A72D9]/5 px-8 py-12 text-center">
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center
+                              rounded-full bg-[#1A72D9]/10 border border-[#1A72D9]/20">
+                <svg className="h-8 w-8 text-[#1A72D9] animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
               </div>
-            ) : (
+              <h2 className="text-xl font-bold text-black dark:text-[#E2E5E9] mb-2">Running Audit…</h2>
+              <p className="text-sm text-body dark:text-bodydark mb-1">
+                The workflow is processing. This typically takes{' '}
+                <span className="text-black dark:text-[#E2E5E9] font-medium">3–8 minutes</span>.
+              </p>
+              <p className="text-sm text-body dark:text-bodydark mb-8">
+                Results will appear here automatically — no need to refresh.
+              </p>
+              <div className="rounded-lg bg-white/5 border border-white/5 px-4 py-3 mb-4 inline-block min-w-[220px]">
+                <p className="text-[11px] uppercase tracking-wider text-white/25 mb-1">Elapsed</p>
+                <p className="font-mono text-2xl font-bold text-[#1A72D9]">{mins}:{secs}</p>
+              </div>
+              <div className="rounded-lg bg-white/5 border border-white/5 px-4 py-3 text-left mt-2">
+                <p className="text-[11px] uppercase tracking-wider text-white/25 mb-1">Auditing</p>
+                <p className="font-mono text-sm text-white/70 truncate">{submittedUrl}</p>
+              </div>
+            </div>
+          ) : (
+            <>
               <form onSubmit={handleSubmit}>
                 <div className="rounded-xl border border-stroke bg-white shadow-default
                                 dark:border-strokedark dark:bg-boxdark">
@@ -483,93 +485,92 @@ export function SEOOnPageAudit() {
                   </div>
                 </div>
               </form>
-            )}
-          </div>
 
-          {/* Right: What's included + Screaming Frog setup */}
-          <div className="col-span-12 xl:col-span-5 space-y-4">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
-            <div className="rounded-xl border border-stroke bg-white shadow-default
-                            dark:border-strokedark dark:bg-boxdark">
-              <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-                <h3 className="font-semibold text-black dark:text-[#E2E5E9]">What's Included</h3>
-                <p className="mt-0.5 text-xs text-body dark:text-bodydark">
-                  Three AI-powered audit modules run in parallel
-                </p>
-              </div>
-              <div className="divide-y divide-stroke dark:divide-strokedark">
-                {[
-                  {
-                    label: 'Technical SEO Audit',
-                    desc: 'Critical issues, quick wins, and structural opportunities from live page HTML',
-                    color: 'bg-[#1A72D9]/10 text-[#1A72D9]',
-                    icon: (
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                        <path strokeLinecap="round" strokeLinejoin="round"
-                              d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    label: 'Content Audit',
-                    desc: 'Keyword density, readability scores (Flesch-Kincaid, Gunning-Fog), and copy recommendations',
-                    color: 'bg-[#F47C20]/10 text-[#F47C20]',
-                    icon: (
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                        <path strokeLinecap="round" strokeLinejoin="round"
-                              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    label: 'Screaming Frog Audit',
-                    desc: 'H1 tags, meta descriptions, titles, internal links, URL status, and word count across all crawled pages',
-                    color: 'bg-emerald-500/10 text-emerald-400',
-                    icon: (
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                        <path strokeLinecap="round" strokeLinejoin="round"
-                              d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c-.621 0-1.125.504-1.125 1.125v1.5m2.25-2.625h7.5" />
-                      </svg>
-                    ),
-                  },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-start gap-4 px-6 py-4">
-                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${item.color}`}>
-                      {item.icon}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-black dark:text-[#E2E5E9]">{item.label}</p>
-                      <p className="mt-0.5 text-xs text-body dark:text-bodydark leading-relaxed">{item.desc}</p>
-                    </div>
+                <div className="rounded-xl border border-stroke bg-white shadow-default
+                                dark:border-strokedark dark:bg-boxdark">
+                  <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
+                    <h3 className="font-semibold text-black dark:text-[#E2E5E9]">What's Included</h3>
+                    <p className="mt-0.5 text-xs text-body dark:text-bodydark">
+                      Three AI-powered audit modules run in parallel
+                    </p>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-stroke bg-white shadow-default
-                            dark:border-strokedark dark:bg-boxdark">
-              <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
-                <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Screaming Frog Setup</h3>
-              </div>
-              <div className="px-6 py-5 space-y-3">
-                {[
-                  'Crawl the site in Screaming Frog SEO Spider',
-                  'Export the full crawl to Google Sheets (File → Export → Google Sheets)',
-                  'Make sure the sheet is shared with the Google service account',
-                  'Paste the sheet URL above — the workflow reads Sheet1 automatically',
-                ].map((step, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full
-                                     bg-[#1A72D9]/10 text-[10px] font-bold text-[#1A72D9]">
-                      {i + 1}
-                    </span>
-                    <p className="text-xs text-body dark:text-bodydark leading-relaxed">{step}</p>
+                  <div className="divide-y divide-stroke dark:divide-strokedark">
+                    {[
+                      {
+                        label: 'Technical SEO Audit',
+                        desc: 'Critical issues, quick wins, and structural opportunities from live page HTML',
+                        color: 'bg-[#1A72D9]/10 text-[#1A72D9]',
+                        icon: (
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round"
+                                  d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
+                          </svg>
+                        ),
+                      },
+                      {
+                        label: 'Content Audit',
+                        desc: 'Keyword density, readability scores (Flesch-Kincaid, Gunning-Fog), and copy recommendations',
+                        color: 'bg-[#F47C20]/10 text-[#F47C20]',
+                        icon: (
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round"
+                                  d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                          </svg>
+                        ),
+                      },
+                      {
+                        label: 'Screaming Frog Audit',
+                        desc: 'H1 tags, meta descriptions, titles, internal links, URL status, and word count across all crawled pages',
+                        color: 'bg-emerald-500/10 text-emerald-400',
+                        icon: (
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round"
+                                  d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c-.621 0-1.125.504-1.125 1.125v1.5m2.25-2.625h7.5" />
+                          </svg>
+                        ),
+                      },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-start gap-4 px-6 py-4">
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${item.color}`}>
+                          {item.icon}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-black dark:text-[#E2E5E9]">{item.label}</p>
+                          <p className="mt-0.5 text-xs text-body dark:text-bodydark leading-relaxed">{item.desc}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
 
-          </div>
+                <div className="rounded-xl border border-stroke bg-white shadow-default
+                                dark:border-strokedark dark:bg-boxdark">
+                  <div className="border-b border-stroke px-6 py-4 dark:border-strokedark">
+                    <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Screaming Frog Setup</h3>
+                  </div>
+                  <div className="px-6 py-5 space-y-3">
+                    {[
+                      'Crawl the site in Screaming Frog SEO Spider',
+                      'Export the full crawl to Google Sheets (File → Export → Google Sheets)',
+                      'Make sure the sheet is shared with the Google service account',
+                      'Paste the sheet URL above — the workflow reads Sheet1 automatically',
+                    ].map((step, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full
+                                         bg-[#1A72D9]/10 text-[10px] font-bold text-[#1A72D9]">
+                          {i + 1}
+                        </span>
+                        <p className="text-xs text-body dark:text-bodydark leading-relaxed">{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </>
+          )}
         </div>
       ) : null}
 
