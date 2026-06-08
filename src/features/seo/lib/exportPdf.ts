@@ -148,7 +148,7 @@ function extractTables(): PdfTable[] {
     if (headers.length > 0 && rows.length > 0) {
       // Find nearest heading above the table
       let heading = ''
-      let el: Element | null = tableEl.closest('.rounded-xl, .rounded-lg, section')
+      const el: Element | null = tableEl.closest('.rounded-xl, .rounded-lg, section')
       if (el) {
         const h = el.querySelector('h2, h3, h4')
         heading = h?.textContent?.trim() || ''
@@ -200,7 +200,9 @@ async function exportViaScreenshot(title: string, filename: string): Promise<voi
     import('jspdf'),
   ])
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const html2canvas = h2cMod.default || (h2cMod as any)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jsPDF = jspdfMod.jsPDF || jspdfMod.default || (jspdfMod as any)
 
   const element = document.querySelector('main') || document.body

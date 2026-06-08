@@ -48,7 +48,6 @@ interface DashboardControlsProps {
 }
 
 export function DashboardControls({
-  propertiesError: _propertiesError,
   selectedGscSite, setSelectedGscSite, gscOptions,
   selectedGa4Id,   setSelectedGa4Id,   ga4Options,
   showGsc = true, showGa4 = true, showDateRange = true,

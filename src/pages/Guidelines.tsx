@@ -256,7 +256,7 @@ fences. Raw JSON only.
 function load<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback } catch { return fallback }
 }
-function save<T>(key: string, v: T) { try { localStorage.setItem(key, JSON.stringify(v)) } catch {} }
+function save<T>(key: string, v: T) { try { localStorage.setItem(key, JSON.stringify(v)) } catch { /* ignore */ } }
 
 // ─── FeaturedPromptCard ───────────────────────────────────────────────────────
 
@@ -537,32 +537,6 @@ function GuidelineItem({ guideline, index, onEdit, onDelete }: {
           Added {new Date(guideline.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
         </span>
       </div>
-    </motion.div>
-  )
-}
-
-// ─── EmptyState ───────────────────────────────────────────────────────────────
-
-function EmptyState({ icon: Icon, title, description, action }: {
-  icon: React.ElementType
-  title: string
-  description: string
-  action: React.ReactNode
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-20 gap-4 text-center"
-    >
-      <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-        <Icon className="h-8 w-8 text-slate-400 dark:text-slate-500" />
-      </div>
-      <div>
-        <p className="font-semibold text-slate-900 dark:text-[#E2E5E9]">{title}</p>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-xs">{description}</p>
-      </div>
-      {action}
     </motion.div>
   )
 }

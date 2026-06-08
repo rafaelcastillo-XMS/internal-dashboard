@@ -4,19 +4,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { NotepadText, ArrowLeft } from 'lucide-react'
 import { useSidebar } from '@/context/useSidebar'
-import { XMSLogo } from '@/components/ui/XMSLogo'
 import { SEMAccountSelector } from '@/features/sem/components/SEMAccountSelector'
 
-const SELECTED_KEY = 'xms_sem_selected'
-const ACCOUNTS_KEY = 'xms_sem_accounts'
-
-function formatAccountName(id: string): string {
-  try {
-    const accounts = JSON.parse(sessionStorage.getItem(ACCOUNTS_KEY) || '[]')
-    const found = accounts.find((a: { id: string; name: string }) => a.id === id)
-    return found?.name || id
-  } catch { return id }
-}
 
 const NAV_GROUPS = [
   {
@@ -113,22 +102,6 @@ const inactiveClass = "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-i
 export function SEMSidebar() {
   const { collapsed, isMobileOpen, closeMobile } = useSidebar()
   const location = useLocation()
-  const [activeAccount, setActiveAccount] = useState<string>(() => {
-    try {
-      const sel = JSON.parse(sessionStorage.getItem(SELECTED_KEY) || 'null')
-      return sel?.accountId ? formatAccountName(sel.accountId) : ''
-    } catch { return '' }
-  })
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ accountId: string; name?: string }>).detail
-      if (detail?.accountId) setActiveAccount(detail.name || formatAccountName(detail.accountId))
-    }
-    window.addEventListener('sem:account-changed', handler)
-    return () => window.removeEventListener('sem:account-changed', handler)
-  }, [])
-
   const navItemClass = collapsed
     ? "relative group flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all text-sm font-semibold"
     : "relative group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-semibold w-full"

@@ -106,7 +106,7 @@ export function SocialAIInsights({ accountName, accountId, platforms, metrics, p
         setInsights(JSON.parse(saved))
         setPinned(true)
       }
-    } catch {}
+    } catch { /* ignore */ }
   }, [key, accountId, platforms.join(',')])
 
   const generate = async () => {

@@ -146,8 +146,8 @@ function ScoreRing({ score, label, size = 96 }: { score: number | null; label: s
 
 // ─── Metric Card ──────────────────────────────────────────────────────────────
 
-function MetricCard({ metricKey, value, metrics }: {
-  metricKey: string
+function MetricCard({ value, metrics }: {
+  metricKey?: string
   value: number | null
   metrics: typeof CWV_METRICS[number]
 }) {

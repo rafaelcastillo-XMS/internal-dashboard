@@ -246,7 +246,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
   // ── Score cards ───────────────────────────────────────────────────────────
   const scoreCards = CARD_CATEGORIES.map(cat => {
     const initial = hasRealData ? categoryScore(findings, cat.key) : [62, 35, 48, 40, 70][CARD_CATEGORIES.indexOf(cat)]
-    let current   = hasRealData
+    const current   = hasRealData
       ? (cat.key === 'Technical SEO' && psiScore !== null ? psiScore : initial)
       : [84, 68, 76, 72, 82][CARD_CATEGORIES.indexOf(cat)]
     const delta   = current - initial

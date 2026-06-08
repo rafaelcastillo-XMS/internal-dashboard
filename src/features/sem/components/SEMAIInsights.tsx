@@ -106,7 +106,7 @@ export function SEMAIInsights({ accountName, summary, campaigns }: Props) {
         setInsights(JSON.parse(saved))
         setPinned(true)
       }
-    } catch {}
+    } catch { /* ignore */ }
   }, [accountName])
 
   const generate = async () => {

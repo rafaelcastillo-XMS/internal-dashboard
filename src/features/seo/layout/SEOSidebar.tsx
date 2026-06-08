@@ -4,7 +4,6 @@ import { Link, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { NotepadText, ArrowLeft } from 'lucide-react'
 import { useSidebar } from '@/context/useSidebar'
-import { XMSLogo } from '@/components/ui/XMSLogo'
 import { ClientSelector } from '@/features/shared/components/ClientSelector'
 
 function formatSiteName(url: string): string {

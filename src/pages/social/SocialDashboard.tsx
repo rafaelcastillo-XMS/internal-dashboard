@@ -8,7 +8,6 @@ import { SocialAIInsights } from '@/features/social/components/SocialAIInsights'
 import {
   useSocialDashboardState,
   PLATFORMS,
-  formatDateLabel,
   type SocialPlatform,
 } from '@/features/social/hooks/useSocialDashboardState'
 
@@ -198,6 +197,7 @@ function MetricSection({
     tooltip: {
       theme: isDark ? 'dark' : 'light',
       x: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         formatter: (_: unknown, opts: any) => {
           const dataPointIndex = opts?.dataPointIndex ?? 0
           const d = new Date(labels[dataPointIndex])

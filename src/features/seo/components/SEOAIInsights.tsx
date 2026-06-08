@@ -104,7 +104,7 @@ export function SEOAIInsights({ clientName, gscSite, gsc, ga4, psiScore }: Props
         setInsights(JSON.parse(saved))
         setPinned(true)
       }
-    } catch {}
+    } catch { /* ignore */ }
   }, [gscSite])
 
   const generate = async () => {

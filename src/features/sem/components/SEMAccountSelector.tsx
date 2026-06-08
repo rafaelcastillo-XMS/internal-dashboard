@@ -32,7 +32,7 @@ export function SEMAccountSelector() {
         setAccounts(cached.filter(a => a.status === 'ENABLED'))
         return
       }
-    } catch {}
+    } catch { /* ignore */ }
     supabase
       .from('sem_accounts')
       .select('id, name, status')
@@ -47,7 +47,7 @@ export function SEMAccountSelector() {
     try {
       const sel = JSON.parse(sessionStorage.getItem(SELECTED_KEY) || 'null')
       if (sel?.accountId) setSelectedId(sel.accountId)
-    } catch {}
+    } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {

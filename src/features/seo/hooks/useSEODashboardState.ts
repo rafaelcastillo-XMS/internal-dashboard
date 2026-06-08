@@ -56,7 +56,7 @@ function ssGet(key: string) {
   try { return JSON.parse(sessionStorage.getItem(key) || 'null') } catch { return null }
 }
 function ssSet(key: string, value: unknown) {
-  try { sessionStorage.setItem(key, JSON.stringify(value)) } catch {}
+  try { sessionStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
 }
 
 export function useSEODashboardState(defaultPreset = 1) {

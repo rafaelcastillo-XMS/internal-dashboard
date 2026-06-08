@@ -17,7 +17,6 @@ interface SEMDashboardControlsProps {
 }
 
 export function DashboardControls({
-  selectedAccountId, setSelectedAccountId, accountOptions,
   showDateRange = true,
   selectedPreset, handlePresetChange,
   loading, onRefresh,

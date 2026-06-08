@@ -46,7 +46,7 @@ function readCache(): Cache | null {
 }
 
 function writeCache(data: Cache) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)) } catch {}
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)) } catch { /* ignore */ }
 }
 
 /** Maps Monday status index → semantic colour bucket */
@@ -89,7 +89,7 @@ export function useMondayTasks(): MondayTasksResult {
 
     async function load() {
       if (tick > 0) localStorage.removeItem(CACHE_KEY)
-      cache ? setSyncing(true) : setLoading(true)
+      if (cache) setSyncing(true); else setLoading(true)
       setError(null)
 
       try {

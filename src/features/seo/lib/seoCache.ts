@@ -12,15 +12,15 @@ export function cacheGet<T>(key: string): T | null {
       return null
     }
     return data
-  } catch { return null }
+  } catch { /* ignore */ return null }
 }
 
 export function cacheSet(key: string, data: unknown): void {
   try {
     sessionStorage.setItem(`seo_data:${key}`, JSON.stringify({ data, ts: Date.now() }))
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 export function cacheClear(key: string): void {
-  try { sessionStorage.removeItem(`seo_data:${key}`) } catch {}
+  try { sessionStorage.removeItem(`seo_data:${key}`) } catch { /* ignore */ }
 }

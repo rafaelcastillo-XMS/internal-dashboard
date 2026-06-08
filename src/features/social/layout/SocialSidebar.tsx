@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Route, RouteOff } from 'lucide-react'
 import { useSidebar } from '@/context/useSidebar'
 import { ClientSelector } from '@/features/shared/components/ClientSelector'
-import { XMSLogo } from '@/components/ui/XMSLogo'
-import { PLATFORMS, type SocialPlatform } from '../hooks/useSocialDashboardState'
+import { type SocialPlatform } from '../hooks/useSocialDashboardState'
 
 const CONNECTED: Record<SocialPlatform, boolean> = {
   instagram: true,

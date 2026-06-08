@@ -12,7 +12,8 @@ function getIsDark() {
     }
 }
 
-export function PageLoader({ label: _label }: { label?: string } = {}) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function PageLoader(_: { label?: string } = {}) {
     const isDark = getIsDark()
 
     return (

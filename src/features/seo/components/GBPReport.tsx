@@ -121,7 +121,7 @@ function areaOpts(labels: string[], color: string, isDark: boolean): ApexOptions
     grid:       { borderColor: GRID(isDark), strokeDashArray: 4, xaxis: { lines: { show: false } } },
     dataLabels: { enabled: false },
     tooltip:    { theme: isDark ? 'dark' : 'light' },
-    markers:    { size: 4, strokeWidth: 2, strokeColors: [color], fillColors: ['#fff'], hover: { size: 6 } } as any,
+    markers:    { size: 4, strokeWidth: 2, strokeColors: [color], fillColors: ['#fff'], hover: { size: 6 } } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   }
 }
 
@@ -136,7 +136,7 @@ function multiLineOpts(labels: string[], isDark: boolean): ApexOptions {
     legend:     { position: 'bottom', horizontalAlign: 'center', labels: { colors: TEXT(isDark) }, markers: { size: 5 }, itemMargin: { horizontal: 10, vertical: 4 } },
     dataLabels: { enabled: false },
     tooltip:    { theme: isDark ? 'dark' : 'light', shared: true, intersect: false },
-    markers:    { size: 3, hover: { size: 5 } } as any,
+    markers:    { size: 3, hover: { size: 5 } } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   }
 }
 
@@ -151,7 +151,7 @@ function summaryLineOpts(labels: string[], isDark: boolean): ApexOptions {
     legend:     { position: 'bottom', horizontalAlign: 'center', labels: { colors: TEXT(isDark) }, markers: { size: 5 } },
     dataLabels: { enabled: false },
     tooltip:    { theme: isDark ? 'dark' : 'light', shared: true, intersect: false },
-    markers:    { size: 3, hover: { size: 5 } } as any,
+    markers:    { size: 3, hover: { size: 5 } } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   }
 }
 
@@ -182,7 +182,7 @@ function gscOpts(labels: string[], isDark: boolean): ApexOptions {
     legend:     { position: 'bottom', horizontalAlign: 'center', labels: { colors: TEXT(isDark) }, markers: { size: 5 } },
     dataLabels: { enabled: false },
     tooltip:    { theme: isDark ? 'dark' : 'light', shared: true, intersect: false },
-    markers:    { size: 3, hover: { size: 5 } } as any,
+    markers:    { size: 3, hover: { size: 5 } } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   }
 }
 
@@ -222,7 +222,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
   ref,
 ) {
   const reportRef           = useRef<HTMLDivElement>(null)
-  const [exporting, setExp] = useState(false)
+  const [, setExp] = useState(false)
   const [loading, setLoad]  = useState(false)
   const [isSample, setSample] = useState(false)
   const [data, setData]     = useState<GBPData | null>(null)
@@ -273,7 +273,9 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
         import('html2canvas'),
         import('jspdf'),
       ])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html2canvas = (h2cMod as any).default ?? h2cMod
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { jsPDF }   = jspdfMod as any
 
       const PAD = 16 // mm padding on all sides

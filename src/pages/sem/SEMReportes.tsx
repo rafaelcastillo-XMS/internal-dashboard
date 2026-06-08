@@ -24,7 +24,7 @@ interface GuaranteeAnalytics {
 const MONTHLY_BUDGET_KEY = 'sem_monthly_budgets'
 
 const load = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || '{}') } catch { return {} } }
-const save = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify(v)) } catch {} }
+const save = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify(v)) } catch { /* ignore */ } }
 
 function loadMonthlyStore():    Record<string,number> { return load(MONTHLY_BUDGET_KEY) }
 function saveMonthlyStore(s: Record<string,number>) { save(MONTHLY_BUDGET_KEY, s) }
