@@ -1,30 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useTrackPageLoading } from '@/context/PageLoadingContext'
-import { edgeFetch } from '@/lib/edgeFetch'
-
-function normalizeDomain(str: string): string {
-  return str
-    .toLowerCase()
-    .replace(/^sc-domain:/, '')
-    .replace(/^https?:\/\/(?:www\.)?/, '')
-    .replace(/\.(com|net|org|io|co|us|info|biz|dev|app).*$/, '')
-    .replace(/[^a-z0-9]/g, '')
-}
-
-function findBestGa4Match(gscSite: string, ga4Properties: { id: string; name?: string }[]): string {
-  const domain = normalizeDomain(gscSite)
-  if (domain.length < 4) return ''
-  let bestId = ''
-  let bestScore = 0
-  for (const prop of ga4Properties) {
-    const propNorm = normalizeDomain(prop.name || prop.id)
-    const score = propNorm.includes(domain) ? domain.length
-                : domain.includes(propNorm) && propNorm.length >= 4 ? propNorm.length
-                : 0
-    if (score > bestScore) { bestScore = score; bestId = prop.id }
-  }
-  return bestScore >= 4 ? bestId : ''
-}
+import { supabase } from '@/lib/supabase'
 
 export const DATE_PRESETS = [
   { label: 'Last 7 Days',  days: 7  },
@@ -49,8 +25,15 @@ export function formatDateLabel(startDate: string, endDate: string) {
 
 export const SEO_API = 'https://sjpvyxdyleebhqlmqscy.supabase.co/functions/v1/seo'
 
-const PROPS_KEY    = 'xms_properties'
-const SELECTED_KEY = 'xms_selected'
+export interface SEOClientOption {
+  id:   string
+  name: string
+  gsc:  string
+  ga4:  string
+}
+
+const CLIENTS_KEY  = 'xms_seo_clients'
+const SELECTED_KEY = 'xms_seo_client'
 
 function ssGet(key: string) {
   try { return JSON.parse(sessionStorage.getItem(key) || 'null') } catch { return null }
@@ -70,84 +53,67 @@ export function useSEODashboardState(defaultPreset = 1) {
 
   useTrackPageLoading(loading || propertiesLoading, 'seo-data')
 
-  const [properties, setProperties] = useState<{ gscSites: { url: string }[]; ga4Properties: { id: string; name?: string }[] }>(() => {
-    return ssGet(PROPS_KEY) || { gscSites: [], ga4Properties: [] }
+  const [clients, setClients] = useState<SEOClientOption[]>(() => {
+    return ssGet(CLIENTS_KEY) || []
   })
 
-  const [selectedGscSite, setSelectedGscSite] = useState<string>(() => {
+  const [selectedClientId, setSelectedClientIdRaw] = useState<string>(() => {
     const sel = ssGet(SELECTED_KEY)
-    if (sel?.gsc) return sel.gsc
-    const cached = ssGet(PROPS_KEY)
-    return cached?.gscSites?.[0]?.url || ''
+    if (sel?.clientId) return sel.clientId
+    const cached: SEOClientOption[] = ssGet(CLIENTS_KEY) || []
+    return cached[0]?.id || ''
   })
 
-  const [selectedGa4Id, setSelectedGa4Id] = useState<string>(() => {
-    const sel = ssGet(SELECTED_KEY)
-    if (sel?.ga4) return sel.ga4
-    const cached = ssGet(PROPS_KEY)
-    return cached?.ga4Properties?.[0]?.id || ''
-  })
-
+  // Load SEO clients (with their fixed GSC/GA4 pair) from the clients table
   useEffect(() => {
     setPropertiesLoading(true)
-    edgeFetch(`${SEO_API}/properties`)
-      .then((r) => r.json().then((d: Record<string, unknown>) => {
-        // Supabase errors use "message" field, not "error"
-        if (!r.ok || d.error || d.message) {
-          throw new Error(String(d.error ?? d.message ?? `HTTP ${r.status}`))
+    supabase
+      .from('clients')
+      .select('id, name, status, gsc_property, ga4_property_id')
+      .order('name')
+      .then(({ data, error }) => {
+        if (error) {
+          setPropertiesError(error.message)
+        } else {
+          const list: SEOClientOption[] = (data || [])
+            .filter((r) => r.status === 'active' && (r.gsc_property || r.ga4_property_id))
+            .map((r) => ({ id: r.id, name: r.name, gsc: r.gsc_property || '', ga4: r.ga4_property_id || '' }))
+          setClients(list)
+          ssSet(CLIENTS_KEY, list)
+          setSelectedClientIdRaw((prev) => list.some((c) => c.id === prev) ? prev : (list[0]?.id || ''))
         }
-        return d
-      }))
-      .then((d) => {
-        const next = {
-          gscSites: Array.isArray(d.gscSites) ? d.gscSites as { url: string }[] : [],
-          ga4Properties: Array.isArray(d.ga4Properties) ? d.ga4Properties as { id: string; name?: string }[] : [],
-        }
-        setProperties(next)
-        ssSet(PROPS_KEY, next)
-        setSelectedGscSite((prev) => next.gscSites.some((s) => s.url === prev) ? prev : next.gscSites[0]?.url || '')
-        setSelectedGa4Id((prev)   => next.ga4Properties.some((p) => p.id === prev) ? prev : next.ga4Properties[0]?.id || '')
         setPropertiesLoaded(true)
+        setPropertiesLoading(false)
       })
-      .catch((err: Error) => { setPropertiesError(err.message); setPropertiesLoaded(true) })
-      .finally(() => setPropertiesLoading(false))
   }, [])
 
+  // Listen for client changes from external sources (e.g. sidebar selector)
   useEffect(() => {
-    if (selectedGscSite || selectedGa4Id) {
-      ssSet(SELECTED_KEY, { gsc: selectedGscSite, ga4: selectedGa4Id })
-      window.dispatchEvent(new CustomEvent('seo:site-changed', { detail: { gsc: selectedGscSite } }))
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ clientId: string }>).detail
+      if (detail?.clientId) {
+        setSelectedClientIdRaw(prev => prev !== detail.clientId ? detail.clientId : prev)
+      }
     }
-  }, [selectedGscSite, selectedGa4Id])
+    window.addEventListener('seo:client-changed', handler)
+    return () => window.removeEventListener('seo:client-changed', handler)
+  }, [])
 
-  // Auto-link GA4 when properties first load (if no saved GA4 selection)
+  // Persist selection + notify sidebar
   useEffect(() => {
-    if (!selectedGscSite || !properties.ga4Properties.length) return
-    const saved = ssGet(SELECTED_KEY)
-    if (saved?.ga4 && properties.ga4Properties.some((p) => p.id === saved.ga4)) return // respect valid saved preference
-    const match = findBestGa4Match(selectedGscSite, properties.ga4Properties)
-    if (match) setSelectedGa4Id(match)
-  }, [properties.ga4Properties]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Wrapped setter: selecting a GSC site also auto-links the matching GA4 property
-  const selectGscSite = useCallback((site: string) => {
-    setSelectedGscSite(site)
-    const match = findBestGa4Match(site, properties.ga4Properties)
-    if (match) setSelectedGa4Id(match)
-  }, [properties.ga4Properties])
+    if (selectedClientId) {
+      const name = clients.find((c) => c.id === selectedClientId)?.name || selectedClientId
+      ssSet(SELECTED_KEY, { clientId: selectedClientId })
+      window.dispatchEvent(new CustomEvent('seo:client-changed', { detail: { clientId: selectedClientId, name } }))
+    }
+  }, [selectedClientId, clients])
 
   function handlePresetChange(idx: number) {
     setSelectedPreset(idx)
     setDateRange(getDateRange(DATE_PRESETS[idx].days))
   }
 
-  const gscOptions = properties.gscSites
-    .map((s) => ({ value: s.url, label: s.url.replace(/^https?:\/\//, '').replace(/\/$/, '') }))
-    .sort((a, b) => a.label.localeCompare(b.label))
-
-  const ga4Options = properties.ga4Properties
-    .map((p) => ({ value: p.id, label: p.name ? `${p.name} (${p.id})` : p.id }))
-    .sort((a, b) => a.label.localeCompare(b.label))
+  const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null
 
   return {
     selectedPreset,
@@ -156,9 +122,12 @@ export function useSEODashboardState(defaultPreset = 1) {
     lastUpdated, setLastUpdated,
     propertiesError,
     propertiesLoaded,
-    selectedGscSite, setSelectedGscSite: selectGscSite,
-    selectedGa4Id,   setSelectedGa4Id,
-    gscOptions, ga4Options,
+    clients,
+    selectedClientId,
+    setSelectedClientId: setSelectedClientIdRaw,
+    clientName:      selectedClient?.name || '',
+    selectedGscSite: selectedClient?.gsc  || '',
+    selectedGa4Id:   selectedClient?.ga4  || '',
     handlePresetChange,
   }
 }

@@ -2,45 +2,9 @@ import { useState } from 'react'
 import { DATE_PRESETS } from '../hooks/useSEODashboardState'
 import { exportPageToPdf } from '../lib/exportPdf'
 
-interface SelectOption { value: string; label: string }
-
-function PropertySelect({ label, value, onChange, options, placeholder, disabled }: {
-  label: string; value: string; onChange: (v: string) => void
-  options: SelectOption[]; placeholder: string; disabled?: boolean
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs font-medium text-body dark:text-bodydark whitespace-nowrap">{label}</span>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          className="appearance-none rounded-lg border border-stroke bg-white
-                     py-1.5 pl-3 pr-8 text-xs font-medium text-black shadow-card
-                     transition-colors hover:border-[#1A72D9] focus:border-[#1A72D9]
-                     focus:outline-none disabled:opacity-50
-                     dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]
-                     max-w-[220px] truncate"
-        >
-          <option value="">{placeholder}</option>
-          {options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
-        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">
-          <svg className="h-3.5 w-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-          </svg>
-        </span>
-      </div>
-    </div>
-  )
-}
-
 interface DashboardControlsProps {
   propertiesError?: string | null
-  selectedGscSite: string; setSelectedGscSite: (v: string) => void; gscOptions: SelectOption[]
-  selectedGa4Id: string;   setSelectedGa4Id:   (v: string) => void; ga4Options: SelectOption[]
-  showGsc?: boolean; showGa4?: boolean; showDateRange?: boolean
+  showDateRange?: boolean
   selectedPreset: number; handlePresetChange: (idx: number) => void
   loading?: boolean; onRefresh: () => void
   pageTitle?: string
@@ -48,9 +12,7 @@ interface DashboardControlsProps {
 }
 
 export function DashboardControls({
-  selectedGscSite, setSelectedGscSite, gscOptions,
-  selectedGa4Id,   setSelectedGa4Id,   ga4Options,
-  showGsc = true, showGa4 = true, showDateRange = true,
+  showDateRange = true,
   selectedPreset, handlePresetChange,
   loading, onRefresh,
   pageTitle = 'Dashboard',
@@ -68,17 +30,6 @@ export function DashboardControls({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {showGsc && (
-        <PropertySelect label="GSC" value={selectedGscSite} onChange={setSelectedGscSite}
-          options={gscOptions} placeholder={gscOptions.length === 0 ? 'Loading…' : 'Select property…'}
-          disabled={gscOptions.length === 0} />
-      )}
-      {showGa4 && (
-        <PropertySelect label="GA4" value={selectedGa4Id} onChange={setSelectedGa4Id}
-          options={ga4Options} placeholder={ga4Options.length === 0 ? 'Loading…' : 'Select property…'}
-          disabled={ga4Options.length === 0} />
-      )}
-
       {showDateRange && (
         <div className="flex items-center gap-1 rounded-lg border border-stroke
                         bg-white p-1 shadow-card dark:border-strokedark dark:bg-boxdark">

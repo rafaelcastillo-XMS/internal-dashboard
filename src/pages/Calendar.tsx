@@ -1,4 +1,5 @@
 import { useState } from "react"
+import DOMPurify from "dompurify"
 import { motion, AnimatePresence } from "framer-motion"
 import { ChevronLeft, ChevronRight, X, Clock, Loader2, Video, AlignLeft } from "lucide-react"
 import { formatIsoDate } from "@/features/calendar/model"
@@ -101,7 +102,7 @@ function EventModal({ event, onClose }: { event: CalendarEvent; onClose: () => v
                             <AlignLeft className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
                             <p
                                 className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap"
-                                dangerouslySetInnerHTML={{ __html: event.description }}
+                                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(event.description) }}
                             />
                         </div>
                     )}

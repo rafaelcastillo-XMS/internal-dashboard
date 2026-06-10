@@ -7,3 +7,5 @@ dist
 .env.production
 token.json
 credentials.json
+service-account.json
+*service-account*.json

@@ -152,7 +152,7 @@ export function SEOTraffic() {
             Acquisition sources &amp; conversion performance · {state.lastUpdated ? `Updated ${state.lastUpdated.toLocaleTimeString()}` : 'Loading data…'}
           </p>
         </div>
-        <DashboardControls {...state} showGsc={false} onRefresh={() => fetchData(true)} pageTitle="Traffic-Quality" />
+        <DashboardControls {...state} onRefresh={() => fetchData(true)} pageTitle="Traffic-Quality" />
       </div>
 
       <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

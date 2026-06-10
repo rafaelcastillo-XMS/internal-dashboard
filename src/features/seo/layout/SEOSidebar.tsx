@@ -4,16 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { NotepadText, ArrowLeft } from 'lucide-react'
 import { useSidebar } from '@/context/useSidebar'
-import { ClientSelector } from '@/features/shared/components/ClientSelector'
-
-function formatSiteName(url: string): string {
-  return url
-    .replace(/^sc-domain:/, '')
-    .replace(/^https?:\/\/(?:www\.)?/, '')
-    .replace(/\/$/, '')
-}
-
-const SELECTED_KEY = 'xms_selected'
+import { SEOClientSelector } from '@/features/seo/components/SEOClientSelector'
 
 const NAV_GROUPS = [
   {
@@ -161,21 +152,6 @@ const inactiveClass = "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-i
 export function SEOSidebar() {
   const { collapsed, isMobileOpen, closeMobile } = useSidebar()
   const location = useLocation()
-  const [activeSite, setActiveSite] = useState<string>(() => {
-    try {
-      const sel = JSON.parse(sessionStorage.getItem(SELECTED_KEY) || 'null')
-      return sel?.gsc || ''
-    } catch { return '' }
-  })
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ gsc: string }>).detail
-      if (detail?.gsc) setActiveSite(detail.gsc)
-    }
-    window.addEventListener('seo:site-changed', handler)
-    return () => window.removeEventListener('seo:site-changed', handler)
-  }, [])
 
   const navItemClass = collapsed
     ? "relative group flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all text-sm font-semibold"
@@ -220,12 +196,8 @@ export function SEOSidebar() {
         {/* Client selector (expanded only) */}
         {!collapsed && (
           <div className="border-b border-[var(--sidebar-border)] px-3 py-3">
-            <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-section-label)]">Active Account</p>
-            <ClientSelector
-              activeName={activeSite ? formatSiteName(activeSite) : 'Holts'}
-              subtitle="SEO Intelligence"
-              onSelect={(name) => setActiveSite(name)}
-            />
+            <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-section-label)]">Active Client</p>
+            <SEOClientSelector />
           </div>
         )}
 

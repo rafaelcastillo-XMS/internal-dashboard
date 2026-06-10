@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import DOMPurify from 'dompurify'
+import { supabase } from '../../lib/supabase'
 import { GBPReport } from '../../features/seo/components/GBPReport'
 import { RunAhrefsCard } from '../../features/seo/components/RunAhrefsCard'
 import type { GBPReportHandle } from '../../features/seo/components/GBPReport'
@@ -59,6 +60,16 @@ const TABS: { id: TabKey; label: string; icon: React.ReactNode }[] = [
 const POLL_INTERVAL = 5000
 const POLL_TIMEOUT  = 10 * 60 * 1000
 
+interface OnPageAuditRow {
+  id: number
+  client: string
+  landing_page_url: string
+  status: string            // running / completed / error
+  error_message: string | null
+  created_at: string
+  completed_at: string | null
+}
+
 export function SEOOnPageAudit() {
   const seoState = useSEODashboardState()
   const [activeTab, setActiveTab] = useState<TabKey>('run-audit')
@@ -70,9 +81,15 @@ export function SEOOnPageAudit() {
   const [submittedUrl, setSubmittedUrl] = useState('')
   const [elapsedSecs, setElapsedSecs] = useState(0)
 
+  const [clients, setClients]       = useState<string[]>([])
+  const [client, setClient]         = useState('')
+  const [audits, setAudits]         = useState<OnPageAuditRow[]>([])
+  const [viewingId, setViewingId]   = useState<number | null>(null)
+
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(0)
+  const auditIdRef   = useRef<number | null>(null)
   const gbpRef       = useRef<GBPReportHandle>(null)
 
   function stopPolling() {
@@ -82,13 +99,60 @@ export function SEOOnPageAudit() {
 
   useEffect(() => () => stopPolling(), [])
 
+  useEffect(() => {
+    loadClients()
+    loadAudits()
+  }, [])
+
+  async function loadClients() {
+    const { data } = await supabase.from('client_profiles').select('client_id')
+    if (data) setClients(data.map((r: { client_id: string }) => r.client_id))
+  }
+
+  async function loadAudits() {
+    const { data } = await supabase
+      .from('seo_onpage_audits')
+      .select('id, client, landing_page_url, status, error_message, created_at, completed_at')
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (data) setAudits(data as OnPageAuditRow[])
+  }
+
+  async function markAuditFailed(message: string) {
+    if (auditIdRef.current === null) return
+    await supabase
+      .from('seo_onpage_audits')
+      .update({ status: 'error', error_message: message, completed_at: new Date().toISOString() })
+      .eq('id', auditIdRef.current)
+    loadAudits()
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!client) {
+      setErrorMsg('Select a client first — every audit is registered against a client.')
+      setStatus(STATUS.error)
+      return
+    }
     setStatus(STATUS.loading)
     setErrorMsg('')
     setAuditHtml('')
     setElapsedSecs(0)
     setSubmittedUrl(landingPageUrl)
+
+    // Register the audit run in Supabase before launching the workflow
+    const { data: row } = await supabase
+      .from('seo_onpage_audits')
+      .insert({
+        client,
+        landing_page_url:   landingPageUrl,
+        screaming_frog_url: screamingFrogSheetUrl,
+        status: 'running',
+      })
+      .select('id')
+      .single()
+    auditIdRef.current = row?.id ?? null
+    loadAudits()
 
     try {
       const res  = await fetch('/api/seo/onpage-audit', {
@@ -99,8 +163,10 @@ export function SEOOnPageAudit() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Unknown error')
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      setErrorMsg(message)
       setStatus(STATUS.error)
+      markAuditFailed(message)
       return
     }
 
@@ -115,6 +181,7 @@ export function SEOOnPageAudit() {
         stopPolling()
         setErrorMsg('Audit timed out after 10 minutes. Please try again.')
         setStatus(STATUS.error)
+        markAuditFailed('Audit timed out after 10 minutes')
         return
       }
       try {
@@ -124,11 +191,36 @@ export function SEOOnPageAudit() {
           stopPolling()
           setAuditHtml(DOMPurify.sanitize(data.html, { USE_PROFILES: { html: true } }))
           setStatus(STATUS.ready)
+          // Persist the finished report so it stays in the client's audit history
+          if (auditIdRef.current !== null) {
+            await supabase
+              .from('seo_onpage_audits')
+              .update({ status: 'completed', audit_html: data.html, completed_at: new Date().toISOString() })
+              .eq('id', auditIdRef.current)
+            loadAudits()
+          }
         }
       } catch {
         // network hiccup — keep polling
       }
     }, POLL_INTERVAL)
+  }
+
+  async function viewSavedAudit(a: OnPageAuditRow) {
+    setViewingId(a.id)
+    const { data } = await supabase
+      .from('seo_onpage_audits')
+      .select('audit_html')
+      .eq('id', a.id)
+      .single()
+    setViewingId(null)
+    if (data?.audit_html) {
+      stopPolling()
+      setSubmittedUrl(a.landing_page_url)
+      setAuditHtml(DOMPurify.sanitize(data.audit_html, { USE_PROFILES: { html: true } }))
+      setStatus(STATUS.ready)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }
 
   function handleReset() {
@@ -140,6 +232,8 @@ export function SEOOnPageAudit() {
     setAuditHtml('')
     setSubmittedUrl('')
     setElapsedSecs(0)
+    auditIdRef.current = null
+    loadAudits()
   }
 
   const mins = String(Math.floor(elapsedSecs / 60)).padStart(2, '0')
@@ -235,7 +329,6 @@ export function SEOOnPageAudit() {
           <div className="mb-6">
             <DashboardControls
               {...seoState}
-              showGa4={true}
               showDateRange={true}
               pageTitle="GBP-Report"
               onRefresh={() => {}}
@@ -248,7 +341,7 @@ export function SEOOnPageAudit() {
             selectedGscSite={seoState.selectedGscSite}
             selectedGa4Id={seoState.selectedGa4Id}
             dateRange={seoState.dateRange}
-            clientLabel={seoState.gscOptions.find(o => o.value === seoState.selectedGscSite)?.label}
+            clientLabel={seoState.clientName || undefined}
           />
         </>
       )}
@@ -391,6 +484,37 @@ export function SEOOnPageAudit() {
                   </div>
 
                   <div className="px-6 py-6 space-y-6">
+
+                    {/* Client */}
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-black dark:text-[#E2E5E9]">
+                        Client
+                        <span className="ml-1 text-danger">*</span>
+                      </label>
+                      <div className="relative">
+                        <select
+                          required
+                          value={client}
+                          onChange={(e) => setClient(e.target.value)}
+                          className="w-full appearance-none rounded-lg border border-stroke bg-white px-4 py-3 pr-8
+                                     text-sm text-black outline-none
+                                     transition focus:border-[#1A72D9] focus:ring-1 focus:ring-[#1A72D9]/30
+                                     dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]
+                                     dark:focus:border-[#1A72D9]"
+                        >
+                          <option value="">Select client…</option>
+                          {clients.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                          <svg className="h-3.5 w-3.5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                          </svg>
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-xs text-body dark:text-bodydark">
+                        The audit is registered in this client's history
+                      </p>
+                    </div>
 
                     {/* Landing Page URL */}
                     <div>
@@ -568,6 +692,87 @@ export function SEOOnPageAudit() {
                   </div>
                 </div>
 
+              </div>
+
+              {/* ══ AUDIT HISTORY ══════════════════════════════════════════ */}
+              <div className="rounded-xl border border-stroke bg-white shadow-default
+                              dark:border-strokedark dark:bg-boxdark">
+                <div className="border-b border-stroke px-6 py-4 dark:border-strokedark flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Audit History</h3>
+                    <p className="mt-0.5 text-xs text-body dark:text-bodydark">
+                      Every audit run is registered per client — reopen any saved report
+                    </p>
+                  </div>
+                  {audits.length > 0 && (
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      {audits.length} audit{audits.length !== 1 ? 's' : ''} registered
+                    </span>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px]">
+                    <thead>
+                      <tr className="border-b border-stroke bg-gray-50/50 dark:border-strokedark dark:bg-black/10">
+                        {['Client', 'Landing Page', 'Date', 'Status', ''].map(col => (
+                          <th key={col} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-body dark:text-bodydark whitespace-nowrap">
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                      {audits.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-10 text-center text-sm text-body dark:text-bodydark">
+                            No audits registered yet. Run your first audit above.
+                          </td>
+                        </tr>
+                      ) : audits.map(a => (
+                        <tr key={a.id} className="transition-colors hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
+                          <td className="px-5 py-3.5 text-sm font-medium text-black dark:text-[#E2E5E9] whitespace-nowrap">{a.client}</td>
+                          <td className="px-5 py-3.5 font-mono text-xs text-[#1A72D9] max-w-[280px] truncate">{a.landing_page_url}</td>
+                          <td className="px-5 py-3.5 text-xs text-body dark:text-bodydark whitespace-nowrap">
+                            {new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              a.status === 'completed'
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+                                : a.status === 'running'
+                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400'
+                                  : 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'
+                            }`}>
+                              {a.status === 'running' && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />}
+                              {a.status}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-right">
+                            {a.status === 'completed' && (
+                              <button
+                                type="button"
+                                onClick={() => viewSavedAudit(a)}
+                                disabled={viewingId === a.id}
+                                className="rounded-lg border border-[#1A72D9]/30 bg-[#1A72D9]/10 px-3 py-1.5
+                                           text-xs font-medium text-[#1A72D9] transition
+                                           disabled:opacity-50 hover:bg-[#1A72D9]/20 active:scale-[0.98]"
+                              >
+                                {viewingId === a.id ? 'Loading…' : 'View Report'}
+                              </button>
+                            )}
+                            {a.status === 'error' && a.error_message && (
+                              <span className="text-xs text-red-500/80 max-w-[180px] inline-block truncate" title={a.error_message}>
+                                {a.error_message}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </>
           )}

@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { motion } from "framer-motion"
-import { ArrowLeft, Camera, ChevronDown, Database, Save, Upload, CheckCircle2, XCircle, RefreshCw } from "lucide-react"
+import { ArrowLeft, Camera, ChevronDown, Database, Save, Upload, CheckCircle2, XCircle, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { getClientIntegrationConfig, saveClientIntegrationConfig, type ClientIntegrationConfig } from "@/features/clients/integrations"
+import { notebookConfigFromRecord, type NotebookIntegrationConfig } from "@/features/clients/integrations"
+import { updateClientRecord, deleteClientRecord, type ClientRecord } from "@/features/clients/clientsTable"
 import { fetchNotebooklmNotebooks, type NotebookSummary } from "@/features/clients/notebooklm"
 import { createClientProfileForm, saveClientProfile, type ClientProfileForm, uploadClientLogo } from "@/features/clients/profiles"
 import { useClientRecord } from "@/features/clients/useClientRecord"
 import { useTrackPageLoading } from "@/context/PageLoadingContext"
+import { SEO_API } from "@/features/seo/hooks/useSEODashboardState"
+import { edgeFetch } from "@/lib/edgeFetch"
+import { supabase } from "@/lib/supabase"
 import notebooklmIcon from "@/assets/notebooklm-icon.svg"
 import googleAdsIcon from "@/assets/google-ads-icon.png"
 
@@ -22,18 +26,38 @@ interface GoogleStatus {
     allowed: boolean
 }
 
+interface GoogleProperties {
+    gscSites: { url: string }[]
+    ga4Properties: { id: string; name?: string }[]
+}
+
+interface SemAccountOption {
+    id: string
+    name: string
+    status: string
+}
+
+const BUDGET_TYPES = [
+    { key: "ads_weekly", label: "Weekly Report — Google Ads" },
+    { key: "guarantee_weekly", label: "Weekly Report — Google Guarantee" },
+    { key: "ads_monthly", label: "Monthly Report — Google Ads" },
+] as const
+
+const selectClass = "h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 pr-12 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+
 export function ClientIntegrations() {
     const navigate = useNavigate()
     const { clientId } = useParams<{ clientId: string }>()
     const [searchParams] = useSearchParams()
-    const { client, profile, loading: profileLoading, setProfile } = useClientRecord(clientId)
+    const { client, profile, record, loading: profileLoading, setProfile, setRecord } = useClientRecord(clientId)
 
     const [activeTab, setActiveTab] = useState<Tab>("Integrations")
-    const [config, setConfig] = useState<ClientIntegrationConfig>(() => getClientIntegrationConfig(client.id))
+    const [config, setConfig] = useState<NotebookIntegrationConfig>(() => notebookConfigFromRecord(record))
     const [profileForm, setProfileForm] = useState<ClientProfileForm>(() => createClientProfileForm(client))
     const [notebooks, setNotebooks] = useState<NotebookSummary[]>([])
     const [loadingNotebooks, setLoadingNotebooks] = useState(true)
     const [integrationError, setIntegrationError] = useState("")
+    const [saveError, setSaveError] = useState("")
     const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null)
     const [loadingGoogle, setLoadingGoogle] = useState(true)
     const authResult = searchParams.get("auth")
@@ -41,24 +65,34 @@ export function ClientIntegrations() {
     const [profileMessage, setProfileMessage] = useState<{ ok: boolean; text: string } | null>(null)
     const [logoFile, setLogoFile] = useState<File | null>(null)
     const [logoPreviewUrl, setLogoPreviewUrl] = useState("")
-    const [adsBudget, setAdsBudget] = useState("")
+    const [deleting, setDeleting] = useState(false)
+
+    // Google properties (GSC sites + GA4 properties) available to assign
+    const [properties, setProperties] = useState<GoogleProperties>({ gscSites: [], ga4Properties: [] })
+    const [loadingProperties, setLoadingProperties] = useState(true)
+    const [propertiesError, setPropertiesError] = useState("")
+
+    // SEM accounts available to link
+    const [semAccounts, setSemAccounts] = useState<SemAccountOption[]>([])
+    const [loadingSemAccounts, setLoadingSemAccounts] = useState(true)
+
+    // Report budgets for the linked Google Ads account
+    const [budgets, setBudgets] = useState<Record<string, string>>({})
+    const [savingBudgets, setSavingBudgets] = useState(false)
+    const [budgetsMessage, setBudgetsMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
     const selectedNotebook = useMemo(
-        () => notebooks.find(notebook => notebook.id === config.notebooklm.notebookId),
-        [config.notebooklm.notebookId, notebooks],
+        () => notebooks.find(notebook => notebook.id === config.notebookId),
+        [config.notebookId, notebooks],
     )
 
     useEffect(() => {
-        setConfig(getClientIntegrationConfig(client.id))
-    }, [client.id])
+        setConfig(notebookConfigFromRecord(record))
+    }, [record])
 
     useEffect(() => {
         setProfileForm(createClientProfileForm(client, profile))
     }, [client, profile])
-
-    useEffect(() => {
-        saveClientIntegrationConfig(client.id, config)
-    }, [client.id, config])
 
     useEffect(() => {
         if (!logoFile) {
@@ -108,6 +142,116 @@ export function ClientIntegrations() {
             .finally(() => setLoadingGoogle(false))
     }, [authResult])
 
+    useEffect(() => {
+        let active = true
+        setLoadingProperties(true)
+        edgeFetch(`${SEO_API}/properties`)
+            .then(r => r.json())
+            .then((d: Record<string, unknown>) => {
+                if (!active) return
+                if (d.error || d.message) throw new Error(String(d.error ?? d.message))
+                setProperties({
+                    gscSites: Array.isArray(d.gscSites) ? d.gscSites as { url: string }[] : [],
+                    ga4Properties: Array.isArray(d.ga4Properties) ? d.ga4Properties as { id: string; name?: string }[] : [],
+                })
+            })
+            .catch((err: Error) => { if (active) setPropertiesError(err.message) })
+            .finally(() => { if (active) setLoadingProperties(false) })
+        return () => { active = false }
+    }, [])
+
+    useEffect(() => {
+        let active = true
+        setLoadingSemAccounts(true)
+        supabase
+            .from("sem_accounts")
+            .select("id, name, status")
+            .order("name")
+            .then(({ data }) => {
+                if (active) setSemAccounts(((data ?? []) as SemAccountOption[]).filter(a => a.status === "ENABLED"))
+            })
+            .then(() => { if (active) setLoadingSemAccounts(false) })
+        return () => { active = false }
+    }, [])
+
+    useEffect(() => {
+        const accountId = record?.sem_account_id
+        if (!accountId) {
+            setBudgets({})
+            return
+        }
+        let active = true
+        supabase
+            .from("sem_report_budgets")
+            .select("report_type, budget")
+            .eq("account_id", accountId)
+            .then(({ data }) => {
+                if (!active) return
+                const next: Record<string, string> = {}
+                for (const row of data ?? []) next[row.report_type] = String(row.budget ?? "")
+                setBudgets(next)
+            })
+        return () => { active = false }
+    }, [record?.sem_account_id])
+
+    async function saveRecord(patch: Partial<Omit<ClientRecord, "id">>) {
+        setSaveError("")
+        try {
+            const updated = await updateClientRecord(client.id, patch)
+            setRecord(updated)
+        } catch (err) {
+            setSaveError(err instanceof Error ? err.message : "Unable to save integration settings.")
+        }
+    }
+
+    function saveNotebookConfig(next: NotebookIntegrationConfig) {
+        setConfig(next)
+        void saveRecord({
+            notebooklm_enabled: next.enabled,
+            notebooklm_id: next.notebookId || null,
+            notebooklm_title: next.notebookTitle || null,
+        })
+    }
+
+    async function handleApplyBudgets() {
+        const accountId = record?.sem_account_id
+        if (!accountId || savingBudgets) return
+        setSavingBudgets(true)
+        setBudgetsMessage(null)
+        try {
+            const rows = BUDGET_TYPES.map(t => ({
+                account_id: accountId,
+                report_type: t.key,
+                budget: parseFloat((budgets[t.key] ?? "").replace(/[$,]/g, "")) || 0,
+                updated_at: new Date().toISOString(),
+            }))
+            const { error } = await supabase
+                .from("sem_report_budgets")
+                .upsert(rows, { onConflict: "account_id,report_type" })
+            if (error) throw error
+            setBudgetsMessage({ ok: true, text: "Budgets saved. SEM Reports will use these values." })
+        } catch (err) {
+            setBudgetsMessage({ ok: false, text: err instanceof Error ? err.message : "Unable to save budgets." })
+        } finally {
+            setSavingBudgets(false)
+            setTimeout(() => setBudgetsMessage(null), 4000)
+        }
+    }
+
+    async function handleDeleteClient() {
+        if (deleting) return
+        const confirmed = window.confirm(`Delete ${client.name}? This removes the client and its integration settings (SEO/SEM data and budgets are kept).`)
+        if (!confirmed) return
+        setDeleting(true)
+        try {
+            await deleteClientRecord(client.id)
+            navigate("/clients")
+        } catch (err) {
+            setSaveError(err instanceof Error ? err.message : "Unable to delete client.")
+            setDeleting(false)
+        }
+    }
+
     function updateProfileField(field: keyof ClientProfileForm, value: string) {
         setProfileForm(current => ({ ...current, [field]: value }))
     }
@@ -144,11 +288,12 @@ export function ClientIntegrations() {
         }
     }
 
-    const integrationEnabled = config.notebooklm.enabled
+    const integrationEnabled = config.enabled
     const hasPersistedLogo = Boolean(profile?.logo_url)
     const logoPreview = logoPreviewUrl || profileForm.logoUrl || (hasPersistedLogo ? client.avatar : "")
     const googleAuthorized = !!googleStatus?.allowed
     const googleWrongAccount = !!googleStatus?.connected && !googleAuthorized
+    const linkedSemAccount = semAccounts.find(a => a.id === record?.sem_account_id)
     useTrackPageLoading(loadingNotebooks || loadingGoogle || profileLoading, `client-integrations:${client.id}`)
 
     return (
@@ -236,7 +381,18 @@ export function ClientIntegrations() {
                                     Connection failed. Make sure you authorize the correct Google account and try again.
                                 </motion.div>
                             )}
+                            {!profileLoading && !record && (
+                                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                                    This client does not exist in the clients table yet, so integration settings cannot be saved.
+                                </div>
+                            )}
+                            {saveError && (
+                                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+                                    {saveError}
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                                {/* ── NotebookLM card ── */}
                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex items-start gap-4">
@@ -265,13 +421,8 @@ export function ClientIntegrations() {
                                                     type="checkbox"
                                                     className="sr-only"
                                                     checked={integrationEnabled}
-                                                    onChange={e => setConfig(current => ({
-                                                        ...current,
-                                                        notebooklm: {
-                                                            ...current.notebooklm,
-                                                            enabled: e.target.checked,
-                                                        },
-                                                    }))}
+                                                    disabled={!record}
+                                                    onChange={e => saveNotebookConfig({ ...config, enabled: e.target.checked })}
                                                 />
                                                 <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${integrationEnabled ? "left-6" : "left-1"}`} />
                                             </span>
@@ -282,20 +433,17 @@ export function ClientIntegrations() {
                                         <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Notebook</label>
                                         <div className="relative">
                                             <select
-                                                value={config.notebooklm.notebookId}
-                                                disabled={!integrationEnabled || loadingNotebooks}
+                                                value={config.notebookId}
+                                                disabled={!integrationEnabled || loadingNotebooks || !record}
                                                 onChange={event => {
                                                     const notebook = notebooks.find(item => item.id === event.target.value)
-                                                    setConfig(current => ({
-                                                        ...current,
-                                                        notebooklm: {
-                                                            ...current.notebooklm,
-                                                            notebookId: event.target.value,
-                                                            notebookTitle: notebook?.title ?? "",
-                                                        },
-                                                    }))
+                                                    saveNotebookConfig({
+                                                        ...config,
+                                                        notebookId: event.target.value,
+                                                        notebookTitle: notebook?.title ?? "",
+                                                    })
                                                 }}
-                                                className="h-14 w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 pr-12 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                                                className={`${selectClass} h-14`}
                                             >
                                                 <option value="">
                                                     {loadingNotebooks ? "Loading notebooks..." : "Select a NotebookLM notebook"}
@@ -402,7 +550,78 @@ export function ClientIntegrations() {
                                     </div>
                                 </div>
 
-                                {/* ── Google Ads Budget card ── */}
+                                {/* ── SEO Properties card (GSC + GA4) ── */}
+                                <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
+                                    <div className="flex items-start gap-4">
+                                        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                            <svg className="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="#1A72D9" strokeWidth={1.8}>
+                                                <path strokeLinecap="round" strokeLinejoin="round"
+                                                      d="M15.75 15.75l-2.489-2.489m0 0a3.375 3.375 0 10-4.773-4.773 3.375 3.375 0 004.774 4.774zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">SEO Properties</h3>
+                                            <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
+                                                record?.gsc_property && record?.ga4_property_id
+                                                    ? "text-emerald-600 dark:text-emerald-400"
+                                                    : "text-slate-400"
+                                            }`}>
+                                                {record?.gsc_property && record?.ga4_property_id ? "Configured" : "Not configured"}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-5 space-y-2">
+                                        <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Search Console Property</label>
+                                        <div className="relative">
+                                            <select
+                                                value={record?.gsc_property ?? ""}
+                                                disabled={!record}
+                                                onChange={e => void saveRecord({ gsc_property: e.target.value || null })}
+                                                className={selectClass}
+                                            >
+                                                <option value="">{loadingProperties ? "Loading properties..." : "Select GSC property"}</option>
+                                                {record?.gsc_property && !properties.gscSites.some(s => s.url === record.gsc_property) && (
+                                                    <option value={record.gsc_property}>{record.gsc_property}</option>
+                                                )}
+                                                {properties.gscSites.map(site => (
+                                                    <option key={site.url} value={site.url}>{site.url}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 space-y-2">
+                                        <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">GA4 Property</label>
+                                        <div className="relative">
+                                            <select
+                                                value={record?.ga4_property_id ?? ""}
+                                                disabled={!record}
+                                                onChange={e => void saveRecord({ ga4_property_id: e.target.value || null })}
+                                                className={selectClass}
+                                            >
+                                                <option value="">{loadingProperties ? "Loading properties..." : "Select GA4 property"}</option>
+                                                {record?.ga4_property_id && !properties.ga4Properties.some(p => p.id === record.ga4_property_id) && (
+                                                    <option value={record.ga4_property_id}>{record.ga4_property_id}</option>
+                                                )}
+                                                {properties.ga4Properties.map(prop => (
+                                                    <option key={prop.id} value={prop.id}>{prop.name ? `${prop.name} (${prop.id})` : prop.id}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        </div>
+                                    </div>
+
+                                    {propertiesError && (
+                                        <p className="mt-3 text-xs text-amber-600 dark:text-amber-300">{propertiesError}</p>
+                                    )}
+                                    <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+                                        The SEO module always uses this fixed GSC + GA4 pair for this client.
+                                    </p>
+                                </div>
+
+                                {/* ── Google Ads card (account link + report budgets) ── */}
                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
                                     <div className="flex items-start gap-4">
                                         <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -410,34 +629,70 @@ export function ClientIntegrations() {
                                         </div>
                                         <div>
                                             <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">Google Ads</h3>
-                                            <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Monthly Budget</p>
+                                            <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
+                                                linkedSemAccount ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                                            }`}>
+                                                {linkedSemAccount ? "Account linked" : "No account linked"}
+                                            </p>
                                         </div>
                                     </div>
 
                                     <div className="mt-5 space-y-2">
-                                        <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Monthly Budget</label>
+                                        <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Google Ads Account</label>
                                         <div className="relative">
-                                            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">$</span>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
-                                                placeholder="0.00"
-                                                value={adsBudget}
-                                                onChange={e => setAdsBudget(e.target.value)}
-                                                className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-8 pr-4 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                                            />
+                                            <select
+                                                value={record?.sem_account_id ?? ""}
+                                                disabled={!record || loadingSemAccounts}
+                                                onChange={e => void saveRecord({ sem_account_id: e.target.value || null })}
+                                                className={selectClass}
+                                            >
+                                                <option value="">{loadingSemAccounts ? "Loading accounts..." : "Select Google Ads account"}</option>
+                                                {semAccounts.map(account => (
+                                                    <option key={account.id} value={account.id}>{account.name}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                         </div>
+                                    </div>
+
+                                    <div className="mt-4 space-y-3">
+                                        {BUDGET_TYPES.map(type => (
+                                            <div key={type.key} className="space-y-1.5">
+                                                <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{type.label}</label>
+                                                <div className="relative">
+                                                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">$</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        placeholder="0.00"
+                                                        disabled={!record?.sem_account_id}
+                                                        value={budgets[type.key] ?? ""}
+                                                        onChange={e => setBudgets(current => ({ ...current, [type.key]: e.target.value }))}
+                                                        className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-8 pr-4 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
 
                                     <div className="mt-4">
                                         <button
-                                            disabled
-                                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#4285F4] px-4 py-3 text-sm font-semibold text-white opacity-60 cursor-not-allowed"
+                                            disabled={!record?.sem_account_id || savingBudgets}
+                                            onClick={() => void handleApplyBudgets()}
+                                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#4285F4] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#3367d6] disabled:cursor-not-allowed disabled:opacity-60"
                                         >
-                                            Apply Budget
+                                            {savingBudgets ? "Saving…" : "Apply Budgets"}
                                         </button>
-                                        <p className="mt-2 text-center text-xs text-slate-400">Integration coming soon</p>
+                                        {budgetsMessage ? (
+                                            <p className={`mt-2 text-center text-xs ${budgetsMessage.ok ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>
+                                                {budgetsMessage.text}
+                                            </p>
+                                        ) : (
+                                            <p className="mt-2 text-center text-xs text-slate-400">
+                                                {record?.sem_account_id ? "Used by the Weekly and Monthly reports in SEM." : "Link a Google Ads account to set budgets."}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -527,6 +782,22 @@ export function ClientIntegrations() {
                                         {profileMessage.text}
                                     </p>
                                 )}
+
+                                <div className="rounded-2xl border border-red-200 bg-red-50/60 p-4 dark:border-red-900/50 dark:bg-red-950/20">
+                                    <p className="text-sm font-semibold text-red-700 dark:text-red-400">Danger zone</p>
+                                    <p className="mt-1 text-sm text-red-600/80 dark:text-red-400/80">
+                                        Deleting removes this client from the dashboard. SEO/SEM data and report budgets are not deleted.
+                                    </p>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => void handleDeleteClient()}
+                                        disabled={deleting || !record}
+                                        className="mt-3 border-red-300 bg-white text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:bg-transparent dark:text-red-400"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                        {deleting ? "Deleting..." : "Delete Client"}
+                                    </Button>
+                                </div>
                             </div>
                         )}
                     </div>

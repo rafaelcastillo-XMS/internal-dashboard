@@ -8,6 +8,14 @@ const app = express()
 app.use(express.json())
 const PORT = process.env.PORT ?? 3000
 
+// ─── Security headers ─────────────────────────────────────────────────────────
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff")
+  res.setHeader("X-Frame-Options", "DENY")
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin")
+  next()
+})
+
 // ─── Monday.com cache (5-min TTL per user) ────────────────────────────────────
 const mondayTaskCache = new Map()
 const MONDAY_CACHE_TTL_MS = 5 * 60 * 1000
@@ -54,7 +62,7 @@ app.get("/api/sem/search-terms", async (req, res) => {
   }
 
   try {
-    const edgeUrl = `${SUPABASE_URL}/functions/v1/sem/search-terms?accountId=${accountId}&startDate=${startDate}&endDate=${endDate}`
+    const edgeUrl = `${SUPABASE_URL}/functions/v1/sem/search-terms?accountId=${encodeURIComponent(accountId)}&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`
     const upstream = await fetch(edgeUrl, {
       headers: {
         apikey:        SUPABASE_ANON_KEY,
@@ -532,8 +540,9 @@ app.post('/api/seo/onpage-audit', async (req, res) => {
 app.get('/api/seo/pagespeed', async (req, res) => {
   const { url } = req.query
   if (!url) return res.status(400).json({ error: 'url is required' })
+  const key = process.env.PSI_API_KEY
+  if (!key) return res.status(503).json({ error: 'PSI_API_KEY is not configured' })
   try {
-    const key = process.env.PSI_API_KEY
     const psiRes = await fetch(
       `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile&key=${key}`
     )

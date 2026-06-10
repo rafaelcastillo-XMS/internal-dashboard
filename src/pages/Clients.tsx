@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import type { Client } from "@/data/dummy"
-import { getClientIntegrationConfig } from "@/features/clients/integrations"
+import { notebookConfigFromRecord, type NotebookIntegrationConfig } from "@/features/clients/integrations"
 import { queryNotebooklm } from "@/features/clients/notebooklm"
 import { useClientRecord } from "@/features/clients/useClientRecord"
 
@@ -23,14 +23,13 @@ type Message = {
     timestamp: Date
 }
 
-function ChatArea({ client }: { client: Client }) {
+function ChatArea({ client, notebook }: { client: Client; notebook: NotebookIntegrationConfig }) {
     const navigate = useNavigate()
-    const integration = getClientIntegrationConfig(client.id)
     const [messages, setMessages] = useState<Message[]>([
         {
             id: "1",
-            text: integration.notebooklm.enabled && integration.notebooklm.notebookId
-                ? `Hi, I'm connected to NotebookLM for ${client.name}. Ask me anything and I'll answer from ${integration.notebooklm.notebookTitle || "the selected notebook"}.`
+            text: notebook.enabled && notebook.notebookId
+                ? `Hi, I'm connected to NotebookLM for ${client.name}. Ask me anything and I'll answer from ${notebook.notebookTitle || "the selected notebook"}.`
                 : `Hi, I'm ${client.contact}. Connect NotebookLM in integrations to answer with real client knowledge.`,
             sender: "client",
             timestamp: new Date()
@@ -44,14 +43,14 @@ function ChatArea({ client }: { client: Client }) {
     useEffect(() => {
         setMessages([{
             id: "1",
-            text: integration.notebooklm.enabled && integration.notebooklm.notebookId
-                ? `Hi, I'm connected to NotebookLM for ${client.name}. Ask me anything and I'll answer from ${integration.notebooklm.notebookTitle || "the selected notebook"}.`
+            text: notebook.enabled && notebook.notebookId
+                ? `Hi, I'm connected to NotebookLM for ${client.name}. Ask me anything and I'll answer from ${notebook.notebookTitle || "the selected notebook"}.`
                 : `Hi, I'm ${client.contact}. Connect NotebookLM in integrations to answer with real client knowledge.`,
             sender: "client",
             timestamp: new Date()
         }])
         setConversationId(undefined)
-    }, [client.contact, client.id, integration.notebooklm.enabled, integration.notebooklm.notebookId, integration.notebooklm.notebookTitle, client.name])
+    }, [client.contact, client.id, notebook.enabled, notebook.notebookId, notebook.notebookTitle, client.name])
 
     const handleSend = async () => {
         if (!inputValue.trim()) return
@@ -70,9 +69,9 @@ function ChatArea({ client }: { client: Client }) {
             let reply = "NotebookLM is not enabled for this client yet. Open integrations and select a notebook first."
             let nextConversationId = conversationId
 
-            if (integration.notebooklm.enabled && integration.notebooklm.notebookId) {
+            if (notebook.enabled && notebook.notebookId) {
                 const result = await queryNotebooklm({
-                    notebookId: integration.notebooklm.notebookId,
+                    notebookId: notebook.notebookId,
                     query: prompt,
                     conversationId,
                 })
@@ -123,12 +122,12 @@ function ChatArea({ client }: { client: Client }) {
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.7)]" />
                             {client.name} · Online
                         </span>
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${integration.notebooklm.enabled && integration.notebooklm.notebookId
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${notebook.enabled && notebook.notebookId
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                             : "bg-[var(--bg-subtle)] text-[var(--text-muted)]"
                             }`}>
                             <Bot className="h-3 w-3" />
-                            {integration.notebooklm.enabled && integration.notebooklm.notebookId ? "NotebookLM live" : "Demo mode"}
+                            {notebook.enabled && notebook.notebookId ? "NotebookLM live" : "Demo mode"}
                         </span>
                     </div>
                 </div>
@@ -199,7 +198,7 @@ function ChatArea({ client }: { client: Client }) {
                         value={inputValue}
                         onChange={e => setInputValue(e.target.value)}
                         onKeyDown={e => e.key === "Enter" && handleSend()}
-                        placeholder={integration.notebooklm.enabled && integration.notebooklm.notebookId
+                        placeholder={notebook.enabled && notebook.notebookId
                             ? `Ask NotebookLM about ${client.name}...`
                             : `Message ${client.contact}...`}
                         className="flex-1 bg-transparent border-none shadow-none focus-visible:ring-0 px-4 text-sm"
@@ -288,13 +287,14 @@ function InfoItem({ icon: Icon, label, value, isLink, linkUrl, badge }: { icon: 
 
 export function Clients() {
     const { clientId } = useParams<{ clientId: string }>()
-    const { client } = useClientRecord(clientId)
+    const { client, record } = useClientRecord(clientId)
+    const notebook = notebookConfigFromRecord(record)
 
     return (
         <div className="h-full overflow-y-auto bg-[var(--bg-app)] custom-scrollbar">
             <div className="mx-auto max-w-screen-2xl p-6 h-full">
                 <div className="flex h-full w-full overflow-hidden rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-                    <ChatArea client={client} />
+                    <ChatArea client={client} notebook={notebook} />
                     <SidebarInfo client={client} />
                 </div>
             </div>

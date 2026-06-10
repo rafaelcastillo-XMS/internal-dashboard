@@ -286,7 +286,8 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
       const cH   = pdfH - PAD * 2
 
       // ── 1. Render header element off-screen ──────────────────────────
-      const clientName = clientLabel || (selectedGscSite ? selectedGscSite.replace(/^https?:\/\//, '').replace(/\/$/, '') : '')
+      const escapeHtml = (s: string) => s.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!))
+      const clientName = escapeHtml(clientLabel || (selectedGscSite ? selectedGscSite.replace(/^https?:\/\//, '').replace(/\/$/, '') : ''))
       const dateStr    = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
       const hEl = document.createElement('div')

@@ -104,33 +104,11 @@ export function SEODashboard() {
             </span>
           </h1>
           <p className="text-sm text-body dark:text-bodydark">
-            Xperience Ai Marketing Solutions ·{' '}
+            {state.clientName || 'Xperience Ai Marketing Solutions'} ·{' '}
             {state.lastUpdated ? `Updated ${state.lastUpdated.toLocaleTimeString()}` : 'Loading data…'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-body dark:text-bodydark">GSC</span>
-            <select value={state.selectedGscSite} onChange={(e) => state.setSelectedGscSite(e.target.value)}
-                    disabled={state.gscOptions.length === 0}
-                    className="rounded-lg border border-stroke bg-white py-1.5 pl-3 pr-8 text-xs font-medium text-black
-                               focus:border-[#1A72D9] focus:outline-none disabled:opacity-50
-                               dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] max-w-[220px]">
-              <option value="">{!state.propertiesLoaded ? 'Loading…' : state.gscOptions.length === 0 ? 'No properties' : 'Select property…'}</option>
-              {state.gscOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-body dark:text-bodydark">GA4</span>
-            <select value={state.selectedGa4Id} onChange={(e) => state.setSelectedGa4Id(e.target.value)}
-                    disabled={state.ga4Options.length === 0}
-                    className="rounded-lg border border-stroke bg-white py-1.5 pl-3 pr-8 text-xs font-medium text-black
-                               focus:border-[#1A72D9] focus:outline-none disabled:opacity-50
-                               dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] max-w-[220px]">
-              <option value="">{!state.propertiesLoaded ? 'Loading…' : state.ga4Options.length === 0 ? 'No properties' : 'Select property…'}</option>
-              {state.ga4Options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
           <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white p-1 shadow-card dark:border-strokedark dark:bg-boxdark">
             {DATE_PRESETS.map((preset, idx) => (
               <button key={preset.days} onClick={() => state.handlePresetChange(idx)}
@@ -155,25 +133,27 @@ export function SEODashboard() {
 
       {/* AI Insights banner */}
       <SEOAIInsights
-        clientName={state.gscOptions.find(o => o.value === state.selectedGscSite)?.label ?? ''}
+        clientName={state.clientName}
         gscSite={state.selectedGscSite}
         gsc={data.gsc}
         ga4={data.ga4}
         psiScore={data.psi?.metrics ? null : null}
       />
 
-      {/* No-properties banner */}
-      {state.propertiesLoaded && state.gscOptions.length === 0 && state.ga4Options.length === 0 && (
+      {/* No-client banner */}
+      {state.propertiesLoaded && !state.selectedGscSite && !state.selectedGa4Id && (
         <div className="mb-6 flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 dark:border-amber-800/40 dark:bg-amber-900/20">
           <svg className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">No Google properties found</p>
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">No SEO client configured</p>
             <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
               {state.propertiesError
                 ? state.propertiesError
-                : "The connected Google account has no Search Console sites or GA4 properties. Connect with the correct account from a client's integrations page."}
+                : state.clientName
+                  ? `${state.clientName} has no GSC or GA4 property assigned. Set them from its integrations page.`
+                  : "No client has GSC or GA4 properties assigned yet. Configure them from each client's integrations page."}
             </p>
           </div>
           <button

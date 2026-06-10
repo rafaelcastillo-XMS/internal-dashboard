@@ -102,7 +102,10 @@ export function SEMCampaigns() {
     else { setSortKey(key); setSortDir('desc') }
   }
 
-  const sorted = [...campaigns].sort((a, b) => {
+  // Paused campaigns are always hidden
+  const visible = campaigns.filter(c => c.status !== 'PAUSED')
+
+  const sorted = [...visible].sort((a, b) => {
     const va = a[sortKey] as number
     const vb = b[sortKey] as number
     return sortDir === 'desc' ? vb - va : va - vb
@@ -143,9 +146,9 @@ export function SEMCampaigns() {
             <h3 className="font-semibold text-black dark:text-[#E2E5E9]">All Campaigns</h3>
             <p className="mt-0.5 text-xs text-body dark:text-bodydark">Click column headers to sort</p>
           </div>
-          {!state.loading && campaigns.length > 0 && (
+          {!state.loading && visible.length > 0 && (
             <span className="rounded-full bg-stroke/50 px-2.5 py-1 text-xs font-semibold text-body dark:text-bodydark dark:bg-strokedark">
-              {campaigns.length} campaigns
+              {visible.length} campaigns
             </span>
           )}
         </div>

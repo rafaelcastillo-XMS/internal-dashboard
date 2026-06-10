@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -160,6 +160,10 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
   const [hasRealData,     setHasRealData]     = useState(false)
   const [ahrefsSnapshots, setAhrefsSnapshots] = useState<AhrefsSnapshotRow[]>([])
   const [loadingAhrefs,   setLoadingAhrefs]   = useState(false)
+  const [refreshKey,      setRefreshKey]      = useState(0)
+  const [exporting,       setExporting]       = useState(false)
+
+  const reportRef = useRef<HTMLDivElement>(null)
 
   // ── Load baselines on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -226,7 +230,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
 
     loadFindings()
     loadAhrefsSnapshots()
-  }, [selectedBaseline, baselines])
+  }, [selectedBaseline, baselines, refreshKey])
 
   // ── Fetch PSI score when GSC site is available ────────────────────────────
   useEffect(() => {
@@ -241,7 +245,59 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
       .then(d => { if (typeof d.score === 'number') setPsiScore(d.score) })
       .catch(() => {})
       .finally(() => setLoadingPsi(false))
-  }, [selectedGscSite])
+  }, [selectedGscSite, refreshKey])
+
+  // ── Export the comparison report as a multi-page A4 PDF ───────────────────
+  async function handleDownloadPdf() {
+    if (!reportRef.current || exporting) return
+    setExporting(true)
+    try {
+      const [h2cMod, jspdfMod] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html2canvas = (h2cMod as any).default ?? h2cMod
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { jsPDF }   = jspdfMod as any
+
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false,
+      })
+
+      const PAD  = 10 // mm
+      const pdf  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const cW   = pdf.internal.pageSize.getWidth()  - PAD * 2
+      const cH   = pdf.internal.pageSize.getHeight() - PAD * 2
+      const imgH = (canvas.height / canvas.width) * cW   // full image height in mm
+      const pxPerMm = canvas.height / imgH
+
+      let yMm = 0
+      let firstPage = true
+      while (yMm < imgH - 0.5) {
+        const sliceMm = Math.min(cH, imgH - yMm)
+        const slice   = document.createElement('canvas')
+        slice.width   = canvas.width
+        slice.height  = Math.max(1, Math.round(sliceMm * pxPerMm))
+        const ctx     = slice.getContext('2d')!
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, slice.width, slice.height)
+        ctx.drawImage(canvas, 0, Math.round(yMm * pxPerMm), canvas.width, slice.height, 0, 0, slice.width, slice.height)
+
+        if (!firstPage) pdf.addPage()
+        pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', PAD, PAD, cW, sliceMm)
+        firstPage = false
+        yMm += sliceMm
+      }
+
+      const bl = baselines.find(b => b.label === selectedBaseline)
+      pdf.save(`seo-comparison-${bl?.client ?? 'report'}-${new Date().toISOString().slice(0, 10)}.pdf`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const comparing = loadingData || loadingAhrefs || loadingPsi
 
   // ── Score cards ───────────────────────────────────────────────────────────
   const scoreCards = CARD_CATEGORIES.map(cat => {
@@ -291,8 +347,10 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
         <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
+            onClick={handleDownloadPdf}
+            disabled={exporting}
             className="flex items-center gap-2 rounded-lg border border-stroke px-4 py-2.5
-                       text-sm font-medium text-black transition
+                       text-sm font-medium text-black transition disabled:opacity-50
                        hover:border-[#1A72D9] hover:text-[#1A72D9]
                        dark:border-strokedark dark:text-[#E2E5E9]
                        dark:hover:border-[#1A72D9] dark:hover:text-[#1A72D9]"
@@ -304,14 +362,17 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
                        c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75
                        c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
-            Download PDF
+            {exporting ? 'Exporting…' : 'Download PDF'}
           </button>
           <button
             type="button"
+            onClick={() => setRefreshKey(k => k + 1)}
+            disabled={comparing}
             className="rounded-lg bg-[#1A72D9] px-5 py-2.5 text-sm font-semibold
-                       text-white transition hover:bg-[#0F4FA8] active:scale-[0.98]"
+                       text-white transition disabled:opacity-60
+                       hover:bg-[#0F4FA8] active:scale-[0.98]"
           >
-            Generate Comparison
+            {comparing ? 'Comparing…' : 'Generate Comparison'}
           </button>
 
           {/* PSI live indicator */}
@@ -327,6 +388,9 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
           )}
         </div>
       </div>
+
+      {/* ══ EXPORTABLE REPORT (captured by Download PDF) ═══════════════════ */}
+      <div ref={reportRef} className="space-y-6">
 
       {/* ══ SCORE CARDS ════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
@@ -604,6 +668,8 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
           </table>
         </div>
       </div>
+
+      </div>{/* end exportable report */}
 
     </div>
   )
