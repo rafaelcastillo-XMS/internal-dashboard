@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { generateWeeklyBudgetPdf, generateMonthlyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
-import type { PdfWeeklyRow, PdfMonthlyRow } from '@/features/sem/lib/generateReportsPdf'
+import { generateWeeklyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
+import type { PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,14 +20,6 @@ interface GuaranteeAnalytics {
 }
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
-
-const MONTHLY_BUDGET_KEY = 'sem_monthly_budgets'
-
-const load = (key: string) => { try { return JSON.parse(localStorage.getItem(key) || '{}') } catch { return {} } }
-const save = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify(v)) } catch { /* ignore */ } }
-
-function loadMonthlyStore():    Record<string,number> { return load(MONTHLY_BUDGET_KEY) }
-function saveMonthlyStore(s: Record<string,number>) { save(MONTHLY_BUDGET_KEY, s) }
 
 async function fetchSupabaseBudgets(reportType: string): Promise<Record<string, number>> {
   const { data } = await supabase
@@ -49,11 +41,45 @@ function defaultRow(): BudgetRow { return { budget: 0 } }
 
 // ─── Date range helpers ───────────────────────────────────────────────────────
 
-function getDefaultDateRange(): { from: string; to: string } {
+const toYMD = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+// Weeks run Monday – Sunday
+function getCurrentWeekRange(): { from: string; to: string } {
   const today = new Date()
-  const from  = new Date(today.getFullYear(), today.getMonth(), 1)
-  const fmt   = (d: Date) => d.toISOString().split('T')[0]
-  return { from: fmt(from), to: fmt(today) }
+  const start = new Date(today)
+  start.setDate(today.getDate() - ((today.getDay() + 6) % 7))
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  return { from: toYMD(start), to: toYMD(end) }
+}
+
+function shiftWeek(from: string, days: number): { from: string; to: string } {
+  const start = new Date(from + 'T00:00:00')
+  start.setDate(start.getDate() + days)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  return { from: toYMD(start), to: toYMD(end) }
+}
+
+const fmtWeekDay = (ymd: string) =>
+  new Date(ymd + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+const weekLabel = (from: string, to: string) =>
+  `${fmtWeekDay(from)} – ${fmtWeekDay(to)}, ${new Date(to + 'T00:00:00').getFullYear()}`
+
+// Weeks of the calendar grid for a given month (each week runs Monday – Sunday)
+function monthWeeks(year: number, month: number): Date[][] {
+  const first = new Date(year, month, 1)
+  const d = new Date(first)
+  d.setDate(1 - ((first.getDay() + 6) % 7))
+  const weeks: Date[][] = []
+  do {
+    const week: Date[] = []
+    for (let i = 0; i < 7; i++) { week.push(new Date(d)); d.setDate(d.getDate() + 1) }
+    weeks.push(week)
+  } while (d.getMonth() === month && d.getFullYear() === year)
+  return weeks
 }
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -113,9 +139,9 @@ function EditableCell({ value, onChange }: { value: number; onChange: (v: number
   )
 }
 
-// ─── DateRangePicker ──────────────────────────────────────────────────────────
+// ─── WeekPicker ───────────────────────────────────────────────────────────────
 
-function DateRangePicker({
+function WeekPicker({
   from, to, onChange, accentColor = '#16a34a',
 }: {
   from: string
@@ -123,24 +149,401 @@ function DateRangePicker({
   onChange: (from: string, to: string) => void
   accentColor?: string
 }) {
-  const today = new Date().toISOString().split('T')[0]
+  const [open, setOpen] = useState(false)
+  const [view, setView] = useState(() => {
+    const d = new Date(from + 'T00:00:00')
+    return { year: d.getFullYear(), month: d.getMonth() }
+  })
+  const isCurrentWeek = getCurrentWeekRange().from === from
+  const todayYMD = toYMD(new Date())
+  const move = (days: number) => { const r = shiftWeek(from, days); onChange(r.from, r.to) }
+  const openCalendar = () => {
+    const d = new Date(from + 'T00:00:00')
+    setView({ year: d.getFullYear(), month: d.getMonth() })
+    setOpen(o => !o)
+  }
+  const moveView = (delta: number) => setView(v => {
+    const d = new Date(v.year, v.month + delta, 1)
+    return { year: d.getFullYear(), month: d.getMonth() }
+  })
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="relative flex flex-wrap items-center gap-2">
       <svg className="h-4 w-4 shrink-0" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
       </svg>
-      <span className="text-xs text-body dark:text-bodydark">From</span>
-      <input
-        type="date" value={from} max={to}
-        onChange={e => onChange(e.target.value, to)}
-        className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
-      />
-      <span className="text-xs text-body dark:text-bodydark">To</span>
-      <input
-        type="date" value={to} min={from} max={today}
-        onChange={e => onChange(from, e.target.value)}
-        className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
-      />
+      <span className="text-xs text-body dark:text-bodydark">Week</span>
+      <div className="flex h-9 items-center gap-1 rounded-lg border border-stroke bg-white px-1 dark:border-strokedark dark:bg-boxdark">
+        <button onClick={() => move(-7)} aria-label="Previous week"
+          className="rounded-md p-1 text-body transition-colors hover:bg-gray-2 hover:text-black dark:text-bodydark dark:hover:bg-meta-4 dark:hover:text-white">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+        <button onClick={openCalendar}
+          className="flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium tabular-nums text-black transition-colors hover:bg-gray-2 dark:text-[#E2E5E9] dark:hover:bg-meta-4">
+          {weekLabel(from, to)}
+          <svg className={`h-3 w-3 text-body transition-transform dark:text-bodydark ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
+        <button onClick={() => move(7)} disabled={isCurrentWeek} aria-label="Next week"
+          className="rounded-md p-1 text-body transition-colors hover:bg-gray-2 hover:text-black disabled:cursor-not-allowed disabled:opacity-30 dark:text-bodydark dark:hover:bg-meta-4 dark:hover:text-white">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
+      </div>
+      {!isCurrentWeek && (
+        <button onClick={() => { const r = getCurrentWeekRange(); onChange(r.from, r.to) }}
+          className="text-xs font-semibold transition-opacity hover:opacity-70" style={{ color: accentColor }}>
+          Current week
+        </button>
+      )}
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-xl border border-stroke bg-white p-3 shadow-2xl dark:border-strokedark dark:bg-boxdark">
+            <div className="mb-2 flex items-center justify-between">
+              <button onClick={() => moveView(-1)} aria-label="Previous month"
+                className="rounded-md p-1 text-body transition-colors hover:bg-gray-2 hover:text-black dark:text-bodydark dark:hover:bg-meta-4 dark:hover:text-white">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+              </button>
+              <span className="text-sm font-semibold text-black dark:text-[#E2E5E9]">
+                {MONTH_NAMES[view.month]} {view.year}
+              </span>
+              <button onClick={() => moveView(1)} aria-label="Next month"
+                className="rounded-md p-1 text-body transition-colors hover:bg-gray-2 hover:text-black dark:text-bodydark dark:hover:bg-meta-4 dark:hover:text-white">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
+            </div>
+            <div className="mb-1 flex px-1">
+              {['Mo','Tu','We','Th','Fr','Sa','Su'].map(d => (
+                <span key={d} className="flex-1 text-center text-[10px] font-semibold uppercase text-body dark:text-bodydark">{d}</span>
+              ))}
+            </div>
+            <div className="space-y-0.5">
+              {monthWeeks(view.year, view.month).map(week => {
+                const wkFrom    = toYMD(week[0])
+                const selected  = wkFrom === from
+                const future    = wkFrom > todayYMD
+                return (
+                  <button key={wkFrom} disabled={future}
+                    onClick={() => { onChange(wkFrom, toYMD(week[6])); setOpen(false) }}
+                    className={`flex w-full rounded-lg px-1 transition-colors
+                      ${selected ? 'text-white' : 'hover:bg-gray-2 dark:hover:bg-meta-4'}
+                      disabled:cursor-not-allowed disabled:opacity-30`}
+                    style={selected ? { backgroundColor: accentColor } : undefined}
+                    title={`Week ${weekLabel(wkFrom, toYMD(week[6]))}`}
+                  >
+                    {week.map(d => (
+                      <span key={d.getDate() + '-' + d.getMonth()}
+                        className={`flex-1 py-1.5 text-center text-xs tabular-nums
+                          ${selected ? '' : d.getMonth() !== view.month ? 'text-body/40 dark:text-bodydark/40' : 'text-black dark:text-[#E2E5E9]'}
+                          ${!selected && toYMD(d) === todayYMD ? 'font-bold' : ''}`}
+                      >
+                        {d.getDate()}
+                      </span>
+                    ))}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-2 border-t border-stroke pt-2 text-center text-[10px] text-body dark:border-strokedark dark:text-bodydark">
+              Click a row to select that week (Mon – Sun)
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Weekly / Monthly period tabs ─────────────────────────────────────────────
+
+type ReportPeriod = 'weekly' | 'monthly'
+
+// ─── Monthly Report (by client) ───────────────────────────────────────────────
+
+const PLATFORMS = ['Google Ads', 'Google Guarantee', 'OpenAI Ads'] as const
+const PAYMENT_SOURCES = ["Client's CC", 'XMS CC'] as const
+
+interface MonthlyReportRow {
+  id: number
+  client_name: string
+  account_id: string | null
+  platform: string
+  budget: number
+  payment_source: string
+}
+
+interface MonthlyRowValues { refunded: number; manual_spend: number | null }
+
+const fmtAccountId = (id: string) =>
+  /^\d{10}$/.test(id) ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id
+
+function MonthlyReport({ accentColor = '#16a34a' }: { accentColor?: string }) {
+  const now = new Date()
+  const [month, setMonth]             = useState(now.getMonth())
+  const [year, setYear]               = useState(now.getFullYear())
+  const [rows, setRows]               = useState<MonthlyReportRow[]>([])
+  const [values, setValues]           = useState<Record<number, MonthlyRowValues>>({})
+  const [adsSpend, setAdsSpend]       = useState<Record<string, number>>({})
+  const [ggSpend, setGgSpend]         = useState<Record<string, number>>({})
+  const [loading, setLoading]         = useState(true)
+  const [loadingSpend, setLoadingSpend] = useState(false)
+  const [adding, setAdding]           = useState(false)
+  const [draft, setDraft]             = useState({ client: '', accountId: '', platform: 'Google Ads' })
+
+  const fetchRows = useCallback(async () => {
+    const { data } = await supabase
+      .from('sem_monthly_report_rows')
+      .select('id, client_name, account_id, platform, budget, payment_source')
+      .order('client_name')
+      .order('id')
+    setRows(data ?? [])
+  }, [])
+
+  useEffect(() => { setLoading(true); fetchRows().finally(() => setLoading(false)) }, [fetchRows])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoadingSpend(true)
+      try {
+        const [vals, ads, gg] = await Promise.all([
+          supabase.from('sem_monthly_report_values').select('row_id, refunded, manual_spend').eq('year', year).eq('month_index', month),
+          supabase.from('sem_yearly_ads').select('account_id, spend').eq('year', year).eq('month', ALL_MONTHS[month]),
+          supabase.from('sem_yearly_guarantee').select('account_id, spend').eq('year', year).eq('month', ALL_MONTHS[month]),
+        ])
+        if (cancelled) return
+        const v: Record<number, MonthlyRowValues> = {}
+        for (const r of vals.data ?? []) v[r.row_id] = { refunded: Number(r.refunded), manual_spend: r.manual_spend === null ? null : Number(r.manual_spend) }
+        setValues(v)
+        const a: Record<string, number> = {}
+        for (const r of ads.data ?? []) a[r.account_id] = Number(r.spend)
+        setAdsSpend(a)
+        const g: Record<string, number> = {}
+        for (const r of gg.data ?? []) g[r.account_id] = Number(r.spend)
+        setGgSpend(g)
+      } finally { if (!cancelled) setLoadingSpend(false) }
+    })()
+    return () => { cancelled = true }
+  }, [month, year])
+
+  const spendFor = (r: MonthlyReportRow): number | null => {
+    if (r.platform === 'OpenAI Ads') return values[r.id]?.manual_spend ?? null
+    if (!r.account_id) return null
+    const map = r.platform === 'Google Guarantee' ? ggSpend : adsSpend
+    return map[r.account_id] ?? null
+  }
+
+  const patchRow = (id: number, patch: Partial<MonthlyReportRow>) => {
+    setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r))
+    supabase.from('sem_monthly_report_rows')
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .then(() => {})
+  }
+
+  const patchValue = (rowId: number, patch: Partial<MonthlyRowValues>) => {
+    const current: MonthlyRowValues = values[rowId] ?? { refunded: 0, manual_spend: null }
+    const merged: MonthlyRowValues = { ...current, ...patch }
+    setValues(prev => ({ ...prev, [rowId]: merged }))
+    supabase.from('sem_monthly_report_values')
+      .upsert(
+        { row_id: rowId, year, month_index: month, refunded: merged.refunded, manual_spend: merged.manual_spend, updated_at: new Date().toISOString() },
+        { onConflict: 'row_id,year,month_index' },
+      )
+      .then(() => {})
+  }
+
+  const addRow = async () => {
+    if (!draft.client.trim()) return
+    await supabase.from('sem_monthly_report_rows').insert({
+      client_name: draft.client.trim(),
+      account_id: draft.accountId.replace(/\D/g, '') || null,
+      platform: draft.platform,
+    })
+    setDraft({ client: '', accountId: '', platform: 'Google Ads' })
+    setAdding(false)
+    fetchRows()
+  }
+
+  const deleteRow = async (r: MonthlyReportRow) => {
+    if (!window.confirm(`Delete the ${r.platform} row for "${r.client_name}"?`)) return
+    await supabase.from('sem_monthly_report_rows').delete().eq('id', r.id)
+    setRows(prev => prev.filter(x => x.id !== r.id))
+  }
+
+  const groups: { client: string; items: MonthlyReportRow[] }[] = []
+  for (const r of rows) {
+    const last = groups[groups.length - 1]
+    if (last && last.client === r.client_name) last.items.push(r)
+    else groups.push({ client: r.client_name, items: [r] })
+  }
+  const clientNames = groups.map(g => g.client)
+
+  const inputCls = 'h-8 rounded-lg border border-stroke bg-white px-2.5 text-xs font-medium text-black outline-none transition focus:border-current dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]'
+
+  return (
+    <div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <select value={month} onChange={e => setMonth(Number(e.target.value))}
+            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+          </select>
+          <select value={year} onChange={e => setYear(Number(e.target.value))}
+            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          {loadingSpend && (
+            <svg className="h-4 w-4 animate-spin" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          )}
+        </div>
+        <button onClick={() => setAdding(a => !a)}
+          className="flex items-center gap-1.5 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card transition-colors hover:border-current dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
+          style={{ color: adding ? accentColor : undefined }}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Add Row
+        </button>
+      </div>
+
+      {adding && (
+        <div className="mb-5 flex flex-wrap items-end gap-3 rounded-xl border border-stroke bg-white px-4 py-3 dark:border-strokedark dark:bg-boxdark">
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase text-body dark:text-bodydark">Client</label>
+            <input list="monthly-clients" value={draft.client} onChange={e => setDraft(d => ({ ...d, client: e.target.value }))}
+              placeholder="Client name" className={`${inputCls} w-48`} />
+            <datalist id="monthly-clients">
+              {clientNames.map(c => <option key={c} value={c} />)}
+            </datalist>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase text-body dark:text-bodydark">Account ID</label>
+            <input value={draft.accountId} onChange={e => setDraft(d => ({ ...d, accountId: e.target.value }))}
+              placeholder="000-000-0000 (optional)" className={`${inputCls} w-40`} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase text-body dark:text-bodydark">Platform</label>
+            <select value={draft.platform} onChange={e => setDraft(d => ({ ...d, platform: e.target.value }))} className={`${inputCls} w-40`}>
+              {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <button onClick={addRow} disabled={!draft.client.trim()}
+            className="h-8 rounded-lg px-4 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: accentColor }}>
+            Add
+          </button>
+          <button onClick={() => setAdding(false)}
+            className="h-8 px-2 text-xs font-medium text-body hover:text-black dark:text-bodydark dark:hover:text-white">
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-8 text-sm text-body dark:text-bodydark">
+          <svg className="h-4 w-4 animate-spin" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Loading monthly report…
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
+                {['Client', 'ID', 'Platform', 'Budget', 'Spend', 'Expected Credits Refunded', 'Paid With', ''].map((h, i) => (
+                  <th key={i} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stroke dark:divide-strokedark">
+              {groups.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-5 py-10 text-center text-sm text-body dark:text-bodydark">
+                    No rows yet. Use “Add Row” to add a client and platform.
+                  </td>
+                </tr>
+              )}
+              {groups.map(group => {
+                const groupSpend = group.items.reduce((s, r) => s + (spendFor(r) ?? 0), 0)
+                return group.items.map((r, idx) => {
+                  const spend = spendFor(r)
+                  const vals  = values[r.id]
+                  const isLast = idx === group.items.length - 1
+                  return (
+                    <>
+                      <tr key={r.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
+                        <td className="max-w-[220px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={group.client}>
+                          {idx === 0 ? group.client : ''}
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">
+                          {r.account_id ? fmtAccountId(r.account_id) : <span className="opacity-40">—</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-4 text-black dark:text-[#E2E5E9]">{r.platform}</td>
+                        <td className="px-5 py-4"><EditableCell value={r.budget} onChange={v => patchRow(r.id, { budget: v })} /></td>
+                        <td className="px-5 py-4 tabular-nums font-medium text-red-500">
+                          {r.platform === 'OpenAI Ads'
+                            ? <EditableCell value={vals?.manual_spend ?? 0} onChange={v => patchValue(r.id, { manual_spend: v })} />
+                            : loadingSpend
+                              ? <span className="text-xs italic text-body/50 dark:text-bodydark/50">Loading…</span>
+                              : spend !== null && spend > 0 ? fmtCurrency(spend) : <span className="opacity-40 text-body dark:text-bodydark">—</span>
+                          }
+                        </td>
+                        <td className="px-5 py-4"><EditableCell value={vals?.refunded ?? 0} onChange={v => patchValue(r.id, { refunded: v })} /></td>
+                        <td className="px-5 py-4">
+                          <select value={r.payment_source} onChange={e => patchRow(r.id, { payment_source: e.target.value })}
+                            className="h-7 rounded-lg border border-stroke bg-white px-2 text-xs font-medium text-black outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+                            <option value="">—</option>
+                            {PAYMENT_SOURCES.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-3 py-4 text-right">
+                          <button onClick={() => deleteRow(r)} title="Delete row"
+                            className="rounded-md p-1 text-body opacity-40 transition-all hover:bg-red-500/10 hover:text-red-500 hover:opacity-100 dark:text-bodydark">
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                      {isLast && group.items.length > 1 && (
+                        <tr key={`${r.id}-total`} className="bg-gray-2/60 dark:bg-meta-4/40">
+                          <td className="px-5 py-2.5" colSpan={3}>
+                            <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: accentColor }}>Total — {group.client}</span>
+                          </td>
+                          <td className="px-5 py-2.5" />
+                          <td className="px-5 py-2.5 tabular-nums text-sm font-bold" style={{ color: accentColor }}>
+                            {groupSpend > 0 ? fmtCurrency(groupSpend) : '—'}
+                          </td>
+                          <td className="px-5 py-2.5" colSpan={3} />
+                        </tr>
+                      )}
+                    </>
+                  )
+                })
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="mt-3 text-[11px] text-body dark:text-bodydark">
+        Spend for Google Ads and Google Guarantee is pulled automatically from the monthly account data. OpenAI Ads spend and refunded credits are entered manually for now.
+      </p>
     </div>
   )
 }
@@ -395,9 +798,11 @@ function GuaranteeAnalyticsCards({ accounts }: { accounts: AdsAccount[] }) {
 
 // ─── Send Email Modal ─────────────────────────────────────────────────────────
 
-type EmailReportPayload =
-  | { kind: 'weekly';  dateLabel: string; adsRows: PdfWeeklyRow[]; guaranteeRows: PdfWeeklyRow[] }
-  | { kind: 'monthly'; monthLabel: string; rows: PdfMonthlyRow[] }
+interface EmailReportPayload {
+  dateLabel: string
+  adsRows: PdfWeeklyRow[]
+  guaranteeRows: PdfWeeklyRow[]
+}
 
 function buildWeeklyText(dateLabel: string, adsRows: PdfWeeklyRow[], guaranteeRows: PdfWeeklyRow[]): string {
   const lines: string[] = []
@@ -432,20 +837,6 @@ function buildWeeklyText(dateLabel: string, adsRows: PdfWeeklyRow[], guaranteeRo
   return lines.join('\n')
 }
 
-function buildMonthlyText(monthLabel: string, rows: PdfMonthlyRow[]): string {
-  const lines: string[] = []
-  const fmt = (n: number) => n > 0 ? fmtCurrency(n) : '—'
-  lines.push(`Budget Overview — ${monthLabel}`)
-  lines.push('')
-  lines.push('Account Name | Monthly Budget | Spend (GA) | Remaining')
-  lines.push('-'.repeat(70))
-  rows.forEach(r => {
-    const rem = r.budget > 0 ? r.budget - r.spend : 0
-    lines.push([r.accountName, fmt(r.budget), fmt(r.spend), r.budget > 0 ? fmtCurrency(rem) : '—'].join(' | '))
-  })
-  return lines.join('\n')
-}
-
 function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | null; onClose: () => void }) {
   const [email, setEmail]         = useState('')
   const [scheduled, setScheduled] = useState('')
@@ -456,11 +847,8 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
 
   if (!payload) return null
 
-  const reportText = payload.kind === 'weekly'
-    ? buildWeeklyText(payload.dateLabel, payload.adsRows, payload.guaranteeRows)
-    : buildMonthlyText(payload.monthLabel, payload.rows)
-
-  const label = payload.kind === 'weekly' ? payload.dateLabel : payload.monthLabel
+  const reportText = buildWeeklyText(payload.dateLabel, payload.adsRows, payload.guaranteeRows)
+  const label = payload.dateLabel
 
   const handleSend = () => {
     const subject = scheduled
@@ -564,7 +952,7 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
 // ─── Google Ads Budget Report Tab ─────────────────────────────────────────────
 
 function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
-  const { from: defaultFrom, to: defaultTo } = getDefaultDateRange()
+  const { from: defaultFrom, to: defaultTo } = getCurrentWeekRange()
   const [fromDate, setFromDate]             = useState(defaultFrom)
   const [toDate, setToDate]                 = useState(defaultTo)
   const [adsBudgets, setAdsBudgets]         = useState<BudgetStore>({})
@@ -617,7 +1005,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
     cost: costByAccount[a.id] ?? 0,
   }))
 
-  const dateLabel = `${fromDate} – ${toDate}`
+  const dateLabel = `Week ${weekLabel(fromDate, toDate)}`
 
   async function handleExport() {
     setExporting(true)
@@ -630,7 +1018,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
       <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <DateRangePicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} />
+          <WeekPicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} />
           {loadingCost && (
             <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -639,7 +1027,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setEmailPayload({ kind: 'weekly', dateLabel, adsRows: buildRows(), guaranteeRows: [] })}
+          <button onClick={() => setEmailPayload({ dateLabel, adsRows: buildRows(), guaranteeRows: [] })}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
                        transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
                        dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
@@ -670,7 +1058,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
 // ─── Google Guarantee Report Tab ──────────────────────────────────────────────
 
 function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
-  const { from: defaultFrom, to: defaultTo } = getDefaultDateRange()
+  const { from: defaultFrom, to: defaultTo } = getCurrentWeekRange()
   const [fromDate, setFromDate]             = useState(defaultFrom)
   const [toDate, setToDate]                 = useState(defaultTo)
   const [ggBudgets, setGgBudgets]           = useState<BudgetStore>({})
@@ -727,7 +1115,7 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <DateRangePicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} accentColor="#3b82f6" />
+          <WeekPicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} accentColor="#3b82f6" />
           {loadingPeriod && (
             <svg className="h-4 w-4 animate-spin text-[#3b82f6]" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -817,174 +1205,30 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
   )
 }
 
-// ─── Monthly Overview Tab ─────────────────────────────────────────────────────
+// ─── OpenAI Ads Tab ───────────────────────────────────────────────────────────
 
-function MonthlyBudgetOverview({ accounts }: { accounts: AdsAccount[] }) {
-  const now = new Date()
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
-  const [selectedYear,  setSelectedYear]  = useState(now.getFullYear())
-  const [monthlySpend,  setMonthlySpend]  = useState<Record<string, number>>({})
-  const [loadingMonth,  setLoadingMonth]  = useState(false)
-  const [budgets, setBudgets]             = useState<Record<string, number>>(loadMonthlyStore)
-  const [exporting, setExporting]         = useState(false)
-  const [emailPayload, setEmailPayload]   = useState<EmailReportPayload | null>(null)
-
-  useEffect(() => {
-    if (!accounts.length) return
-    fetchSupabaseBudgets('ads_monthly').then(map => {
-      if (!Object.keys(map).length) return
-      setBudgets(prev => { const next = { ...prev, ...map }; saveMonthlyStore(next); return next })
-    })
-  }, [accounts])
-
-  const fetchMonthly = useCallback(async (month: number, year: number) => {
-    setLoadingMonth(true)
-    try {
-      const { data, error } = await supabase
-        .from('sem_yearly_ads')
-        .select('account_id, spend')
-        .eq('year', year)
-        .eq('month', ALL_MONTHS[month])
-      if (error) return
-      const map: Record<string, number> = {}
-      for (const r of data ?? []) map[r.account_id] = r.spend
-      setMonthlySpend(map)
-    } finally { setLoadingMonth(false) }
-  }, [])
-
-  useEffect(() => { fetchMonthly(selectedMonth, selectedYear) }, [selectedMonth, selectedYear, fetchMonthly])
-
-  const updateBudget = (id: string, v: number) => {
-    setBudgets(prev => { const next = { ...prev, [id]: v }; saveMonthlyStore(next); return next })
-    upsertSupabaseBudget(id, 'ads_monthly', v)
-  }
-
-  const buildMonthlyRows = () => accounts.map(a => ({
-    status: a.status, accountName: a.name, budget: budgets[a.id] ?? 0, spend: monthlySpend[a.id] ?? 0,
-  }))
-
-  async function handleExport() {
-    setExporting(true)
-    const monthLabel = `${MONTH_NAMES[selectedMonth]} ${selectedYear}`
-    try { await generateMonthlyBudgetPdf({ monthLabel, rows: buildMonthlyRows() }) }
-    finally { setExporting(false) }
-  }
-
-  const totalBudget = accounts.reduce((s, a) => s + (budgets[a.id] ?? 0), 0)
-  const totalSpend  = accounts.reduce((s, a) => s + (monthlySpend[a.id] ?? 0), 0)
-
+function OpenAiAdsPlaceholder() {
   return (
-    <div>
-      <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
-
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}
-            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none
-                       focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
-          </select>
-          <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
-            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none
-                       focus:border-[#16a34a] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          {loadingMonth && (
-            <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setEmailPayload({ kind: 'monthly', monthLabel: `${MONTH_NAMES[selectedMonth]} ${selectedYear}`, rows: buildMonthlyRows() })}
-            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
-                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-            </svg>
-            Send by Email
-          </button>
-          <button onClick={handleExport} disabled={exporting}
-            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
-                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            {exporting ? 'Exporting…' : 'Export PDF'}
-          </button>
-        </div>
+    <div className="rounded-xl border border-dashed border-stroke bg-white px-6 py-20 text-center dark:border-strokedark dark:bg-boxdark">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#16a34a]/10">
+        <svg className="h-6 w-6 text-[#16a34a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+        </svg>
       </div>
-
-      <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
-              {['Status', 'Account Name', 'Monthly Budget', 'Spend (GA)', 'Remaining', '% Used'].map(h => (
-                <th key={h} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stroke dark:divide-strokedark">
-            {accounts.length === 0 ? (
-              <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-body dark:text-bodydark">No accounts found.</td></tr>
-            ) : accounts.map(a => {
-              const spend = monthlySpend[a.id] ?? 0
-              const budget = budgets[a.id] ?? 0
-              const remaining = budget > 0 ? budget - spend : null
-              const pct = budget > 0 ? (spend / budget) * 100 : null
-              const remNeg = remaining !== null && remaining < 0
-              return (
-                <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
-                  <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
-                  <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={a.name}>{a.name}</td>
-                  <td className="px-5 py-4"><EditableCell value={budget} onChange={v => updateBudget(a.id, v)} /></td>
-                  <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{spend > 0 ? fmtCurrency(spend) : <span className="opacity-40">—</span>}</td>
-                  <td className={`px-5 py-4 tabular-nums font-semibold ${remNeg ? 'text-red-500' : remaining !== null ? 'text-meta-3' : 'text-body dark:text-bodydark'}`}>
-                    {remaining !== null ? fmtCurrency(remaining) : <span className="opacity-40">—</span>}
-                  </td>
-                  <td className="px-5 py-4">
-                    {pct !== null ? (
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-stroke dark:bg-strokedark">
-                          <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-400' : 'bg-meta-3'}`}
-                               style={{ width: `${Math.min(pct, 100)}%` }} />
-                        </div>
-                        <span className={`text-xs font-semibold tabular-nums ${pct > 90 ? 'text-red-500' : pct > 70 ? 'text-yellow-500' : 'text-meta-3'}`}>
-                          {pct.toFixed(1)}%
-                        </span>
-                      </div>
-                    ) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
-                  </td>
-                </tr>
-              )
-            })}
-            {accounts.length > 0 && (
-              <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
-                <td className="px-5 py-4" />
-                <td className="px-5 py-4 text-xs font-bold uppercase text-[#16a34a]">Totals</td>
-                <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totalBudget > 0 ? fmtCurrency(totalBudget) : '—'}</td>
-                <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totalSpend > 0 ? fmtCurrency(totalSpend) : '—'}</td>
-                <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totalBudget > 0 ? fmtCurrency(totalBudget - totalSpend) : '—'}</td>
-                <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">
-                  {totalBudget > 0 ? `${((totalSpend / totalBudget) * 100).toFixed(1)}%` : '—'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <p className="text-base font-semibold text-black dark:text-[#E2E5E9]">OpenAI Ads</p>
+      <p className="mx-auto mt-1.5 max-w-sm text-sm text-body dark:text-bodydark">
+        Work in progress — this report is not available yet.
+      </p>
     </div>
   )
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type ReportTab = 'ads' | 'guarantee' | 'monthly'
+type ReportTab = 'ads' | 'guarantee' | 'openai'
 
 export function SEMReportes() {
+  const [period, setPeriod]               = useState<ReportPeriod>('weekly')
   const [activeTab, setActiveTab]         = useState<ReportTab>('ads')
   const [accounts, setAccounts]           = useState<AdsAccount[]>([])
   const [adsAccountIds, setAdsAccountIds] = useState<Set<string>>(new Set())
@@ -1016,22 +1260,30 @@ export function SEMReportes() {
           <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#16a34a]/20 text-[#16a34a] align-middle">
             SEM Intelligence
           </span>
+          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-600 align-middle dark:text-amber-400">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            Work in Progress
+          </span>
         </h1>
         <p className="mt-1 text-sm text-body dark:text-bodydark">
           Budget tracking and performance reports for all Google Ads accounts. Export to PDF for client delivery.
         </p>
+        <p className="mt-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+          This section is still under development — it may contain errors or incomplete data.
+        </p>
       </div>
 
-      {/* Tabs */}
+      {/* Period tabs: Weekly / Monthly */}
       <div className="mb-6 flex w-fit gap-1 rounded-xl border border-stroke bg-gray-2 p-1 dark:border-strokedark dark:bg-meta-4">
         {([
-          { id: 'ads',       label: 'Google Ads Budget Report' },
-          { id: 'guarantee', label: 'Google Guarantee Report' },
-          { id: 'monthly',   label: 'OpenAI Ads' },
-        ] as { id: ReportTab; label: string }[]).map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)}
+          { id: 'weekly',  label: 'Weekly Report' },
+          { id: 'monthly', label: 'Monthly Report' },
+        ] as { id: ReportPeriod; label: string }[]).map(t => (
+          <button key={t.id} onClick={() => setPeriod(t.id)}
             className={`rounded-lg px-5 py-2 text-sm font-semibold transition-all duration-150
-              ${activeTab === t.id
+              ${period === t.id
                 ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-[#E2E5E9]'
                 : 'text-body hover:text-black dark:text-bodydark dark:hover:text-white'
               }`}
@@ -1041,19 +1293,44 @@ export function SEMReportes() {
         ))}
       </div>
 
-      {loading ? (
-        <div className="flex items-center gap-2 py-8 text-sm text-body dark:text-bodydark">
-          <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          Loading accounts…
-        </div>
+      {period === 'monthly' ? (
+        <MonthlyReport />
       ) : (
         <>
-          {activeTab === 'ads'       && <AdsReport accounts={accounts.filter(a => adsAccountIds.has(a.id))} />}
-          {activeTab === 'guarantee' && <GuaranteeReport accounts={accounts.filter(a => ggAccountIds.has(a.id))} />}
-          {activeTab === 'monthly'   && <MonthlyBudgetOverview accounts={accounts.filter(a => adsAccountIds.has(a.id))} />}
+          {/* Weekly sub-tabs */}
+          <div className="mb-6 flex w-fit gap-1 rounded-lg border border-stroke bg-gray-2 p-0.5 dark:border-strokedark dark:bg-meta-4">
+            {([
+              { id: 'ads',       label: 'Google Ads Budget Report' },
+              { id: 'guarantee', label: 'Google Guarantee Report' },
+              { id: 'openai',    label: 'OpenAI Ads' },
+            ] as { id: ReportTab; label: string }[]).map(t => (
+              <button key={t.id} onClick={() => setActiveTab(t.id)}
+                className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-all duration-150
+                  ${activeTab === t.id
+                    ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-[#E2E5E9]'
+                    : 'text-body hover:text-black dark:text-bodydark dark:hover:text-white'
+                  }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="flex items-center gap-2 py-8 text-sm text-body dark:text-bodydark">
+              <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Loading accounts…
+            </div>
+          ) : (
+            <>
+              {activeTab === 'ads'       && <AdsReport accounts={accounts.filter(a => adsAccountIds.has(a.id))} />}
+              {activeTab === 'guarantee' && <GuaranteeReport accounts={accounts.filter(a => ggAccountIds.has(a.id))} />}
+              {activeTab === 'openai'    && <OpenAiAdsPlaceholder />}
+            </>
+          )}
         </>
       )}
     </div>
