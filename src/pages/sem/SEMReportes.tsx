@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '@/lib/supabase'
+import { edgeFetch } from '@/lib/edgeFetch'
 import { generateWeeklyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
 import type { PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
 
@@ -29,12 +30,6 @@ async function fetchSupabaseBudgets(reportType: string): Promise<Record<string, 
   const map: Record<string, number> = {}
   for (const r of data ?? []) map[r.account_id] = Number(r.budget)
   return map
-}
-
-function upsertSupabaseBudget(accountId: string, reportType: string, budget: number) {
-  supabase.from('sem_report_budgets')
-    .upsert({ account_id: accountId, report_type: reportType, budget, updated_at: new Date().toISOString() }, { onConflict: 'account_id,report_type' })
-    .then(() => {})
 }
 
 function defaultRow(): BudgetRow { return { budget: 0 } }
@@ -270,279 +265,185 @@ type ReportPeriod = 'weekly' | 'monthly'
 
 // ─── Monthly Report (by client) ───────────────────────────────────────────────
 
-const PLATFORMS = ['Google Ads', 'Google Guarantee', 'OpenAI Ads'] as const
 const PAYMENT_SOURCES = ["Client's CC", 'XMS CC'] as const
 
-interface MonthlyReportRow {
-  id: number
-  client_name: string
-  account_id: string | null
-  platform: string
-  budget: number
-  payment_source: string
-}
+type MonthlyPlatform = 'Google Ads' | 'Google Guarantee'
 
-interface MonthlyRowValues { refunded: number; manual_spend: number | null }
+interface MonthlyCell { refunded: number; paid_with: string }
 
 const fmtAccountId = (id: string) =>
   /^\d{10}$/.test(id) ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id
 
-function MonthlyReport({ accentColor = '#16a34a' }: { accentColor?: string }) {
+function MonthlyReport({ accounts, accentColor = '#16a34a' }: { accounts: AdsAccount[]; accentColor?: string }) {
   const now = new Date()
-  const [month, setMonth]             = useState(now.getMonth())
-  const [year, setYear]               = useState(now.getFullYear())
-  const [rows, setRows]               = useState<MonthlyReportRow[]>([])
-  const [values, setValues]           = useState<Record<number, MonthlyRowValues>>({})
-  const [adsSpend, setAdsSpend]       = useState<Record<string, number>>({})
-  const [ggSpend, setGgSpend]         = useState<Record<string, number>>({})
-  const [loading, setLoading]         = useState(true)
-  const [loadingSpend, setLoadingSpend] = useState(false)
-  const [adding, setAdding]           = useState(false)
-  const [draft, setDraft]             = useState({ client: '', accountId: '', platform: 'Google Ads' })
+  const [month, setMonth]         = useState(now.getMonth())
+  const [year, setYear]           = useState(now.getFullYear())
+  const [adsIds, setAdsIds]       = useState<Set<string>>(new Set())
+  const [ggIds, setGgIds]         = useState<Set<string>>(new Set())
+  const [adsSpend, setAdsSpend]   = useState<Record<string, number>>({})
+  const [ggSpend, setGgSpend]     = useState<Record<string, number>>({})
+  const [adsBudget, setAdsBudget] = useState<Record<string, number>>({})
+  const [ggBudget, setGgBudget]   = useState<Record<string, number>>({})
+  const [cells, setCells]         = useState<Record<string, MonthlyCell>>({})
+  const [loading, setLoading]     = useState(true)
 
-  const fetchRows = useCallback(async () => {
-    const { data } = await supabase
-      .from('sem_monthly_report_rows')
-      .select('id, client_name, account_id, platform, budget, payment_source')
-      .order('client_name')
-      .order('id')
-    setRows(data ?? [])
+  // Budgets are set per account in the client integration cards (not month-scoped)
+  useEffect(() => {
+    supabase.from('sem_report_budgets')
+      .select('account_id, report_type, budget')
+      .in('report_type', ['ads_monthly', 'guarantee_monthly'])
+      .then(({ data }) => {
+        const a: Record<string, number> = {}
+        const g: Record<string, number> = {}
+        for (const r of data ?? []) {
+          if (r.report_type === 'ads_monthly') a[r.account_id] = Number(r.budget)
+          else g[r.account_id] = Number(r.budget)
+        }
+        setAdsBudget(a); setGgBudget(g)
+      })
   }, [])
 
-  useEffect(() => { setLoading(true); fetchRows().finally(() => setLoading(false)) }, [fetchRows])
-
+  // Which accounts run Google Ads / Google Guarantee in the selected year
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      setLoadingSpend(true)
+      const [a, g] = await Promise.all([
+        supabase.from('sem_yearly_ads').select('account_id').eq('year', year),
+        supabase.from('sem_yearly_guarantee').select('account_id').eq('year', year),
+      ])
+      if (cancelled) return
+      setAdsIds(new Set((a.data ?? []).map(r => r.account_id)))
+      setGgIds(new Set((g.data ?? []).map(r => r.account_id)))
+    })()
+    return () => { cancelled = true }
+  }, [year])
+
+  // Spend (from the yearly tables) + manual cells for the selected month
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
       try {
-        const [vals, ads, gg] = await Promise.all([
-          supabase.from('sem_monthly_report_values').select('row_id, refunded, manual_spend').eq('year', year).eq('month_index', month),
+        const [ads, gg, cl] = await Promise.all([
           supabase.from('sem_yearly_ads').select('account_id, spend').eq('year', year).eq('month', ALL_MONTHS[month]),
           supabase.from('sem_yearly_guarantee').select('account_id, spend').eq('year', year).eq('month', ALL_MONTHS[month]),
+          supabase.from('sem_monthly_cells').select('account_id, platform, refunded, paid_with').eq('year', year).eq('month_index', month),
         ])
         if (cancelled) return
-        const v: Record<number, MonthlyRowValues> = {}
-        for (const r of vals.data ?? []) v[r.row_id] = { refunded: Number(r.refunded), manual_spend: r.manual_spend === null ? null : Number(r.manual_spend) }
-        setValues(v)
         const a: Record<string, number> = {}
         for (const r of ads.data ?? []) a[r.account_id] = Number(r.spend)
         setAdsSpend(a)
         const g: Record<string, number> = {}
         for (const r of gg.data ?? []) g[r.account_id] = Number(r.spend)
         setGgSpend(g)
-      } finally { if (!cancelled) setLoadingSpend(false) }
+        const c: Record<string, MonthlyCell> = {}
+        for (const r of cl.data ?? []) c[`${r.account_id}:${r.platform}`] = { refunded: Number(r.refunded), paid_with: r.paid_with ?? '' }
+        setCells(c)
+      } finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }
-  }, [month, year])
+  }, [year, month])
 
-  const spendFor = (r: MonthlyReportRow): number | null => {
-    if (r.platform === 'OpenAI Ads') return values[r.id]?.manual_spend ?? null
-    if (!r.account_id) return null
-    const map = r.platform === 'Google Guarantee' ? ggSpend : adsSpend
-    return map[r.account_id] ?? null
-  }
-
-  const patchRow = (id: number, patch: Partial<MonthlyReportRow>) => {
-    setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r))
-    supabase.from('sem_monthly_report_rows')
-      .update({ ...patch, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .then(() => {})
-  }
-
-  const patchValue = (rowId: number, patch: Partial<MonthlyRowValues>) => {
-    const current: MonthlyRowValues = values[rowId] ?? { refunded: 0, manual_spend: null }
-    const merged: MonthlyRowValues = { ...current, ...patch }
-    setValues(prev => ({ ...prev, [rowId]: merged }))
-    supabase.from('sem_monthly_report_values')
+  const patchCell = (accountId: string, platform: MonthlyPlatform, patch: Partial<MonthlyCell>) => {
+    const key = `${accountId}:${platform}`
+    const current: MonthlyCell = cells[key] ?? { refunded: 0, paid_with: '' }
+    const merged: MonthlyCell = { ...current, ...patch }
+    setCells(prev => ({ ...prev, [key]: merged }))
+    supabase.from('sem_monthly_cells')
       .upsert(
-        { row_id: rowId, year, month_index: month, refunded: merged.refunded, manual_spend: merged.manual_spend, updated_at: new Date().toISOString() },
-        { onConflict: 'row_id,year,month_index' },
+        { account_id: accountId, platform, year, month_index: month, refunded: merged.refunded, paid_with: merged.paid_with, updated_at: new Date().toISOString() },
+        { onConflict: 'account_id,platform,year,month_index' },
       )
       .then(() => {})
   }
 
-  const addRow = async () => {
-    if (!draft.client.trim()) return
-    await supabase.from('sem_monthly_report_rows').insert({
-      client_name: draft.client.trim(),
-      account_id: draft.accountId.replace(/\D/g, '') || null,
-      platform: draft.platform,
+  // One group per account, with a row per platform it runs (mirrors the weekly account list)
+  const groups = accounts
+    .map(acct => {
+      const items: { platform: MonthlyPlatform; budget: number; spend: number }[] = []
+      if (adsIds.has(acct.id)) items.push({ platform: 'Google Ads', budget: adsBudget[acct.id] ?? 0, spend: adsSpend[acct.id] ?? 0 })
+      if (ggIds.has(acct.id))  items.push({ platform: 'Google Guarantee', budget: ggBudget[acct.id] ?? 0, spend: ggSpend[acct.id] ?? 0 })
+      return { acct, items }
     })
-    setDraft({ client: '', accountId: '', platform: 'Google Ads' })
-    setAdding(false)
-    fetchRows()
-  }
+    .filter(g => g.items.length > 0)
 
-  const deleteRow = async (r: MonthlyReportRow) => {
-    if (!window.confirm(`Delete the ${r.platform} row for "${r.client_name}"?`)) return
-    await supabase.from('sem_monthly_report_rows').delete().eq('id', r.id)
-    setRows(prev => prev.filter(x => x.id !== r.id))
-  }
-
-  const groups: { client: string; items: MonthlyReportRow[] }[] = []
-  for (const r of rows) {
-    const last = groups[groups.length - 1]
-    if (last && last.client === r.client_name) last.items.push(r)
-    else groups.push({ client: r.client_name, items: [r] })
-  }
-  const clientNames = groups.map(g => g.client)
-
-  const inputCls = 'h-8 rounded-lg border border-stroke bg-white px-2.5 text-xs font-medium text-black outline-none transition focus:border-current dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]'
+  const selectCls = 'h-7 rounded-lg border border-stroke bg-white px-2 text-xs font-medium text-black outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]'
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <select value={month} onChange={e => setMonth(Number(e.target.value))}
-            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
-          </select>
-          <select value={year} onChange={e => setYear(Number(e.target.value))}
-            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          {loadingSpend && (
-            <svg className="h-4 w-4 animate-spin" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          )}
-        </div>
-        <button onClick={() => setAdding(a => !a)}
-          className="flex items-center gap-1.5 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card transition-colors hover:border-current dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
-          style={{ color: adding ? accentColor : undefined }}>
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Add Row
-        </button>
-      </div>
-
-      {adding && (
-        <div className="mb-5 flex flex-wrap items-end gap-3 rounded-xl border border-stroke bg-white px-4 py-3 dark:border-strokedark dark:bg-boxdark">
-          <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase text-body dark:text-bodydark">Client</label>
-            <input list="monthly-clients" value={draft.client} onChange={e => setDraft(d => ({ ...d, client: e.target.value }))}
-              placeholder="Client name" className={`${inputCls} w-48`} />
-            <datalist id="monthly-clients">
-              {clientNames.map(c => <option key={c} value={c} />)}
-            </datalist>
-          </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase text-body dark:text-bodydark">Account ID</label>
-            <input value={draft.accountId} onChange={e => setDraft(d => ({ ...d, accountId: e.target.value }))}
-              placeholder="000-000-0000 (optional)" className={`${inputCls} w-40`} />
-          </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase text-body dark:text-bodydark">Platform</label>
-            <select value={draft.platform} onChange={e => setDraft(d => ({ ...d, platform: e.target.value }))} className={`${inputCls} w-40`}>
-              {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <button onClick={addRow} disabled={!draft.client.trim()}
-            className="h-8 rounded-lg px-4 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ backgroundColor: accentColor }}>
-            Add
-          </button>
-          <button onClick={() => setAdding(false)}
-            className="h-8 px-2 text-xs font-medium text-body hover:text-black dark:text-bodydark dark:hover:text-white">
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex items-center gap-2 py-8 text-sm text-body dark:text-bodydark">
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <select value={month} onChange={e => setMonth(Number(e.target.value))}
+          className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+          {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+        </select>
+        <select value={year} onChange={e => setYear(Number(e.target.value))}
+          className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+          {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+        {loading && (
           <svg className="h-4 w-4 animate-spin" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          Loading monthly report…
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
-                {['Client', 'ID', 'Platform', 'Budget', 'Spend', 'Expected Credits Refunded', 'Paid With', ''].map((h, i) => (
-                  <th key={i} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
-                ))}
+        )}
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
+              {['Client', 'ID', 'Platform', 'Budget', 'Spend', 'Expected Credits Refunded', 'Paid With'].map((h, i) => (
+                <th key={i} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-stroke dark:divide-strokedark">
+            {groups.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-5 py-10 text-center text-sm text-body dark:text-bodydark">
+                  {loading ? 'Loading…' : 'No accounts with Google Ads or Google Guarantee data for this year.'}
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-stroke dark:divide-strokedark">
-              {groups.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-5 py-10 text-center text-sm text-body dark:text-bodydark">
-                    No rows yet. Use “Add Row” to add a client and platform.
-                  </td>
-                </tr>
-              )}
-              {groups.map(group => {
-                const groupSpend = group.items.reduce((s, r) => s + (spendFor(r) ?? 0), 0)
-                return group.items.map((r, idx) => {
-                  const spend = spendFor(r)
-                  const vals  = values[r.id]
-                  const isLast = idx === group.items.length - 1
-                  return (
-                    <>
-                      <tr key={r.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
-                        <td className="max-w-[220px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={group.client}>
-                          {idx === 0 ? group.client : ''}
+            )}
+            {groups.map(({ acct, items }) => {
+              return (
+                <Fragment key={acct.id}>
+                  {items.map((it, idx) => {
+                    const cell = cells[`${acct.id}:${it.platform}`]
+                    return (
+                      <tr key={it.platform} title={it.budget > 0 ? undefined : `No ${it.platform} budget set for this client`}
+                        className={`transition-opacity hover:bg-gray-2 dark:hover:bg-meta-4 ${it.budget > 0 ? '' : 'opacity-40'}`}>
+                        <td className="max-w-[220px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={acct.name}>
+                          {idx === 0 ? acct.name : ''}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">
-                          {r.account_id ? fmtAccountId(r.account_id) : <span className="opacity-40">—</span>}
+                        <td className="whitespace-nowrap px-5 py-4 tabular-nums text-body dark:text-bodydark">{fmtAccountId(acct.id)}</td>
+                        <td className="whitespace-nowrap px-5 py-4 text-black dark:text-[#E2E5E9]">{it.platform}</td>
+                        <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">
+                          {it.budget > 0 ? fmtCurrency(it.budget) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-4 text-black dark:text-[#E2E5E9]">{r.platform}</td>
-                        <td className="px-5 py-4"><EditableCell value={r.budget} onChange={v => patchRow(r.id, { budget: v })} /></td>
-                        <td className="px-5 py-4 tabular-nums font-medium text-red-500">
-                          {r.platform === 'OpenAI Ads'
-                            ? <EditableCell value={vals?.manual_spend ?? 0} onChange={v => patchValue(r.id, { manual_spend: v })} />
-                            : loadingSpend
-                              ? <span className="text-xs italic text-body/50 dark:text-bodydark/50">Loading…</span>
-                              : spend !== null && spend > 0 ? fmtCurrency(spend) : <span className="opacity-40 text-body dark:text-bodydark">—</span>
-                          }
+                        <td className="px-5 py-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">
+                          {loading
+                            ? <span className="text-xs italic font-normal text-body/50 dark:text-bodydark/50">Loading…</span>
+                            : it.spend > 0 ? fmtCurrency(it.spend) : <span className="opacity-40 font-normal text-body dark:text-bodydark">—</span>}
                         </td>
-                        <td className="px-5 py-4"><EditableCell value={vals?.refunded ?? 0} onChange={v => patchValue(r.id, { refunded: v })} /></td>
+                        <td className="px-5 py-4"><EditableCell value={cell?.refunded ?? 0} onChange={v => patchCell(acct.id, it.platform, { refunded: v })} /></td>
                         <td className="px-5 py-4">
-                          <select value={r.payment_source} onChange={e => patchRow(r.id, { payment_source: e.target.value })}
-                            className="h-7 rounded-lg border border-stroke bg-white px-2 text-xs font-medium text-black outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+                          <select value={cell?.paid_with ?? ''} onChange={e => patchCell(acct.id, it.platform, { paid_with: e.target.value })} className={selectCls}>
                             <option value="">—</option>
                             {PAYMENT_SOURCES.map(p => <option key={p} value={p}>{p}</option>)}
                           </select>
                         </td>
-                        <td className="px-3 py-4 text-right">
-                          <button onClick={() => deleteRow(r)} title="Delete row"
-                            className="rounded-md p-1 text-body opacity-40 transition-all hover:bg-red-500/10 hover:text-red-500 hover:opacity-100 dark:text-bodydark">
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                            </svg>
-                          </button>
-                        </td>
                       </tr>
-                      {isLast && group.items.length > 1 && (
-                        <tr key={`${r.id}-total`} className="bg-gray-2/60 dark:bg-meta-4/40">
-                          <td className="px-5 py-2.5" colSpan={3}>
-                            <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: accentColor }}>Total — {group.client}</span>
-                          </td>
-                          <td className="px-5 py-2.5" />
-                          <td className="px-5 py-2.5 tabular-nums text-sm font-bold" style={{ color: accentColor }}>
-                            {groupSpend > 0 ? fmtCurrency(groupSpend) : '—'}
-                          </td>
-                          <td className="px-5 py-2.5" colSpan={3} />
-                        </tr>
-                      )}
-                    </>
-                  )
-                })
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    )
+                  })}
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
       <p className="mt-3 text-[11px] text-body dark:text-bodydark">
-        Spend for Google Ads and Google Guarantee is pulled automatically from the monthly account data. OpenAI Ads spend and refunded credits are entered manually for now.
+        Spend is pulled automatically from each account's monthly Google Ads / Google Guarantee data. Budget comes from the client integration cards (Monthly Report budgets). Expected credits refunded and “Paid With” are entered here per month.
       </p>
     </div>
   )
@@ -551,12 +452,11 @@ function MonthlyReport({ accentColor = '#16a34a' }: { accentColor?: string }) {
 // ─── BudgetTableSection ───────────────────────────────────────────────────────
 
 function BudgetTableSection({
-  accounts, budgets, costByAccount = {}, onUpdate, pendingCost = false,
+  accounts, budgets, costByAccount = {}, pendingCost = false,
 }: {
   accounts: AdsAccount[]
   budgets: BudgetStore
   costByAccount?: Record<string, number>
-  onUpdate: (id: string, value: number) => void
   pendingCost?: boolean
 }) {
   const get = (id: string) => budgets[id] ?? defaultRow()
@@ -599,7 +499,9 @@ function BudgetTableSection({
               <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                 <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
                 <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={a.name}>{a.name}</td>
-                <td className="px-5 py-4"><EditableCell value={b.budget} onChange={v => onUpdate(a.id, v)} /></td>
+                <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">
+                  {b.budget > 0 ? fmtCurrency(b.budget) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                </td>
                 <td className="px-5 py-4 tabular-nums font-medium text-red-500">
                   {pendingCost
                     ? <span className="text-xs italic text-body/50 dark:text-bodydark/50">Loading…</span>
@@ -965,7 +867,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
   useEffect(() => {
     if (!accounts.length) return
     setLoadingBudgets(true)
-    fetchSupabaseBudgets('ads_weekly').then(map => {
+    fetchSupabaseBudgets('ads_monthly').then(map => {
       const next: BudgetStore = {}
       for (const a of accounts) next[a.id] = { budget: map[a.id] ?? 0 }
       setAdsBudgets(next)
@@ -989,14 +891,6 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
   }, [accounts])
 
   useEffect(() => { if (accounts.length) fetchSpend(fromDate, toDate) }, [accounts, fromDate, toDate, fetchSpend])
-
-  const updateAds = (id: string, value: number) => {
-    setAdsBudgets(prev => {
-      const next = { ...prev, [id]: { budget: value } }
-      upsertSupabaseBudget(id, 'ads_weekly', value)
-      return next
-    })
-  }
 
   const buildRows = (): PdfWeeklyRow[] => accounts.map(a => ({
     status: a.status,
@@ -1049,7 +943,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
       </div>
       {loadingBudgets
         ? <div className="flex items-center gap-2 py-8 text-sm text-body dark:text-bodydark"><svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Loading budgets…</div>
-        : <BudgetTableSection accounts={accounts} budgets={adsBudgets} costByAccount={costByAccount} onUpdate={updateAds} pendingCost={loadingCost} />
+        : <BudgetTableSection accounts={accounts} budgets={adsBudgets} costByAccount={costByAccount} pendingCost={loadingCost} />
       }
     </div>
   )
@@ -1069,7 +963,7 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
   useEffect(() => {
     if (!accounts.length) return
     setLoadingBudgets(true)
-    fetchSupabaseBudgets('guarantee_weekly').then(map => {
+    fetchSupabaseBudgets('guarantee_monthly').then(map => {
       const next: BudgetStore = {}
       for (const a of accounts) next[a.id] = { budget: map[a.id] ?? 0 }
       setGgBudgets(next)
@@ -1098,14 +992,6 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
   }, [accounts])
 
   useEffect(() => { if (accounts.length) fetchPeriod(fromDate, toDate) }, [accounts, fromDate, toDate, fetchPeriod])
-
-  const updateGg = (id: string, value: number) => {
-    setGgBudgets(prev => {
-      const next = { ...prev, [id]: { budget: value } }
-      upsertSupabaseBudget(id, 'guarantee_weekly', value)
-      return next
-    })
-  }
 
   const totalBudget = accounts.reduce((s, a) => s + (ggBudgets[a.id]?.budget ?? 0), 0)
   const totalSpend  = accounts.reduce((s, a) => s + (ggPeriod[a.id]?.spend ?? 0), 0)
@@ -1151,7 +1037,9 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
                 <tr key={a.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
                   <td className="px-5 py-4"><StatusBadge status={a.status} /></td>
                   <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={a.name}>{a.name}</td>
-                  <td className="px-5 py-4"><EditableCell value={budget} onChange={v => updateGg(a.id, v)} /></td>
+                  <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">
+                    {budget > 0 ? fmtCurrency(budget) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
+                  </td>
                   <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">
                     {loadingPeriod ? <span className="text-xs italic opacity-50">Loading…</span> : spend > 0 ? fmtCurrency(spend) : <span className="opacity-40">—</span>}
                   </td>
@@ -1207,18 +1095,159 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
 
 // ─── OpenAI Ads Tab ───────────────────────────────────────────────────────────
 
-function OpenAiAdsPlaceholder() {
+const OPENAI_ADS_API = 'https://sjpvyxdyleebhqlmqscy.supabase.co/functions/v1/openai-ads'
+
+interface OpenAiCampaign {
+  id: string
+  name: string
+  status: string
+  budget: number
+  spend: number
+  impressions: number
+  clicks: number
+  cpc: number
+}
+
+interface OpenAiClientResult {
+  clientId: string
+  clientName: string
+  campaigns: OpenAiCampaign[]
+  error?: string
+  insightsError?: string | null
+}
+
+function OpenAiAdsReport() {
+  const { from: defaultFrom, to: defaultTo } = getCurrentWeekRange()
+  const [fromDate, setFromDate] = useState(defaultFrom)
+  const [toDate, setToDate]     = useState(defaultTo)
+  const [results, setResults]   = useState<OpenAiClientResult[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState<string | null>(null)
+
+  const load = useCallback(async (from: string, to: string) => {
+    setLoading(true); setError(null)
+    try {
+      const { data: secrets } = await supabase
+        .from('client_ad_secrets')
+        .select('client_id')
+        .eq('provider', 'openai_ads')
+      const ids = (secrets ?? []).map(s => s.client_id)
+      if (ids.length === 0) { setResults([]); return }
+
+      const { data: clients } = await supabase.from('clients').select('id, name').in('id', ids)
+      const nameById = new Map((clients ?? []).map(c => [c.id, c.name]))
+
+      const startTime = Math.floor(new Date(from + 'T00:00:00').getTime() / 1000)
+      const endTime   = Math.floor(new Date(to + 'T23:59:59').getTime() / 1000)
+
+      const out = await Promise.all(ids.map(async (id): Promise<OpenAiClientResult> => {
+        try {
+          const res = await edgeFetch(`${OPENAI_ADS_API}/campaigns?clientId=${encodeURIComponent(id)}&startTime=${startTime}&endTime=${endTime}`)
+          const json = await res.json()
+          if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`)
+          return { clientId: id, clientName: nameById.get(id) ?? id, campaigns: json.campaigns ?? [], insightsError: json.insightsError }
+        } catch (e) {
+          return { clientId: id, clientName: nameById.get(id) ?? id, campaigns: [], error: e instanceof Error ? e.message : String(e) }
+        }
+      }))
+      setResults(out)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load(fromDate, toDate) }, [fromDate, toDate, load])
+
+  const allCampaigns = results.flatMap(r => r.campaigns)
+  const totals = {
+    budget:      allCampaigns.reduce((s, c) => s + c.budget, 0),
+    spend:       allCampaigns.reduce((s, c) => s + c.spend, 0),
+    clicks:      allCampaigns.reduce((s, c) => s + c.clicks, 0),
+    impressions: allCampaigns.reduce((s, c) => s + c.impressions, 0),
+  }
+
   return (
-    <div className="rounded-xl border border-dashed border-stroke bg-white px-6 py-20 text-center dark:border-strokedark dark:bg-boxdark">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#16a34a]/10">
-        <svg className="h-6 w-6 text-[#16a34a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
-        </svg>
+    <div>
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <WeekPicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} />
+        {loading && (
+          <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        )}
       </div>
-      <p className="text-base font-semibold text-black dark:text-[#E2E5E9]">OpenAI Ads</p>
-      <p className="mx-auto mt-1.5 max-w-sm text-sm text-body dark:text-bodydark">
-        Work in progress — this report is not available yet.
-      </p>
+
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300">
+          {error}
+        </div>
+      )}
+
+      {!loading && results.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-stroke bg-white px-6 py-16 text-center dark:border-strokedark dark:bg-boxdark">
+          <p className="text-base font-semibold text-black dark:text-[#E2E5E9]">No OpenAI Ads accounts connected</p>
+          <p className="mx-auto mt-1.5 max-w-sm text-sm text-body dark:text-bodydark">
+            Add an OpenAI Ads API token in a client's integration card to see their campaigns here.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
+                {['Client', 'Campaign', 'Status', 'Budget', 'Spend', 'CPC', 'Impressions'].map(h => (
+                  <th key={h} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stroke dark:divide-strokedark">
+              {results.map(r => (
+                <Fragment key={r.clientId}>
+                  {r.error ? (
+                    <tr>
+                      <td className="px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]">{r.clientName}</td>
+                      <td colSpan={6} className="px-5 py-4 text-xs text-red-500">{r.error}</td>
+                    </tr>
+                  ) : r.campaigns.length === 0 ? (
+                    <tr>
+                      <td className="px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]">{r.clientName}</td>
+                      <td colSpan={6} className="px-5 py-4 text-xs text-body dark:text-bodydark opacity-60">No campaigns.</td>
+                    </tr>
+                  ) : r.campaigns.map((c, idx) => (
+                    <tr key={c.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
+                      <td className="max-w-[200px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={r.clientName}>
+                        {idx === 0 ? r.clientName : ''}
+                      </td>
+                      <td className="max-w-[220px] truncate px-5 py-4 text-black dark:text-[#E2E5E9]" title={c.name}>{c.name}</td>
+                      <td className="px-5 py-4"><StatusBadge status={c.status === 'active' ? 'ENABLED' : 'PAUSED'} /></td>
+                      <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">{c.budget > 0 ? fmtCurrency(c.budget) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}</td>
+                      <td className="px-5 py-4 tabular-nums font-medium text-red-500">{c.spend > 0 ? fmtCurrency(c.spend) : <span className="opacity-40 font-normal text-body dark:text-bodydark">—</span>}</td>
+                      <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{c.cpc > 0 ? fmtCurrency(c.cpc) : <span className="opacity-40">—</span>}</td>
+                      <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{c.impressions > 0 ? fmtNum(c.impressions) : <span className="opacity-40">—</span>}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+              {allCampaigns.length > 0 && (
+                <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
+                  <td className="px-5 py-4 text-xs font-bold uppercase text-[#16a34a]" colSpan={3}>Totals</td>
+                  <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.budget > 0 ? fmtCurrency(totals.budget) : '—'}</td>
+                  <td className="px-5 py-4 tabular-nums font-bold text-red-500">{totals.spend > 0 ? fmtCurrency(totals.spend) : '—'}</td>
+                  <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.clicks > 0 ? fmtCurrency(totals.spend / totals.clicks) : '—'}</td>
+                  <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.impressions > 0 ? fmtNum(totals.impressions) : '—'}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {results.some(r => r.insightsError) && (
+        <p className="mt-3 text-[11px] text-amber-600 dark:text-amber-400">
+          Budget loaded from the Campaigns API. Spend / CPC / impressions come from the Insights API and may be unavailable until metrics are reported.
+        </p>
+      )}
     </div>
   )
 }
@@ -1240,12 +1269,19 @@ export function SEMReportes() {
       setLoading(true)
       try {
         const year = new Date().getFullYear()
-        const [acctRes, adsRes, ggRes] = await Promise.all([
+        const [acctRes, adsRes, ggRes, clientsRes] = await Promise.all([
           supabase.from('sem_accounts').select('id, name, status').order('name'),
           supabase.from('sem_yearly_ads').select('account_id').eq('year', year),
           supabase.from('sem_yearly_guarantee').select('account_id').eq('year', year),
+          supabase.from('clients').select('sem_account_id, sem_enabled'),
         ])
-        setAccounts(acctRes.data ?? [])
+        // Accounts whose linked client has Google Ads disabled are hidden from all reports
+        const disabled = new Set(
+          (clientsRes.data ?? [])
+            .filter(c => c.sem_enabled === false && c.sem_account_id)
+            .map(c => c.sem_account_id as string),
+        )
+        setAccounts((acctRes.data ?? []).filter(a => !disabled.has(a.id)))
         setAdsAccountIds(new Set((adsRes.data ?? []).map(r => r.account_id)))
         setGgAccountIds(new Set((ggRes.data ?? []).map(r => r.account_id)))
       } finally { setLoading(false) }
@@ -1294,7 +1330,7 @@ export function SEMReportes() {
       </div>
 
       {period === 'monthly' ? (
-        <MonthlyReport />
+        <MonthlyReport accounts={accounts} />
       ) : (
         <>
           {/* Weekly sub-tabs */}
@@ -1328,7 +1364,7 @@ export function SEMReportes() {
             <>
               {activeTab === 'ads'       && <AdsReport accounts={accounts.filter(a => adsAccountIds.has(a.id))} />}
               {activeTab === 'guarantee' && <GuaranteeReport accounts={accounts.filter(a => ggAccountIds.has(a.id))} />}
-              {activeTab === 'openai'    && <OpenAiAdsPlaceholder />}
+              {activeTab === 'openai'    && <OpenAiAdsReport />}
             </>
           )}
         </>

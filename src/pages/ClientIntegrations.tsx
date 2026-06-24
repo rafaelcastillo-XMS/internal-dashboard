@@ -15,6 +15,7 @@ import { edgeFetch } from "@/lib/edgeFetch"
 import { supabase } from "@/lib/supabase"
 import notebooklmIcon from "@/assets/notebooklm-icon.svg"
 import googleAdsIcon from "@/assets/google-ads-icon.png"
+import openaiIcon from "@/assets/openai-icon.svg"
 
 const tabs = ["Integrations", "Data"] as const
 type Tab = typeof tabs[number]
@@ -38,9 +39,8 @@ interface SemAccountOption {
 }
 
 const BUDGET_TYPES = [
-    { key: "ads_weekly", label: "Weekly Report — Google Ads" },
-    { key: "guarantee_weekly", label: "Weekly Report — Google Guarantee" },
-    { key: "ads_monthly", label: "Monthly Report — Google Ads" },
+    { key: "ads_monthly", label: "Monthly Budget — Google Ads" },
+    { key: "guarantee_monthly", label: "Monthly Budget — Google LSA" },
 ] as const
 
 const selectClass = "h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 pr-12 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
@@ -80,6 +80,12 @@ export function ClientIntegrations() {
     const [budgets, setBudgets] = useState<Record<string, string>>({})
     const [savingBudgets, setSavingBudgets] = useState(false)
     const [budgetsMessage, setBudgetsMessage] = useState<{ ok: boolean; text: string } | null>(null)
+
+    // OpenAI Ads API token (write-only: the browser can save it but never read it back)
+    const [openaiToken, setOpenaiToken] = useState("")
+    const [openaiTokenSet, setOpenaiTokenSet] = useState<string | null>(null)
+    const [savingToken, setSavingToken] = useState(false)
+    const [tokenMessage, setTokenMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
     const selectedNotebook = useMemo(
         () => notebooks.find(notebook => notebook.id === config.notebookId),
@@ -194,6 +200,24 @@ export function ClientIntegrations() {
         return () => { active = false }
     }, [record?.sem_account_id])
 
+    // Whether an OpenAI Ads token exists (metadata only — the token itself is never read back)
+    useEffect(() => {
+        const id = client?.id
+        if (!id) { setOpenaiTokenSet(null); return }
+        let active = true
+        supabase
+            .from("client_ad_secrets")
+            .select("updated_at")
+            .eq("client_id", id)
+            .eq("provider", "openai_ads")
+            .maybeSingle()
+            .then(({ data }) => {
+                if (!active) return
+                setOpenaiTokenSet(data?.updated_at ? new Date(data.updated_at).toLocaleDateString() : null)
+            })
+        return () => { active = false }
+    }, [client?.id])
+
     async function saveRecord(patch: Partial<Omit<ClientRecord, "id">>) {
         setSaveError("")
         try {
@@ -235,6 +259,30 @@ export function ClientIntegrations() {
         } finally {
             setSavingBudgets(false)
             setTimeout(() => setBudgetsMessage(null), 4000)
+        }
+    }
+
+    async function handleSaveOpenAiToken() {
+        const id = client?.id
+        const token = openaiToken.trim()
+        if (!id || !token || savingToken) return
+        setSavingToken(true)
+        setTokenMessage(null)
+        try {
+            const { error } = await supabase.rpc("set_client_ad_token", {
+                p_client_id: id,
+                p_provider: "openai_ads",
+                p_token: token,
+            })
+            if (error) throw error
+            setOpenaiToken("")
+            setOpenaiTokenSet(new Date().toLocaleDateString())
+            setTokenMessage({ ok: true, text: "Token saved (write-only — it cannot be read back here)." })
+        } catch (err) {
+            setTokenMessage({ ok: false, text: err instanceof Error ? err.message : "Unable to save token." })
+        } finally {
+            setSavingToken(false)
+            setTimeout(() => setTokenMessage(null), 4000)
         }
     }
 
@@ -294,6 +342,7 @@ export function ClientIntegrations() {
     const googleAuthorized = !!googleStatus?.allowed
     const googleWrongAccount = !!googleStatus?.connected && !googleAuthorized
     const linkedSemAccount = semAccounts.find(a => a.id === record?.sem_account_id)
+    const semEnabled = record?.sem_enabled !== false
     useTrackPageLoading(loadingNotebooks || loadingGoogle || profileLoading, `client-integrations:${client.id}`)
 
     return (
@@ -623,18 +672,34 @@ export function ClientIntegrations() {
 
                                 {/* ── Google Ads card (account link + report budgets) ── */}
                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
-                                    <div className="flex items-start gap-4">
-                                        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                                            <img src={googleAdsIcon} alt="Google Ads logo" className="h-10 w-10 object-contain" />
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start gap-4">
+                                            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                                <img src={googleAdsIcon} alt="Google Ads logo" className="h-10 w-10 object-contain" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">Google Ads</h3>
+                                                <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
+                                                    semEnabled ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                                                }`}>
+                                                    {semEnabled ? (linkedSemAccount ? "Enabled · linked" : "Enabled") : "Disabled"}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">Google Ads</h3>
-                                            <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
-                                                linkedSemAccount ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
-                                            }`}>
-                                                {linkedSemAccount ? "Account linked" : "No account linked"}
-                                            </p>
-                                        </div>
+
+                                        <label className="inline-flex cursor-pointer items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                                            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Enable</span>
+                                            <span className={`relative h-7 w-12 rounded-full transition ${semEnabled ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-700"}`}>
+                                                <input
+                                                    type="checkbox"
+                                                    className="sr-only"
+                                                    checked={semEnabled}
+                                                    disabled={!record}
+                                                    onChange={e => void saveRecord({ sem_enabled: e.target.checked })}
+                                                />
+                                                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${semEnabled ? "left-6" : "left-1"}`} />
+                                            </span>
+                                        </label>
                                     </div>
 
                                     <div className="mt-5 space-y-2">
@@ -642,7 +707,7 @@ export function ClientIntegrations() {
                                         <div className="relative">
                                             <select
                                                 value={record?.sem_account_id ?? ""}
-                                                disabled={!record || loadingSemAccounts}
+                                                disabled={!record || loadingSemAccounts || !semEnabled}
                                                 onChange={e => void saveRecord({ sem_account_id: e.target.value || null })}
                                                 className={selectClass}
                                             >
@@ -666,7 +731,7 @@ export function ClientIntegrations() {
                                                         min="0"
                                                         step="0.01"
                                                         placeholder="0.00"
-                                                        disabled={!record?.sem_account_id}
+                                                        disabled={!record?.sem_account_id || !semEnabled}
                                                         value={budgets[type.key] ?? ""}
                                                         onChange={e => setBudgets(current => ({ ...current, [type.key]: e.target.value }))}
                                                         className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-8 pr-4 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
@@ -678,7 +743,7 @@ export function ClientIntegrations() {
 
                                     <div className="mt-4">
                                         <button
-                                            disabled={!record?.sem_account_id || savingBudgets}
+                                            disabled={!record?.sem_account_id || savingBudgets || !semEnabled}
                                             onClick={() => void handleApplyBudgets()}
                                             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#4285F4] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#3367d6] disabled:cursor-not-allowed disabled:opacity-60"
                                         >
@@ -691,6 +756,56 @@ export function ClientIntegrations() {
                                         ) : (
                                             <p className="mt-2 text-center text-xs text-slate-400">
                                                 {record?.sem_account_id ? "Used by the Weekly and Monthly reports in SEM." : "Link a Google Ads account to set budgets."}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* ── OpenAI Ads card (per-client API token, write-only) ── */}
+                                <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
+                                    <div className="flex items-start gap-4">
+                                        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                            <img src={openaiIcon} alt="OpenAI logo" className="h-9 w-9 object-contain dark:invert" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">OpenAI Ads</h3>
+                                            <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
+                                                openaiTokenSet ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                                            }`}>
+                                                {openaiTokenSet ? "Configured" : "Not configured"}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-5 space-y-3">
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">API Token</label>
+                                            <p className="text-[11px] text-slate-400">
+                                                {openaiTokenSet ? `Last updated ${openaiTokenSet}` : "No token saved yet."}
+                                            </p>
+                                        </div>
+                                        <input
+                                            type="password"
+                                            autoComplete="off"
+                                            placeholder={openaiTokenSet ? "•••••••• — enter a new token to replace" : "Paste OpenAI Ads token"}
+                                            value={openaiToken}
+                                            onChange={e => setOpenaiToken(e.target.value)}
+                                            className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                        />
+                                        <button
+                                            disabled={!openaiToken.trim() || savingToken}
+                                            onClick={() => void handleSaveOpenAiToken()}
+                                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                                        >
+                                            {savingToken ? "Saving…" : openaiTokenSet ? "Replace Token" : "Save Token"}
+                                        </button>
+                                        {tokenMessage ? (
+                                            <p className={`text-center text-xs ${tokenMessage.ok ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>
+                                                {tokenMessage.text}
+                                            </p>
+                                        ) : (
+                                            <p className="text-center text-[11px] text-slate-400">
+                                                Write-only — the token can't be read back here. OpenAI Ads has no reporting API yet; saved for future use.
                                             </p>
                                         )}
                                     </div>

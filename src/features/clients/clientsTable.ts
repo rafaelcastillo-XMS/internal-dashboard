@@ -7,12 +7,13 @@ export type ClientRecord = {
     gsc_property: string | null
     ga4_property_id: string | null
     sem_account_id: string | null
+    sem_enabled: boolean
     notebooklm_enabled: boolean
     notebooklm_id: string | null
     notebooklm_title: string | null
 }
 
-const COLUMNS = "id, name, status, gsc_property, ga4_property_id, sem_account_id, notebooklm_enabled, notebooklm_id, notebooklm_title"
+const COLUMNS = "id, name, status, gsc_property, ga4_property_id, sem_account_id, sem_enabled, notebooklm_enabled, notebooklm_id, notebooklm_title"
 
 export async function fetchClientRecords(): Promise<ClientRecord[]> {
     const { data, error } = await supabase
