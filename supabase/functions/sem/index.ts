@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -27,16 +28,6 @@ async function getAccessToken(): Promise<string> {
 }
 
 // ── Google Ads REST helpers ──────────────────────────────────────────────────
-
-function adsHeaders(token: string) {
-  const mccId = (Deno.env.get("ADS_MCC_ID") ?? "").replace(/-/g, "")
-  return {
-    Authorization: `Bearer ${token}`,
-    "developer-token": Deno.env.get("ADS_DEVELOPER_TOKEN") ?? "",
-    "login-customer-id": mccId,
-    "Content-Type": "application/json",
-  }
-}
 
 async function adsSearch(token: string, customerId: string, query: string) {
   const mccId = (Deno.env.get("ADS_MCC_ID") ?? "").replace(/-/g, "")
@@ -263,6 +254,58 @@ async function fetchSearchTerms(token: string, params: URLSearchParams) {
   return { searchTerms, dateRange: { start: startDate, end: endDate } }
 }
 
+// ── /sync ──────────────────────────────────────────────────────────────────────
+// Reconciles the sem_accounts table against the live Google Ads MCC roster.
+// Live accounts are upserted; accounts no longer returned by the MCC are
+// soft-deleted (status = 'REMOVED') so history rows and selections are preserved.
+
+async function syncAccounts(token: string) {
+  const { accounts } = await fetchAccounts(token)
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  )
+
+  const now = new Date().toISOString()
+  const rows = accounts.map((a) => ({
+    id: a.id,
+    name: a.name,
+    currency: a.currency,
+    timezone: a.timezone,
+    status: a.status,
+    synced_at: now,
+  }))
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from("sem_accounts").upsert(rows, { onConflict: "id" })
+    if (error) throw new Error(`Upsert failed: ${error.message}`)
+  }
+
+  // Soft-delete accounts present in the table but absent from the live MCC.
+  // Guard: never reconcile against an empty roster (would wipe every account).
+  const liveIds = accounts.map((a) => a.id)
+  if (liveIds.length === 0) return { synced: 0, removed: 0, removedIds: [], syncedAt: now }
+
+  const { data: stale, error: selErr } = await supabase
+    .from("sem_accounts")
+    .select("id")
+    .not("id", "in", `(${liveIds.map((id) => `"${id}"`).join(",")})`)
+    .neq("status", "REMOVED")
+  if (selErr) throw new Error(`Select stale failed: ${selErr.message}`)
+
+  const removedIds = (stale ?? []).map((r: { id: string }) => r.id)
+  if (removedIds.length > 0) {
+    const { error } = await supabase
+      .from("sem_accounts")
+      .update({ status: "REMOVED", synced_at: now })
+      .in("id", removedIds)
+    if (error) throw new Error(`Soft-delete failed: ${error.message}`)
+  }
+
+  return { synced: rows.length, removed: removedIds.length, removedIds, syncedAt: now }
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -277,6 +320,8 @@ serve(async (req) => {
 
     if (segment === "accounts") {
       result = await fetchAccounts(token)
+    } else if (segment === "sync") {
+      result = await syncAccounts(token)
     } else if (segment === "performance") {
       result = await fetchPerformance(token, url.searchParams)
     } else if (segment === "search-terms") {
