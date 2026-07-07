@@ -30,6 +30,10 @@ const SEOTraffic = lazy(() => import("./pages/seo/SEOTraffic").then(module => ({
 const SEOCoreWebVitals = lazy(() => import("./pages/seo/SEOCoreWebVitals").then(module => ({ default: module.SEOCoreWebVitals })))
 const SEOMobile = lazy(() => import("./pages/seo/SEOMobile").then(module => ({ default: module.SEOMobile })))
 const SEOOnPageAudit = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOOnPageAudit })))
+const SEOInitialAnalysis = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOInitialAnalysis })))
+const SEOAuditHistory = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOAuditHistory })))
+const SEOComparativeAudit = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOComparativeAudit })))
+const SEOReports = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOReports })))
 
 // SEM Intelligence
 const SEMLayout = lazy(() => import("./features/sem/layout/SEMLayout").then(module => ({ default: module.SEMLayout })))
@@ -38,6 +42,7 @@ const SEMCampaigns = lazy(() => import("./pages/sem/SEMCampaigns").then(module =
 const SEMKeywords = lazy(() => import("./pages/sem/SEMKeywords").then(module => ({ default: module.SEMKeywords })))
 const SEMSearchTerms = lazy(() => import("./pages/sem/SEMSearchTerms").then(module => ({ default: module.SEMSearchTerms })))
 const SEMReportes = lazy(() => import("./pages/sem/SEMReportes").then(module => ({ default: module.SEMReportes })))
+const SEMAccountReport = lazy(() => import("./pages/sem/SEMAccountReport").then(module => ({ default: module.SEMAccountReport })))
 
 // Design Intelligence
 const DesignLayout = lazy(() => import("./features/design/layout/DesignLayout").then(module => ({ default: module.DesignLayout })))
@@ -125,13 +130,21 @@ function App() {
                                 <Route path="/seo/cwv" element={<SEOCoreWebVitals />} />
                                 <Route path="/seo/mobile" element={<SEOMobile />} />
                                 <Route path="/seo/onpage-audit" element={<SEOOnPageAudit />} />
+                                <Route path="/seo/audit/initial-analysis" element={<SEOInitialAnalysis />} />
+                                <Route path="/seo/audit/history" element={<SEOAuditHistory />} />
+                                <Route path="/seo/audit/comparative" element={<SEOComparativeAudit />} />
+                                <Route path="/seo/reports" element={<SEOReports />} />
                             </Route>
                             <Route element={<SEMProtectedLayout session={session} />}>
                                 <Route path="/sem" element={<SEMDashboard />} />
                                 <Route path="/sem/campaigns" element={<SEMCampaigns />} />
                                 <Route path="/sem/keywords" element={<SEMKeywords />} />
                                 <Route path="/sem/search-terms" element={<SEMSearchTerms />} />
-                                <Route path="/sem/reports" element={<SEMReportes />} />
+                                <Route path="/sem/budget" element={<SEMReportes />} />
+                                <Route path="/sem/reports" element={<SEMAccountReport />} />
+                                <Route path="/sem/reports/:reportId" element={<SEMAccountReport />} />
+                                <Route path="/sem/clients/:clientId/reports" element={<SEMAccountReport />} />
+                                <Route path="/sem/clients/:clientId/reports/:reportId" element={<SEMAccountReport />} />
                             </Route>
                             <Route element={<SocialProtectedLayout session={session} />}>
                                 <Route path="/social" element={<SocialDashboard />} />

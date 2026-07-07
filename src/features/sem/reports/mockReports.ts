@@ -1,0 +1,391 @@
+import type { Report, Slide } from './types'
+import { GOOGLE_ADS_KEYWORD_COLUMNS, getGoogleAdsReportData, getLsaReportData } from './reportData'
+import { normalizeReportSlides } from './reportSlides'
+
+export const REPORT_MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+const nowIso = () => new Date().toISOString()
+
+export function initialsForName(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+export function makeReportId(clientId: string, month: string, year: number) {
+  const safeClient = clientId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  const safeMonth = month.toLowerCase()
+  return `${safeClient}-${safeMonth}-${year}-${Date.now()}`
+}
+
+export function createSlidesTemplate(clientId: string, clientName: string, month: string, year: number): Slide[] {
+  const googleAdsData = getGoogleAdsReportData(clientId, month, year)
+  const lsaData = getLsaReportData(clientId, month, year)
+
+  const slides: Slide[] = [
+    {
+      id: 'cover',
+      type: 'cover',
+      title: 'Cover',
+      order: 1,
+      notes: 'Introduce the month, scope, and overall account health.',
+      content: {
+        reportTitle: 'Google Ads & LSA Report',
+        subtitle: `${month} ${year}`,
+        textBlocks: [
+          {
+            id: 'prepared-for',
+            label: 'Prepared for',
+            value: clientName,
+          },
+        ],
+      },
+    },
+    {
+      id: 'google-ads-key-stats',
+      type: 'google_ads_kpis',
+      title: 'Google Ads - Key Stats and Performance KPIs',
+      order: 3,
+      notes: 'Use this slide to summarize Google Ads momentum and month-over-month movement.',
+      content: {
+        dataSource: {
+          source: googleAdsData.source,
+          connectionStatus: googleAdsData.connectionStatus,
+          integrationTarget: googleAdsData.integrationTarget,
+          message: 'Real Google Ads KPI data loads from the Ads account when the report is generated or opened.',
+        },
+        kpis: googleAdsData.kpis,
+        textBlocks: [
+          {
+            id: 'monthly-summary',
+            label: 'Monthly Summary',
+            value: googleAdsData.summary,
+          },
+        ],
+      },
+    },
+    {
+      id: 'google-ads-keywords',
+      type: 'keywords',
+      title: 'Google Ads - Keywords Stats and Performance',
+      order: 4,
+      notes: 'Highlight both winning keywords and terms that require bid, match type, or negative keyword action.',
+      content: {
+        dataSource: {
+          source: 'mock',
+          connectionStatus: 'mock_not_connected',
+          integrationTarget: 'Existing SEM Google Ads integration: Supabase Edge Function /sem/performance -> Google Ads keyword_view',
+          message: 'Real keyword data loads from Google Ads when the report is generated or opened.',
+        },
+        tables: [
+          {
+            id: 'keywords-table',
+            title: 'Keyword Performance - Google Ads API',
+            columns: GOOGLE_ADS_KEYWORD_COLUMNS,
+            rows: [],
+          },
+        ],
+        textBlocks: [
+          {
+            id: 'keyword-analysis',
+            label: 'Keyword Analysis',
+            value: 'Real Google Ads keyword data will load from the client Ads account when the report is generated or opened.',
+          },
+        ],
+      },
+    },
+    {
+      id: 'google-ads-ad-performance',
+      type: 'ads',
+      title: 'Google Ads - Ads Stats and Performance',
+      order: 5,
+      notes: 'Show top ad themes and describe why they worked.',
+      content: {
+        ads: [
+          {
+            id: 'search-ad-1',
+            type: 'Search Ad',
+            headline: 'Same-Day Garage Door Repair',
+            description: 'Fast local service, transparent pricing, and experienced technicians available today.',
+            status: 'Top performer',
+            metrics: [
+              { id: 'ctr', label: 'CTR', value: '6.8%', comparison: '+1.2 pts', trend: 'up' },
+              { id: 'conv', label: 'Conversions', value: '31.6', comparison: '+18%', trend: 'up' },
+              { id: 'cpl', label: 'CPL', value: '$58.42', comparison: '-12%', trend: 'down' },
+            ],
+          },
+          {
+            id: 'pmax-ad-1',
+            type: 'Performance Max',
+            headline: 'Local Garage Door Service',
+            description: 'Asset group focused on repair, replacement, and urgent service requests.',
+            status: 'Efficient reach',
+            metrics: [
+              { id: 'impressions', label: 'Impr.', value: '14,810', comparison: '+9%', trend: 'up' },
+              { id: 'clicks', label: 'Clicks', value: '396', comparison: '+5%', trend: 'up' },
+              { id: 'conversions', label: 'Conv.', value: '22.4', comparison: '+7%', trend: 'up' },
+            ],
+          },
+        ],
+        textBlocks: [
+          {
+            id: 'ads-analysis',
+            label: 'Ads Analysis',
+            value: 'Search ads with urgency and local trust messaging produced the best lead quality. Performance Max continues to support additional reach and should be monitored through lead quality feedback.',
+          },
+        ],
+      },
+    },
+    {
+      id: 'google-ads-search-terms',
+      type: 'search_terms',
+      title: 'Google Ads - Search Terms Stats and Performance',
+      order: 6,
+      notes: 'Use recommendations to document what should be added, excluded, or watched next month.',
+      content: {
+        tables: [
+          {
+            id: 'search-terms-table',
+            title: 'Search Term Review',
+            columns: [
+              { key: 'term', label: 'Search term' },
+              { key: 'impressions', label: 'Impr.', align: 'right' },
+              { key: 'clicks', label: 'Clicks', align: 'right' },
+              { key: 'cost', label: 'Cost', align: 'right' },
+              { key: 'conversions', label: 'Conv.', align: 'right' },
+              { key: 'action', label: 'Action / Recommendation' },
+            ],
+            rows: [
+              { term: 'garage door repair same day', impressions: '1,184', clicks: '74', cost: '$355.42', conversions: '8.0', action: 'Add as exact keyword' },
+              { term: 'broken spring repair near me', impressions: '942', clicks: '58', cost: '$281.20', conversions: '6.0', action: 'Add as phrase keyword' },
+              { term: 'garage door repair jobs', impressions: '320', clicks: '18', cost: '$76.10', conversions: '0', action: 'Add negative keyword' },
+              { term: 'diy garage door opener repair', impressions: '284', clicks: '12', cost: '$44.85', conversions: '0', action: 'Exclude DIY intent' },
+            ],
+          },
+        ],
+        textBlocks: [
+          {
+            id: 'search-term-note',
+            label: 'Search Term Note',
+            value: 'Search term cleanup improved lead quality by removing employment and DIY intent. Add exact match coverage for same-day and spring repair terms.',
+          },
+        ],
+      },
+    },
+    {
+      id: 'devices-day-hour',
+      type: 'devices_day_hour',
+      title: 'Google Ads - Devices and Day & Hour Stats',
+      order: 7,
+      notes: 'Summarize timing and device patterns that should influence bids and staffing.',
+      content: {
+        charts: [
+          {
+            id: 'device-performance',
+            title: 'Device Performance',
+            description: 'Conversions by device',
+            series: [
+              { label: 'Mobile', value: 64, displayValue: '64%', detail: '58.7 conversions' },
+              { label: 'Desktop', value: 27, displayValue: '27%', detail: '24.9 conversions' },
+              { label: 'Tablet', value: 9, displayValue: '9%', detail: '8.8 conversions' },
+            ],
+          },
+          {
+            id: 'day-performance',
+            title: 'Day of Week Performance',
+            description: 'Lead share by day',
+            series: [
+              { label: 'Mon', value: 16, displayValue: '16%', detail: '$67 CPL' },
+              { label: 'Tue', value: 18, displayValue: '18%', detail: '$62 CPL' },
+              { label: 'Wed', value: 14, displayValue: '14%', detail: '$71 CPL' },
+              { label: 'Thu', value: 17, displayValue: '17%', detail: '$64 CPL' },
+              { label: 'Fri', value: 15, displayValue: '15%', detail: '$69 CPL' },
+              { label: 'Sat', value: 11, displayValue: '11%', detail: '$78 CPL' },
+              { label: 'Sun', value: 9, displayValue: '9%', detail: '$84 CPL' },
+            ],
+          },
+          {
+            id: 'hour-performance',
+            title: 'Hour of Day Performance',
+            description: 'Best converting windows',
+            series: [
+              { label: '8-11 AM', value: 31, displayValue: '31%', detail: 'Highest call volume' },
+              { label: '11-2 PM', value: 24, displayValue: '24%', detail: 'Strong quote intent' },
+              { label: '2-5 PM', value: 22, displayValue: '22%', detail: 'Stable quality' },
+              { label: '5-8 PM', value: 15, displayValue: '15%', detail: 'Lower urgency' },
+              { label: 'After 8 PM', value: 8, displayValue: '8%', detail: 'Monitor spend' },
+            ],
+          },
+        ],
+        textBlocks: [
+          {
+            id: 'device-day-hour-analysis',
+            label: 'Analysis',
+            value: 'Mobile remains the strongest lead driver, especially during business hours. Consider stronger bid coverage in the morning and early afternoon when call readiness is highest.',
+          },
+        ],
+      },
+    },
+    {
+      id: 'lsa-key-results',
+      type: 'lsa_key_results',
+      title: 'Local Services Ads - Key Results',
+      order: 8,
+      notes: 'Focus LSA commentary on lead quality, responsiveness, and account trust signals.',
+      content: {
+        kpis: lsaData.kpis,
+        textBlocks: [
+          {
+            id: 'lsa-summary',
+            label: 'LSA Summary',
+            value: lsaData.summary,
+          },
+        ],
+      },
+    },
+    {
+      id: 'highlights',
+      type: 'highlights',
+      title: 'Highlights',
+      order: 9,
+      notes: 'Document completed optimization work in plain language.',
+      content: {
+        highlights: [
+          'Monthly Budget reviewed and adjusted',
+          'Search Terms Reviewed',
+          'Negative Keywords Added',
+          'Search Keywords Added',
+          'Poor quality leads reviewed/disputed',
+        ],
+      },
+    },
+    {
+      id: 'lsa-account-notes',
+      type: 'lsa_notes',
+      title: 'LSA Account Notes',
+      order: 10,
+      notes: 'Use this slide for operational items that can impact LSA visibility and billing.',
+      content: {
+        noteBlocks: [
+          {
+            id: 'document-expiration-alerts',
+            label: 'Document Expiration Alerts',
+            value: 'No active document expiration issues were found during the monthly review.',
+          },
+          {
+            id: 'missed-calls-messages',
+            label: 'Missed Calls / Messages',
+            value: 'Missed lead activity should be reviewed weekly so valid opportunities are followed up quickly.',
+          },
+          {
+            id: 'lead-quality-review',
+            label: 'Lead Quality Review',
+            value: 'Review low-quality leads and dispute any eligible leads inside the LSA dashboard.',
+          },
+          {
+            id: 'google-guaranteed-status',
+            label: 'Google Guaranteed Account Status',
+            value: 'Account appears active. Continue monitoring verification and review health.',
+          },
+        ],
+      },
+    },
+    {
+      id: 'next-steps',
+      type: 'next_steps',
+      title: 'Next Steps & Recommendations',
+      order: 11,
+      notes: 'Keep next steps practical and tied to client behavior.',
+      content: {
+        textBlocks: [
+          {
+            id: 'client-recommendations',
+            label: 'Recommendations',
+            value: 'Answer every call promptly. Follow up with leads quickly. Send weekly project photos. Ask satisfied customers for reviews. Continue sharing lead quality feedback so targeting can be refined.',
+          },
+        ],
+      },
+    },
+    {
+      id: 'final-thank-you',
+      type: 'thank_you',
+      title: 'Final Thank You Slide',
+      order: 12,
+      notes: 'Close with a concise client-facing message.',
+      content: {
+        finalMessage: 'Thank you for your business. If you have any questions let us know, we are here to help.',
+      },
+    },
+  ]
+
+  return normalizeReportSlides(slides)
+}
+
+export function createReportFromTemplate(input: {
+  clientId: string
+  clientName: string
+  clientLogo?: string
+  month: string
+  year: number
+  status?: Report['status']
+}): Report {
+  const createdAt = nowIso()
+  return {
+    id: makeReportId(input.clientId, input.month, input.year),
+    clientId: input.clientId,
+    clientName: input.clientName,
+    clientLogo: input.clientLogo ?? '',
+    month: input.month,
+    year: input.year,
+    status: input.status ?? 'Draft',
+    slides: createSlidesTemplate(input.clientId, input.clientName, input.month, input.year),
+    createdAt,
+    updatedAt: createdAt,
+  }
+}
+
+export function createSeedReportsForClient(client: {
+  id: string
+  name: string
+  logo?: string
+}): Report[] {
+  return [
+    createReportFromTemplate({
+      clientId: client.id,
+      clientName: client.name,
+      clientLogo: client.logo,
+      month: 'June',
+      year: 2026,
+      status: 'In Review',
+    }),
+    createReportFromTemplate({
+      clientId: client.id,
+      clientName: client.name,
+      clientLogo: client.logo,
+      month: 'May',
+      year: 2026,
+      status: 'Ready',
+    }),
+  ].map((report, index) => ({
+    ...report,
+    id: `${client.id}-sample-${index === 0 ? 'june' : 'may'}-2026`,
+    updatedAt: index === 0 ? '2026-06-28T16:30:00.000Z' : '2026-05-31T18:15:00.000Z',
+  }))
+}

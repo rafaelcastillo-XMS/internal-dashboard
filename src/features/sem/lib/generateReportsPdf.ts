@@ -12,8 +12,12 @@ export interface PdfWeeklyRow {
 export interface PdfMonthlyRow {
   status: string
   accountName: string
+  accountId?: string
+  platform?: string
   budget: number
   spend: number
+  refunded?: number
+  paidWith?: string
 }
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -338,16 +342,7 @@ export async function generateWeeklyBudgetPdf(params: {
   doc.save(filename)
 }
 
-// ─── Public: Monthly PDF ──────────────────────────────────────────────────────
-
-export async function generateMonthlyBudgetPdf(params: {
-  monthLabel: string
-  rows: PdfMonthlyRow[]
-}): Promise<void> {
-  const { monthLabel, rows } = params
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-
-  // Header
+function drawMonthlyPdfHeader(doc: jsPDF, monthLabel: string, pageNum?: number) {
   setColor(doc, C.green, 'fill')
   doc.rect(0, 0, PAGE_W, 26, 'F')
   setColor(doc, [16, 185, 129], 'fill')
@@ -356,7 +351,7 @@ export async function generateMonthlyBudgetPdf(params: {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
   setColor(doc, C.white, 'text')
-  doc.text('Budget Overview — Monthly', ML, 11)
+  doc.text('Monthly Budget Report', ML, 11)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.5)
@@ -370,81 +365,90 @@ export async function generateMonthlyBudgetPdf(params: {
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   doc.text(`Generated: ${dateStr}`, PAGE_W - ML, 17.5, { align: 'right' })
 
-  let y = 32
+  if (pageNum && pageNum > 1) {
+    doc.setFontSize(7)
+    setColor(doc, [167, 243, 208], 'text')
+    doc.text('(continued)', PAGE_W / 2, 17.5, { align: 'center' })
+  }
+}
 
-  // Section label
-  drawSectionLabel(doc, 'GOOGLE ADS', 'Spend from Google Ads API · sem_yearly_ads', y, 'ads')
-  y += 11
+const MONTHLY_COLS = [18, 55, 30, 34, 28, 28, 34, 38] as const
+const MONTHLY_HEADERS = ['STATUS', 'CLIENT', 'ID', 'PLATFORM', 'BUDGET', 'SPEND', 'CREDITS', 'PAID WITH']
 
-  // Table header
-  const MCOLS = [20, 90, 35, 35, 35, 50] as const
-  const MHDRS = ['STATUS', 'ACCOUNT NAME', 'MONTHLY BUDGET', 'SPEND (GA)', 'REMAINING', '% USED']
-
+function drawMonthlyTableHeader(doc: jsPDF, y: number) {
   setColor(doc, C.green, 'fill')
   doc.rect(ML, y, USABLE, HDR_H, 'F')
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(6.5)
+  doc.setFontSize(6.2)
   setColor(doc, C.white, 'text')
   let x = ML
-  MHDRS.forEach((h, i) => {
-    doc.text(h, x + 3, y + HDR_H / 2 + 2)
-    x += MCOLS[i]
+  MONTHLY_HEADERS.forEach((h, i) => {
+    doc.text(h, x + 2.5, y + HDR_H / 2 + 2)
+    x += MONTHLY_COLS[i]
   })
+}
+
+// ─── Public: Monthly PDF ──────────────────────────────────────────────────────
+
+export async function generateMonthlyBudgetPdf(params: {
+  monthLabel: string
+  rows: PdfMonthlyRow[]
+}): Promise<void> {
+  const { monthLabel, rows } = params
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+  drawMonthlyPdfHeader(doc, monthLabel)
+  let y = 32
+
+  // Section label
+  drawSectionLabel(doc, 'MONTHLY BUDGET', 'Google Ads + Google Guarantee · SEM monthly data', y, 'ads')
+  y += 11
+
+  // Table header
+  drawMonthlyTableHeader(doc, y)
   y += HDR_H
 
   // Rows
   rows.forEach((row, ri) => {
     if (y + ROW_H > PAGE_H - 14) {
       doc.addPage()
-      y = 20
+      drawMonthlyPdfHeader(doc, monthLabel, doc.getNumberOfPages())
+      y = 32
+      drawSectionLabel(doc, 'MONTHLY BUDGET', `Continued · ${monthLabel}`, y, 'ads')
+      y += 11
+      drawMonthlyTableHeader(doc, y)
+      y += HDR_H
     }
     setColor(doc, ri % 2 === 1 ? C.rowAlt : C.white, 'fill')
     doc.rect(ML, y, USABLE, ROW_H, 'F')
 
-    const active    = row.status === 'ENABLED'
-    const remaining = row.budget > 0 ? row.budget - row.spend : null
-    const remNeg    = remaining !== null && remaining < 0
-    const pct       = row.budget > 0 ? (row.spend / row.budget) * 100 : null
+    const active   = row.status === 'ENABLED'
+    const refunded = row.refunded ?? 0
 
     let x = ML
     const cy = y + ROW_H / 2
     drawStatusDot(doc, active, x, cy)
-    x += MCOLS[0]
+    x += MONTHLY_COLS[0]
 
-    cell(doc, row.accountName, x, y, MCOLS[1], ROW_H, { bold: true, color: C.dark })
-    x += MCOLS[1]
+    cell(doc, row.accountName, x, y, MONTHLY_COLS[1], ROW_H, { bold: true, color: C.dark })
+    x += MONTHLY_COLS[1]
 
-    cell(doc, fc(row.budget), x, y, MCOLS[2], ROW_H, { color: row.budget > 0 ? C.dark : C.muted, align: 'right' })
-    x += MCOLS[2]
+    cell(doc, row.accountId ?? '—', x, y, MONTHLY_COLS[2], ROW_H, { color: C.body, size: 7 })
+    x += MONTHLY_COLS[2]
 
-    cell(doc, fc(row.spend), x, y, MCOLS[3], ROW_H, { color: row.spend > 0 ? C.body : C.muted, align: 'right' })
-    x += MCOLS[3]
+    cell(doc, row.platform ?? '—', x, y, MONTHLY_COLS[3], ROW_H, { color: C.dark, size: 7 })
+    x += MONTHLY_COLS[3]
 
-    if (remaining !== null) {
-      cell(doc, fc(Math.abs(remaining)) + (remNeg ? ' ↓' : ''), x, y, MCOLS[4], ROW_H, { bold: true, color: remNeg ? C.red : C.greenText, align: 'right' })
-    } else {
-      cell(doc, '—', x, y, MCOLS[4], ROW_H, { color: C.muted, align: 'right' })
-    }
-    x += MCOLS[4]
+    cell(doc, fc(row.budget), x, y, MONTHLY_COLS[4], ROW_H, { color: row.budget > 0 ? C.dark : C.muted, align: 'right' })
+    x += MONTHLY_COLS[4]
 
-    // % Used bar
-    if (pct !== null) {
-      const barX  = x + 3
-      const barY  = y + ROW_H / 2 - 1.2
-      const barW  = 28
-      const barH  = 2.4
-      const color = pct > 90 ? C.red : pct > 70 ? C.yellow : C.greenText
-      setColor(doc, C.border, 'fill')
-      doc.rect(barX, barY, barW, barH, 'F')
-      setColor(doc, color, 'fill')
-      doc.rect(barX, barY, Math.min(pct / 100, 1) * barW, barH, 'F')
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(7)
-      setColor(doc, color, 'text')
-      doc.text(`${pct.toFixed(1)}%`, barX + barW + 2, y + ROW_H / 2 + 2)
-    } else {
-      cell(doc, '—', x, y, MCOLS[5], ROW_H, { color: C.muted })
-    }
+    cell(doc, fc(row.spend), x, y, MONTHLY_COLS[5], ROW_H, { color: row.spend > 0 ? C.body : C.muted, align: 'right' })
+    x += MONTHLY_COLS[5]
+
+    cell(doc, fc(refunded), x, y, MONTHLY_COLS[6], ROW_H, { color: refunded > 0 ? C.dark : C.muted, align: 'right' })
+    x += MONTHLY_COLS[6]
+
+    cell(doc, row.paidWith || '—', x, y, MONTHLY_COLS[7], ROW_H, { color: row.paidWith ? C.body : C.muted, size: 7 })
 
     setColor(doc, C.border, 'draw')
     doc.setLineWidth(0.1)
@@ -455,8 +459,7 @@ export async function generateMonthlyBudgetPdf(params: {
   // Totals
   const totalBudget = rows.reduce((s, r) => s + r.budget, 0)
   const totalSpend  = rows.reduce((s, r) => s + r.spend, 0)
-  const totalRem    = totalBudget > 0 ? totalBudget - totalSpend : null
-  const totalPct    = totalBudget > 0 ? (totalSpend / totalBudget) * 100 : null
+  const totalRefund = rows.reduce((s, r) => s + (r.refunded ?? 0), 0)
 
   setColor(doc, C.totals, 'fill')
   doc.rect(ML, y, USABLE, ROW_H + 1, 'F')
@@ -464,24 +467,14 @@ export async function generateMonthlyBudgetPdf(params: {
   doc.setLineWidth(0.4)
   doc.line(ML, y, ML + USABLE, y)
 
-  x = ML
-  cell(doc, 'TOTALS', x + MCOLS[0] + 3, y, MCOLS[1], ROW_H + 1, { bold: true, color: C.greenText, size: 7 })
-  x += MCOLS[0] + MCOLS[1]
-  cell(doc, fc(totalBudget), x, y, MCOLS[2], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
-  x += MCOLS[2]
-  cell(doc, fc(totalSpend), x, y, MCOLS[3], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
-  x += MCOLS[3]
-  if (totalRem !== null) {
-    const remNeg = totalRem < 0
-    cell(doc, fc(Math.abs(totalRem)) + (remNeg ? ' ↓' : ''), x, y, MCOLS[4], ROW_H + 1, { bold: true, color: remNeg ? C.red : C.greenText, align: 'right' })
-  }
-  x += MCOLS[4]
-  if (totalPct !== null) {
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(7.5)
-    setColor(doc, totalPct > 90 ? C.red : totalPct > 70 ? C.yellow : C.greenText, 'text')
-    doc.text(`${totalPct.toFixed(1)}%`, x + 3, y + ROW_H / 2 + 2)
-  }
+  let x = ML
+  cell(doc, 'TOTALS', x + MONTHLY_COLS[0] + 3, y, MONTHLY_COLS[1], ROW_H + 1, { bold: true, color: C.greenText, size: 7 })
+  x += MONTHLY_COLS[0] + MONTHLY_COLS[1] + MONTHLY_COLS[2] + MONTHLY_COLS[3]
+  cell(doc, fc(totalBudget), x, y, MONTHLY_COLS[4], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
+  x += MONTHLY_COLS[4]
+  cell(doc, fc(totalSpend), x, y, MONTHLY_COLS[5], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
+  x += MONTHLY_COLS[5]
+  cell(doc, fc(totalRefund), x, y, MONTHLY_COLS[6], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
 
   drawFooters(doc)
 

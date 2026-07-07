@@ -2,6 +2,7 @@ import express from "express"
 import { fileURLToPath } from "url"
 import path from "path"
 import Anthropic from "@anthropic-ai/sdk"
+import { getCompanySkillsCatalog } from "./server/companySkills.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -591,6 +592,19 @@ app.get('/api/seo/ahrefs-snapshot', async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Ahrefs request failed'
     console.error('[seo/ahrefs]', message)
+    res.status(500).json({ error: message })
+  }
+})
+
+// ── Company Skills catalog ───────────────────────────────────────────────────
+app.get('/api/company-skills', async (req, res) => {
+  try {
+    const refresh = req.query.refresh === '1'
+    const catalog = await getCompanySkillsCatalog({ refresh })
+    res.json(catalog)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Company skills request failed'
+    console.error('[company-skills]', message)
     res.status(500).json({ error: message })
   }
 })

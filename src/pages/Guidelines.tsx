@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { Fragment, useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   BookOpen,
@@ -12,6 +12,11 @@ import {
   Tag,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
+  ExternalLink,
+  Layers3,
+  ShieldCheck,
+  AlertCircle,
 } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -33,6 +38,55 @@ interface Guideline {
 }
 
 type GuidelinesMap = Record<string, Guideline[]>
+
+type CompanySkillStatus = "available" | "draft" | "deprecated" | "archived"
+
+interface CompanySkill {
+  id: string
+  name: string
+  title: string
+  category: string
+  status: CompanySkillStatus
+  path: string
+  filePath: string
+  url: string
+  summary: string
+  createdAt: string | null
+  updatedAt: string | null
+  commitCount: number
+  historyComplete: boolean
+}
+
+interface CompanySkillCategory {
+  name: string
+  count: number
+  available: number
+  draft: number
+  deprecated: number
+  archived: number
+}
+
+interface CompanySkillsCatalog {
+  repository: {
+    fullName: string
+    url: string
+    defaultBranch: string
+    private: boolean
+    archived: boolean
+    updatedAt: string | null
+    fetchedAt: string
+  }
+  totals: {
+    skills: number
+    categories: number
+    available: number
+    draft: number
+    deprecated: number
+    archived: number
+  }
+  categories: CompanySkillCategory[]
+  skills: CompanySkill[]
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -93,6 +147,27 @@ const PROMPT_CAT_ACCENT: Record<string, string> = {
   "Design":      "purple",
   "Operations":  "green",
   "Content":     "amber",
+}
+
+const COMPANY_SKILLS_REPO_URL = "https://github.com/XMS-Ai/company-skills"
+
+const SKILL_STATUS_LABEL: Record<CompanySkillStatus, string> = {
+  available: "Available",
+  draft: "Draft",
+  deprecated: "Deprecated",
+  archived: "Archived",
+}
+
+const SKILL_STATUS_CLASS: Record<CompanySkillStatus, string> = {
+  available: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+  draft: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  deprecated: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+  archived: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300",
+}
+
+function formatSkillDate(value: string | null) {
+  if (!value) return "—"
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
 const FEATURED_PROMPTS = [
@@ -541,6 +616,232 @@ function GuidelineItem({ guideline, index, onEdit, onDelete }: {
   )
 }
 
+// ─── CompanySkillsPanel ───────────────────────────────────────────────────────
+
+function SkillStatusBadge({ status }: { status: CompanySkillStatus }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${SKILL_STATUS_CLASS[status]}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {SKILL_STATUS_LABEL[status]}
+    </span>
+  )
+}
+
+function CompanySkillsPanel() {
+  const [catalog, setCatalog] = useState<CompanySkillsCatalog | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState<"all" | CompanySkillStatus>("all")
+
+  const loadCatalog = async (refresh = false) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/company-skills${refresh ? "?refresh=1" : ""}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Unable to load company skills")
+      setCatalog(json)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load company skills")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadCatalog() }, [])
+
+  const query = search.trim().toLowerCase()
+  const filteredSkills = (catalog?.skills ?? [])
+    .filter(skill => statusFilter === "all" || skill.status === statusFilter)
+    .filter(skill => {
+      if (!query) return true
+      return [
+        skill.title,
+        skill.name,
+        skill.category,
+        skill.path,
+        skill.summary,
+        skill.status,
+      ].some(value => value.toLowerCase().includes(query))
+    })
+    .sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title))
+
+  let currentCategory = ""
+
+  return (
+    <section className="mb-6">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
+              <Layers3 className="h-4 w-4" />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-[#E2E5E9]">Company Skills</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">XMS-Ai/company-skills inventory</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href={catalog?.repository.url ?? COMPANY_SKILLS_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Repository
+          </a>
+          <button
+            onClick={() => loadCatalog(true)}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>{error}</p>
+        </div>
+      )}
+
+      {catalog && (
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Skills</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-[#E2E5E9]">{catalog.totals.skills}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm dark:border-emerald-900/40 dark:bg-slate-800">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Available</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{catalog.totals.available}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Categories</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-[#E2E5E9]">{catalog.totals.categories}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Repo Updated</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-[#E2E5E9]">{formatSkillDate(catalog.repository.updatedAt)}</p>
+            </div>
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {catalog.categories.map(category => (
+              <span key={category.name} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                {category.name}
+                <span className="text-slate-400">{category.count}</span>
+              </span>
+            ))}
+          </div>
+
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="relative min-w-[220px] flex-1 max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search skills..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-[var(--focus-ring)] dark:border-slate-700 dark:bg-slate-800 dark:text-[#E2E5E9]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value as "all" | CompanySkillStatus)}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-[var(--focus-ring)] dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+              >
+                <option value="all">All statuses</option>
+                {Object.entries(SKILL_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <span className="hidden items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 sm:inline-flex">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                {catalog.repository.private ? "Private repo" : "Public repo"}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <table className="w-full min-w-[980px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-400">
+                  <th className="px-4 py-3">Skill</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Created</th>
+                  <th className="px-4 py-3">Updated</th>
+                  <th className="px-4 py-3">Commits</th>
+                  <th className="px-4 py-3">Path</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {filteredSkills.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                      No skills match the current filters.
+                    </td>
+                  </tr>
+                ) : filteredSkills.map(skill => {
+                  const showCategory = skill.category !== currentCategory
+                  currentCategory = skill.category
+                  return (
+                    <Fragment key={skill.id}>
+                      {showCategory && (
+                        <tr className="bg-slate-50/80 dark:bg-slate-900/40">
+                          <td colSpan={6} className="px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            {skill.category}
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                        <td className="px-4 py-3">
+                          <div className="max-w-[340px]">
+                            <a href={skill.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-slate-900 hover:text-[var(--brand-accent)] dark:text-[#E2E5E9]">
+                              {skill.title}
+                              <ExternalLink className="h-3 w-3 opacity-50" />
+                            </a>
+                            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{skill.summary}</p>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3"><SkillStatusBadge status={skill.status} /></td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">{formatSkillDate(skill.createdAt)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">{formatSkillDate(skill.updatedAt)}</td>
+                        <td className="px-4 py-3 tabular-nums text-slate-500 dark:text-slate-400">{skill.commitCount || "—"}</td>
+                        <td className="px-4 py-3">
+                          <code className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{skill.path}</code>
+                        </td>
+                      </tr>
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+            Last sync: {formatSkillDate(catalog.repository.fetchedAt)} · Branch: {catalog.repository.defaultBranch}
+          </p>
+        </>
+      )}
+
+      {loading && !catalog && (
+        <div className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+          <span className="inline-flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 animate-spin text-[var(--brand-accent)]" />
+            Loading company skills...
+          </span>
+        </div>
+      )}
+    </section>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function Guidelines() {
@@ -695,6 +996,8 @@ export function Guidelines() {
                   {FEATURED_PROMPTS.map(fp => <FeaturedPromptCard key={fp.id} prompt={fp} />)}
                 </div>
               </div>
+
+              <CompanySkillsPanel />
 
               {/* Prompt grid */}
               {filteredPrompts.length === 0 ? (

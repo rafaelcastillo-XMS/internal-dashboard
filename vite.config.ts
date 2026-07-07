@@ -1,5 +1,6 @@
 import path from "path"
 import fs from "fs"
+import os from "os"
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "child_process"
 import { promisify } from "util"
 import { config as loadDotenv } from "dotenv"
@@ -7,6 +8,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import Anthropic from "@anthropic-ai/sdk"
 import type { IncomingMessage, ServerResponse } from "http"
+import { getCompanySkillsCatalog } from "./server/companySkills.js"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
 
@@ -812,7 +814,7 @@ function pdfExportDevPlugin() {
           }
 
           const toolsDir = path.resolve(__dirname, "tools")
-          const tmpDir = fs.mkdtempSync(path.join(require("os").tmpdir(), ".pdf-export-"))
+          const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), ".pdf-export-"))
           const inputPath = path.join(tmpDir, "payload.json")
           const outputPath = path.join(tmpDir, "report.pdf")
           try {
@@ -831,6 +833,35 @@ function pdfExportDevPlugin() {
         } catch (error) {
           const message = error instanceof Error ? error.message : "PDF export error"
           console.error("[pdf-export]", message)
+          sendJson(res, 500, { error: message })
+        }
+      })
+    },
+  }
+}
+
+function companySkillsPlugin() {
+  return {
+    name: "company-skills-api",
+    configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/api/company-skills")) {
+          next()
+          return
+        }
+
+        if (req.method !== "GET") {
+          sendJson(res, 405, { error: "Method not allowed" })
+          return
+        }
+
+        try {
+          const url = new URL(req.url, "http://localhost")
+          const catalog = await getCompanySkillsCatalog({ refresh: url.searchParams.get("refresh") === "1" })
+          sendJson(res, 200, catalog)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Company skills request failed"
+          console.error("[company-skills]", message)
           sendJson(res, 500, { error: message })
         }
       })
@@ -1344,7 +1375,7 @@ Use the dashboard context below to give specific, data-driven answers. Never inv
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin(), mondayPlugin(), aiPlugin()],
+  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin(), companySkillsPlugin(), mondayPlugin(), aiPlugin()],
   server: {},
   build: {
     rollupOptions: {

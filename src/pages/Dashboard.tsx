@@ -10,6 +10,8 @@ import {
   Clock,
   Loader2,
   RefreshCw,
+  Layers3,
+  Sparkles,
   TrendingUp,
 } from "lucide-react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
@@ -129,6 +131,13 @@ function useSlider() {
 
 const sliderArrowClass =
   "flex h-7 w-7 items-center justify-center rounded-full border border-stroke bg-white text-body transition hover:bg-gray-2 disabled:opacity-30 dark:border-strokedark dark:bg-boxdark dark:text-bodydark"
+
+const guidelineLinks = [
+  { title: "Prompt Library", subtitle: "Reusable AI prompts", icon: Sparkles, color: "blue" },
+  { title: "Company Skills", subtitle: "Repo inventory", icon: Layers3, color: "green" },
+  { title: "Guidelines", subtitle: "Team playbook", icon: BookOpen, color: "amber" },
+  { title: "Skill Capture", subtitle: "Approval and error logs", icon: CheckSquare, color: "slate" },
+] as const
 
 export function Dashboard() {
   const [today] = useState(() => new Date())
@@ -346,27 +355,27 @@ export function Dashboard() {
         >
           <div className="mb-3">
             <h2 className="text-base font-semibold text-black dark:text-[#E2E5E9]">Guidelines</h2>
-            <p className="mt-0.5 text-xs text-body dark:text-bodydark">Frequently visited</p>
+            <p className="mt-0.5 text-xs text-body dark:text-bodydark">Prompts, skills and team playbook</p>
           </div>
           <div className="flex gap-3 overflow-x-auto no-scrollbar">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="flex-none rounded-xl border border-dashed border-stroke bg-white/60 p-4 dark:border-strokedark dark:bg-boxdark/60 opacity-50"
+            {guidelineLinks.map(({ title, subtitle, icon: Icon, color }) => {
+              const c = colorMap[color]
+              return (
+              <Link
+                key={title}
+                to="/guidelines"
+                className="flex-none rounded-xl border border-stroke bg-white p-4 transition-shadow hover:shadow-md dark:border-strokedark dark:bg-boxdark"
                 style={{ width: "calc(25% - 9px)", minWidth: 160 }}
               >
-                <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
-                  <BookOpen className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                <div className={`mb-3 flex h-8 w-8 items-center justify-center rounded-lg ${c.bg}`}>
+                  <Icon className={`h-4 w-4 ${c.text}`} />
                 </div>
-                <div className="h-2.5 w-3/4 rounded-full bg-slate-200 dark:bg-slate-700 mb-2" />
-                <div className="h-2 w-1/2 rounded-full bg-slate-100 dark:bg-slate-700/60" />
-              </div>
-            ))}
+                <p className="text-sm font-semibold text-black dark:text-[#E2E5E9]">{title}</p>
+                <p className="mt-1 text-xs text-body dark:text-bodydark">{subtitle}</p>
+              </Link>
+              )
+            })}
           </div>
-          <p className="mt-2 flex items-center gap-1.5 text-[11px] text-body dark:text-bodydark">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-            Integration in progress — guidelines will appear here once connected
-          </p>
         </motion.div>
 
         {/* ── Task Performance ────────────────────────────────────────────── */}

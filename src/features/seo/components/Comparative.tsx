@@ -659,7 +659,7 @@ export function Comparative({ selectedGscSite }: ComparativeProps) {
                       No findings found for the selected baseline.
                     </p>
                     <p className="mt-1 text-xs text-body dark:text-bodydark opacity-60">
-                      Go to the Initial Status tab and save your first finding.
+                      Go to Initial Analysis and save your first finding.
                     </p>
                   </td>
                 </tr>

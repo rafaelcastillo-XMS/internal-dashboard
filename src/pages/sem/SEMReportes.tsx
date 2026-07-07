@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, Fragment } from 'react'
+import { Download, Mail } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { edgeFetch } from '@/lib/edgeFetch'
-import { generateWeeklyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
-import type { PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
+import { generateMonthlyBudgetPdf, generateWeeklyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
+import type { PdfMonthlyRow, PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -286,6 +287,8 @@ function MonthlyReport({ accounts, accentColor = '#16a34a' }: { accounts: AdsAcc
   const [ggBudget, setGgBudget]   = useState<Record<string, number>>({})
   const [cells, setCells]         = useState<Record<string, MonthlyCell>>({})
   const [loading, setLoading]     = useState(true)
+  const [exporting, setExporting] = useState(false)
+  const [emailPayload, setEmailPayload] = useState<EmailReportPayload | null>(null)
 
   // Budgets are set per account in the client integration cards (not month-scoped)
   useEffect(() => {
@@ -367,25 +370,66 @@ function MonthlyReport({ accounts, accentColor = '#16a34a' }: { accounts: AdsAcc
     })
     .filter(g => g.items.length > 0)
 
+  const monthLabel = `${MONTH_NAMES[month]} ${year}`
+  const buildMonthlyRows = (): PdfMonthlyRow[] =>
+    groups.flatMap(({ acct, items }) => items.map(it => {
+      const cell = cells[`${acct.id}:${it.platform}`]
+      return {
+        status: acct.status,
+        accountName: acct.name,
+        accountId: fmtAccountId(acct.id),
+        platform: it.platform,
+        budget: it.budget,
+        spend: it.spend,
+        refunded: cell?.refunded ?? 0,
+        paidWith: cell?.paid_with ?? '',
+      }
+    }))
+
+  async function handleExportMonthly() {
+    setExporting(true)
+    try { await generateMonthlyBudgetPdf({ monthLabel, rows: buildMonthlyRows() }) }
+    finally { setExporting(false) }
+  }
+
   const selectCls = 'h-7 rounded-lg border border-stroke bg-white px-2 text-xs font-medium text-black outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]'
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <select value={month} onChange={e => setMonth(Number(e.target.value))}
-          className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-          {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
-        </select>
-        <select value={year} onChange={e => setYear(Number(e.target.value))}
-          className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-          {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
-        {loading && (
-          <svg className="h-4 w-4 animate-spin" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-        )}
+      <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={month} onChange={e => setMonth(Number(e.target.value))}
+            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+          </select>
+          <select value={year} onChange={e => setYear(Number(e.target.value))}
+            className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          {loading && (
+            <svg className="h-4 w-4 animate-spin" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setEmailPayload({ kind: 'monthly', monthLabel, rows: buildMonthlyRows() })}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            <Mail className="h-4 w-4" />
+            Send by Email
+          </button>
+          <button onClick={handleExportMonthly} disabled={exporting}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            <Download className="h-4 w-4" />
+            {exporting ? 'Exporting…' : 'Export PDF'}
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
@@ -700,11 +744,18 @@ function GuaranteeAnalyticsCards({ accounts }: { accounts: AdsAccount[] }) {
 
 // ─── Send Email Modal ─────────────────────────────────────────────────────────
 
-interface EmailReportPayload {
-  dateLabel: string
-  adsRows: PdfWeeklyRow[]
-  guaranteeRows: PdfWeeklyRow[]
-}
+type EmailReportPayload =
+  | {
+      kind: 'weekly'
+      dateLabel: string
+      adsRows: PdfWeeklyRow[]
+      guaranteeRows: PdfWeeklyRow[]
+    }
+  | {
+      kind: 'monthly'
+      monthLabel: string
+      rows: PdfMonthlyRow[]
+    }
 
 function buildWeeklyText(dateLabel: string, adsRows: PdfWeeklyRow[], guaranteeRows: PdfWeeklyRow[]): string {
   const lines: string[] = []
@@ -739,6 +790,38 @@ function buildWeeklyText(dateLabel: string, adsRows: PdfWeeklyRow[], guaranteeRo
   return lines.join('\n')
 }
 
+function buildMonthlyText(monthLabel: string, rows: PdfMonthlyRow[]): string {
+  const lines: string[] = []
+  const fmt = (n: number) => n > 0 ? fmtCurrency(n) : '—'
+
+  lines.push(`Monthly Budget Report — ${monthLabel}`)
+  lines.push('')
+  lines.push('Client | ID | Platform | Budget | Spend | Remaining | Credits Refunded | Paid With')
+  lines.push('-'.repeat(110))
+
+  rows.forEach(r => {
+    const remaining = r.budget > 0 ? r.budget - r.spend : 0
+    lines.push([
+      r.accountName,
+      r.accountId ?? '—',
+      r.platform ?? '—',
+      fmt(r.budget),
+      fmt(r.spend),
+      r.budget > 0 ? fmtCurrency(remaining) : '—',
+      fmt(r.refunded ?? 0),
+      r.paidWith || '—',
+    ].join(' | '))
+  })
+
+  const totalBudget = rows.reduce((s, r) => s + r.budget, 0)
+  const totalSpend = rows.reduce((s, r) => s + r.spend, 0)
+  const totalRefunded = rows.reduce((s, r) => s + (r.refunded ?? 0), 0)
+  lines.push('')
+  lines.push(`Totals | Budget: ${fmt(totalBudget)} | Spend: ${fmt(totalSpend)} | Remaining: ${totalBudget > 0 ? fmtCurrency(totalBudget - totalSpend) : '—'} | Credits Refunded: ${fmt(totalRefunded)}`)
+
+  return lines.join('\n')
+}
+
 function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | null; onClose: () => void }) {
   const [email, setEmail]         = useState('')
   const [scheduled, setScheduled] = useState('')
@@ -749,13 +832,16 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
 
   if (!payload) return null
 
-  const reportText = buildWeeklyText(payload.dateLabel, payload.adsRows, payload.guaranteeRows)
-  const label = payload.dateLabel
+  const reportText = payload.kind === 'monthly'
+    ? buildMonthlyText(payload.monthLabel, payload.rows)
+    : buildWeeklyText(payload.dateLabel, payload.adsRows, payload.guaranteeRows)
+  const label = payload.kind === 'monthly' ? payload.monthLabel : payload.dateLabel
+  const subjectPrefix = payload.kind === 'monthly' ? 'Monthly Budget Report' : 'Budget Report'
 
   const handleSend = () => {
     const subject = scheduled
-      ? `Budget Report — ${label} (scheduled ${new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`
-      : `Budget Report — ${label}`
+      ? `${subjectPrefix} — ${label} (scheduled ${new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`
+      : `${subjectPrefix} — ${label}`
     const body = [reportText, note ? `\n\nNote:\n${note}` : ''].join('')
     window.open(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`)
     setSent(true)
@@ -921,7 +1007,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setEmailPayload({ dateLabel, adsRows: buildRows(), guaranteeRows: [] })}
+          <button onClick={() => setEmailPayload({ kind: 'weekly', dateLabel, adsRows: buildRows(), guaranteeRows: [] })}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
                        transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
                        dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
@@ -1292,7 +1378,7 @@ export function SEMReportes() {
     <div className="mx-auto max-w-screen-2xl p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">
-          Reports
+          Monthly Budget
           <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#16a34a]/20 text-[#16a34a] align-middle">
             SEM Intelligence
           </span>
