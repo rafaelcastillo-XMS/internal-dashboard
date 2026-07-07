@@ -39,6 +39,7 @@ ENV PATH="/app/venv/bin:$PATH"
 # App files
 COPY --from=builder /app/dist ./dist
 COPY server.js ./
+COPY server/ ./server/
 COPY tools/ ./tools/
 
 # credentials.json and token.json are bind-mounted at runtime (see docker-compose.yml)
