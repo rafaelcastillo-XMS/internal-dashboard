@@ -3,6 +3,7 @@ export type ReportStatus = 'Draft' | 'In Review' | 'Ready'
 export type SlideType =
   | 'cover'
   | 'strategy'
+  | 'custom'
   | 'google_ads_kpis'
   | 'keywords'
   | 'ads'

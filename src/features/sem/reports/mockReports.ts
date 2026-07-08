@@ -144,13 +144,6 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
             ],
           },
         ],
-        textBlocks: [
-          {
-            id: 'ads-analysis',
-            label: 'Ads Analysis',
-            value: 'Search ads with urgency and local trust messaging produced the best lead quality. Performance Max continues to support additional reach and should be monitored through lead quality feedback.',
-          },
-        ],
       },
     },
     {
@@ -177,6 +170,9 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
               { term: 'broken spring repair near me', impressions: '942', clicks: '58', cost: '$281.20', conversions: '6.0', action: 'Add as phrase keyword' },
               { term: 'garage door repair jobs', impressions: '320', clicks: '18', cost: '$76.10', conversions: '0', action: 'Add negative keyword' },
               { term: 'diy garage door opener repair', impressions: '284', clicks: '12', cost: '$44.85', conversions: '0', action: 'Exclude DIY intent' },
+              { term: 'emergency garage door repair', impressions: '248', clicks: '21', cost: '$118.90', conversions: '3.0', action: 'Keep monitored' },
+              { term: 'garage door opener installation', impressions: '221', clicks: '16', cost: '$92.44', conversions: '2.0', action: 'Review bid coverage' },
+              { term: 'commercial garage door repair', impressions: '176', clicks: '11', cost: '$66.32', conversions: '1.0', action: 'Segment if volume grows' },
             ],
           },
         ],
@@ -196,6 +192,12 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       order: 7,
       notes: 'Summarize timing and device patterns that should influence bids and staffing.',
       content: {
+        dataSource: {
+          source: 'mock',
+          connectionStatus: 'mock_not_connected',
+          integrationTarget: 'Existing SEM Google Ads integration: Supabase Edge Function /sem/breakdowns -> Google Ads segments.device, segments.day_of_week, segments.hour',
+          message: 'Real device, day, and hour data loads from Google Ads when the report is generated or opened.',
+        },
         charts: [
           {
             id: 'device-performance',

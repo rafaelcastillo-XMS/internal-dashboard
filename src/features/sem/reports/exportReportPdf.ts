@@ -434,7 +434,7 @@ function drawSlideBody(doc: jsPDF, slide: Slide, report: Report, assets: PdfAsse
   if (slide.content.charts?.length) y = drawCharts(doc, slide.content.charts, y)
   if (slide.content.tables?.length) {
     slide.content.tables.slice(0, 2).forEach((table) => {
-      y = drawTable(doc, table, y, slide.type === 'keywords' ? 7 : 8)
+      y = drawTable(doc, table, y, slide.type === 'keywords' || slide.type === 'search_terms' ? 7 : 8)
     })
   }
   if (slide.content.highlights?.length) {
@@ -446,8 +446,8 @@ function drawSlideBody(doc: jsPDF, slide: Slide, report: Report, assets: PdfAsse
     })
     y += 8
   }
-  if (slide.content.textBlocks?.length) {
-    y = slide.type === 'google_ads_kpis' || slide.type === 'keywords' || slide.type === 'ads' || slide.type === 'search_terms'
+  if (slide.type !== 'ads' && slide.content.textBlocks?.length) {
+    y = slide.type === 'google_ads_kpis' || slide.type === 'keywords' || slide.type === 'search_terms'
       ? drawGoogleAdsSummary(doc, slide.content.textBlocks, y)
       : drawTextBlocks(doc, slide.content.textBlocks, y)
   }

@@ -1,6 +1,6 @@
 import { edgeFetch } from '@/lib/edgeFetch'
 import { supabase } from '@/lib/supabase'
-import type { KpiMetric, Report, ReportDataSource, ReportTableColumn, ReportTableData, Slide } from './types'
+import type { ChartBlockData, KpiMetric, Report, ReportDataSource, ReportTableColumn, ReportTableData, Slide } from './types'
 import { normalizeReport } from './reportSlides'
 
 export type ReportDataConnectionStatus = 'mock_not_connected' | 'connected' | 'empty' | 'error'
@@ -86,6 +86,22 @@ interface GoogleAdsPerformanceResponse {
   error?: string
 }
 
+interface GoogleAdsBreakdownRow {
+  key?: string | number
+  label?: string
+  impressions?: number
+  clicks?: number
+  cost?: number
+  conversions?: number
+}
+
+interface GoogleAdsBreakdownsResponse {
+  devices?: GoogleAdsBreakdownRow[]
+  days?: GoogleAdsBreakdownRow[]
+  hours?: GoogleAdsBreakdownRow[]
+  error?: string
+}
+
 export interface GoogleAdsKpiReportData {
   kpis: KpiMetric[]
   summary: string
@@ -94,6 +110,12 @@ export interface GoogleAdsKpiReportData {
 
 export interface GoogleAdsKeywordReportData {
   table: ReportTableData
+  analysis: string
+  dataSource: ReportDataSource
+}
+
+export interface GoogleAdsBreakdownReportData {
+  charts: ChartBlockData[]
   analysis: string
   dataSource: ReportDataSource
 }
@@ -201,6 +223,22 @@ async function fetchGoogleAdsPerformance(
   return json
 }
 
+async function fetchGoogleAdsBreakdowns(
+  accountId: string,
+  dateRange: { start: string; end: string },
+): Promise<GoogleAdsBreakdownsResponse> {
+  const params = new URLSearchParams({
+    accountId,
+    startDate: dateRange.start,
+    endDate: dateRange.end,
+  })
+  const response = await edgeFetch(`${SEM_API}/breakdowns?${params}`)
+  const json = await response.json() as GoogleAdsBreakdownsResponse
+
+  if (!response.ok || json.error) throw new Error(json.error ?? `Google Ads API HTTP ${response.status}`)
+  return json
+}
+
 function createGoogleAdsKpiDataSource(
   connectionStatus: ReportDataSource['connectionStatus'],
   dateRange: { start: string; end: string },
@@ -214,6 +252,26 @@ function createGoogleAdsKpiDataSource(
     clientId,
     accountId,
     integrationTarget: 'Existing SEM Google Ads integration: Supabase Edge Function /sem/performance -> Google Ads campaign summary',
+    dateRange,
+    updatedAt: new Date().toISOString(),
+    message,
+  }
+}
+
+function createGoogleAdsBreakdownDataSource(
+  connectionStatus: ReportDataSource['connectionStatus'],
+  dateRange: { start: string; end: string },
+  message: string,
+  clientId: string,
+  accountId?: string,
+): ReportDataSource {
+  return {
+    source: 'google_ads_api',
+    connectionStatus,
+    clientId,
+    accountId,
+    rangeKey: 'monthly_google_ads_breakdowns',
+    integrationTarget: 'Existing SEM Google Ads integration: Supabase Edge Function /sem/breakdowns -> Google Ads segments.device, segments.day_of_week, segments.hour',
     dateRange,
     updatedAt: new Date().toISOString(),
     message,
@@ -482,6 +540,149 @@ export async function getGoogleAdsKeywordReportData(
   }
 }
 
+function breakdownMetric(row: GoogleAdsBreakdownRow) {
+  const conversions = safeNumber(row.conversions)
+  const clicks = safeNumber(row.clicks)
+  return conversions > 0 ? conversions : clicks
+}
+
+function formatShare(value: number, total: number) {
+  if (total <= 0) return '0%'
+  return `${Math.round((value / total) * 100)}%`
+}
+
+function breakdownDetail(row: GoogleAdsBreakdownRow) {
+  const conversions = safeNumber(row.conversions)
+  const cost = safeNumber(row.cost)
+  const clicks = safeNumber(row.clicks)
+  if (conversions > 0) return `${formatCurrency(cost / conversions)} CPL`
+  return `${formatNumber(clicks)} clicks`
+}
+
+function deviceLabel(value: unknown) {
+  const normalized = String(value ?? '').replace(/_/g, ' ').toLowerCase()
+  if (!normalized) return 'Unknown'
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
+
+const dayLabels: Record<string, string> = {
+  MONDAY: 'Mon',
+  TUESDAY: 'Tue',
+  WEDNESDAY: 'Wed',
+  THURSDAY: 'Thu',
+  FRIDAY: 'Fri',
+  SATURDAY: 'Sat',
+  SUNDAY: 'Sun',
+}
+
+const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']
+
+function buildShareChart(
+  id: string,
+  title: string,
+  description: string,
+  rows: GoogleAdsBreakdownRow[],
+  labelForRow: (row: GoogleAdsBreakdownRow) => string,
+): ChartBlockData {
+  const total = rows.reduce((sum, row) => sum + breakdownMetric(row), 0)
+
+  return {
+    id,
+    title,
+    description,
+    series: rows.map((row) => {
+      const metric = breakdownMetric(row)
+      return {
+        label: labelForRow(row),
+        value: total > 0 ? Math.round((metric / total) * 100) : 0,
+        displayValue: formatShare(metric, total),
+        detail: breakdownDetail(row),
+      }
+    }),
+  }
+}
+
+function buildHourRows(rows: GoogleAdsBreakdownRow[]) {
+  const buckets = [
+    { label: '12-8 AM', min: 0, max: 8, row: { key: '12-8 AM', clicks: 0, cost: 0, conversions: 0 } },
+    { label: '8-11 AM', min: 8, max: 11, row: { key: '8-11 AM', clicks: 0, cost: 0, conversions: 0 } },
+    { label: '11-2 PM', min: 11, max: 14, row: { key: '11-2 PM', clicks: 0, cost: 0, conversions: 0 } },
+    { label: '2-5 PM', min: 14, max: 17, row: { key: '2-5 PM', clicks: 0, cost: 0, conversions: 0 } },
+    { label: '5-8 PM', min: 17, max: 20, row: { key: '5-8 PM', clicks: 0, cost: 0, conversions: 0 } },
+    { label: 'After 8 PM', min: 20, max: 24, row: { key: 'After 8 PM', clicks: 0, cost: 0, conversions: 0 } },
+  ]
+
+  rows.forEach((sourceRow) => {
+    const hour = Number(sourceRow.key)
+    const bucket = buckets.find((item) => Number.isFinite(hour) && hour >= item.min && hour < item.max)
+    if (!bucket) return
+    bucket.row.clicks += safeNumber(sourceRow.clicks)
+    bucket.row.cost += safeNumber(sourceRow.cost)
+    bucket.row.conversions += safeNumber(sourceRow.conversions)
+  })
+
+  return buckets.map((bucket) => ({ ...bucket.row, label: bucket.label }))
+}
+
+function buildGoogleAdsBreakdownCharts(response: GoogleAdsBreakdownsResponse): ChartBlockData[] {
+  const devices = (response.devices ?? [])
+    .slice()
+    .sort((a, b) => breakdownMetric(b) - breakdownMetric(a))
+
+  const days = (response.days ?? [])
+    .slice()
+    .sort((a, b) => dayOrder.indexOf(String(a.key)) - dayOrder.indexOf(String(b.key)))
+
+  const hours = buildHourRows(response.hours ?? [])
+
+  return [
+    buildShareChart('device-performance', 'Device Performance', 'Lead share by device', devices, (row) => row.label ?? deviceLabel(row.key)),
+    buildShareChart('day-performance', 'Day of Week Performance', 'Lead share by day', days, (row) => dayLabels[String(row.key)] ?? row.label ?? String(row.key ?? 'Unknown')),
+    buildShareChart('hour-performance', 'Hour of Day Performance', 'Lead share by time window', hours, (row) => row.label ?? String(row.key ?? 'Unknown')),
+  ]
+}
+
+export async function getGoogleAdsBreakdownReportData(
+  clientId: string,
+  month: string,
+  year: number,
+): Promise<GoogleAdsBreakdownReportData> {
+  const dateRange = getMonthlyReportDateRange(month, year)
+  let accountId = ''
+
+  try {
+    accountId = await resolveGoogleAdsAccountId(clientId)
+    const json = await fetchGoogleAdsBreakdowns(accountId, dateRange)
+    const hasData = [...(json.devices ?? []), ...(json.days ?? []), ...(json.hours ?? [])]
+      .some((row) => breakdownMetric(row) > 0)
+    const dataSource = createGoogleAdsBreakdownDataSource(
+      hasData ? 'connected' : 'empty',
+      dateRange,
+      hasData
+        ? `Loaded real Google Ads device, day, and hour breakdowns from account ${accountId}.`
+        : `Google Ads returned no device, day, or hour activity for account ${accountId} in this month.`,
+      clientId,
+      accountId,
+    )
+
+    return {
+      dataSource,
+      charts: buildGoogleAdsBreakdownCharts(json),
+      analysis: hasData
+        ? `Real Google Ads breakdown data loaded for ${dateRange.start} through ${dateRange.end}. Shares use conversions when available and clicks as the fallback signal.`
+        : `No real Google Ads device, day, or hour data returned for ${dateRange.start} through ${dateRange.end}. Confirm the account had campaign activity and the Google Ads integration can access this customer.`,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to load real Google Ads breakdown data.'
+    const dataSource = createGoogleAdsBreakdownDataSource('error', dateRange, message, clientId, accountId || undefined)
+    return {
+      dataSource,
+      charts: buildGoogleAdsBreakdownCharts({ devices: [], days: [], hours: [] }),
+      analysis: `Unable to load real Google Ads device, day, and hour data for ${dateRange.start} through ${dateRange.end}: ${message}`,
+    }
+  }
+}
+
 function replaceKeywordSlide(slide: Slide, keywordData: GoogleAdsKeywordReportData): Slide {
   return {
     ...slide,
@@ -495,6 +696,25 @@ function replaceKeywordSlide(slide: Slide, keywordData: GoogleAdsKeywordReportDa
           id: 'keyword-analysis',
           label: 'Keyword Analysis',
           value: keywordData.analysis,
+        },
+      ],
+    },
+  }
+}
+
+function replaceGoogleAdsBreakdownSlide(slide: Slide, breakdownData: GoogleAdsBreakdownReportData): Slide {
+  return {
+    ...slide,
+    notes: breakdownData.dataSource.message ?? slide.notes,
+    content: {
+      ...slide.content,
+      dataSource: breakdownData.dataSource,
+      charts: breakdownData.charts,
+      textBlocks: [
+        {
+          id: 'device-day-hour-analysis',
+          label: 'Analysis',
+          value: breakdownData.analysis,
         },
       ],
     },
@@ -586,9 +806,43 @@ export async function hydrateReportWithRealGoogleAdsKeywords(report: Report): Pr
   }
 }
 
+export function reportNeedsGoogleAdsBreakdownHydration(report: Report): boolean {
+  const normalizedReport = normalizeReport(report)
+  const breakdownSlide = normalizedReport.slides.find((slide) => slide.type === 'devices_day_hour')
+  const expectedRange = getMonthlyReportDateRange(report.month, report.year)
+  const source = breakdownSlide?.content.dataSource
+  const charts = breakdownSlide?.content.charts ?? []
+
+  if (!source) return true
+  if (source.source !== 'google_ads_api' || source.rangeKey !== 'monthly_google_ads_breakdowns') return true
+  if (source.connectionStatus === 'error') {
+    const lastAttempt = source.updatedAt ? new Date(source.updatedAt).getTime() : 0
+    return Date.now() - lastAttempt > 5 * 60 * 1000
+  }
+  if (source.clientId !== report.clientId) return true
+  const expectedAccountId = report.clientId.replace(/-/g, '')
+  if (/^\d+$/.test(expectedAccountId) && source.accountId !== expectedAccountId) return true
+  if (!source.accountId) return true
+  if (!charts.length && source.connectionStatus === 'connected') return true
+  if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
+  return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
+}
+
+export async function hydrateReportWithRealGoogleAdsBreakdowns(report: Report): Promise<Report> {
+  const normalizedReport = normalizeReport(report)
+  const breakdownData = await getGoogleAdsBreakdownReportData(normalizedReport.clientId, normalizedReport.month, normalizedReport.year)
+  return {
+    ...normalizedReport,
+    slides: normalizedReport.slides.map((slide) => (
+      slide.type === 'devices_day_hour' ? replaceGoogleAdsBreakdownSlide(slide, breakdownData) : slide
+    )),
+  }
+}
+
 export async function hydrateReportWithRealGoogleAdsData(report: Report): Promise<Report> {
   const withKpis = await hydrateReportWithRealGoogleAdsKpis(normalizeReport(report))
-  return hydrateReportWithRealGoogleAdsKeywords(withKpis)
+  const withKeywords = await hydrateReportWithRealGoogleAdsKeywords(withKpis)
+  return hydrateReportWithRealGoogleAdsBreakdowns(withKeywords)
 }
 
 // MOCK DATA LAYER: this is intentionally separate from Google Ads so the LSA API

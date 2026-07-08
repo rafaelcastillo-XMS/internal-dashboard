@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react'
 import {
+  ArrowDown,
   ArrowDownRight,
   ArrowRight,
+  ArrowUp,
   ArrowUpRight,
   Download,
   Eye,
@@ -31,6 +33,8 @@ const coverTrustLogos = {
 }
 
 const googleAdsKpiOrder = ['impressions', 'clicks', 'cost', 'avg-cpc']
+const sevenRowTableSlides = new Set<Slide['type']>(['keywords', 'search_terms'])
+const slideFrameClass = 'mx-auto aspect-[1164/655] w-full max-w-[1164px] overflow-hidden rounded-lg'
 const googleAdsKpiStyles: Record<string, {
   card: string
   label: string
@@ -113,7 +117,7 @@ function AutoResizeSlideTitle({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       rows={1}
-      className="block w-full resize-none overflow-hidden bg-transparent text-3xl font-bold leading-tight text-[#003B8F] outline-none placeholder:text-[#003B8F]/50 max-md:text-2xl"
+      className="block w-full resize-none overflow-hidden bg-transparent text-2xl font-bold leading-tight text-[#003B8F] outline-none placeholder:text-[#003B8F]/50 max-md:text-xl"
     />
   )
 }
@@ -179,54 +183,95 @@ export function ReportSidebar({
   slides,
   activeSlideId,
   onSelect,
+  onAddSlide,
+  onMoveSlide,
 }: {
   slides: Slide[]
   activeSlideId: string
   onSelect: (id: string) => void
+  onAddSlide: () => void
+  onMoveSlide: (id: string, direction: -1 | 1) => void
 }) {
+  const orderedSlides = slides.slice().sort((a, b) => a.order - b.order)
+
   return (
-    <aside className="h-full border-r border-stroke bg-white dark:border-strokedark dark:bg-boxdark">
+    <aside className="flex h-full flex-col border-r border-stroke bg-white dark:border-strokedark dark:bg-boxdark">
       <div className="border-b border-stroke px-4 py-4 dark:border-strokedark">
         <div className="flex items-center gap-2">
           <Layers3 className="h-4 w-4 text-slate-500" />
           <h2 className="text-sm font-bold text-black dark:text-[#E2E5E9]">Slides</h2>
         </div>
       </div>
-      <div className="h-[calc(100%-57px)] overflow-y-auto px-3 py-3 custom-scrollbar">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 custom-scrollbar">
         <ul className="space-y-1.5">
-          {slides
-            .slice()
-            .sort((a, b) => a.order - b.order)
-            .map((slide) => {
+          {orderedSlides
+            .map((slide, index) => {
               const active = activeSlideId === slide.id
               return (
                 <li key={slide.id}>
-                  <button
-                    onClick={() => onSelect(slide.id)}
-                    className={`flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition ${
+                  <div
+                    className={`group flex w-full items-stretch overflow-hidden rounded-md transition ${
                       active
                         ? 'bg-slate-800 text-white shadow-sm'
                         : 'text-[var(--sidebar-item-text)] hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
-                    <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold ${
-                      active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                    }`}>
-                      {slide.order}
-                    </span>
-                    <span className="min-w-0">
-                      <span className={`block truncate text-sm font-semibold ${active ? 'text-white' : 'text-black dark:text-[#E2E5E9]'}`}>
-                        {slide.title}
+                    <button
+                      onClick={() => onSelect(slide.id)}
+                      className="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 text-left"
+                    >
+                      <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold ${
+                        active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      }`}>
+                        {slide.order}
                       </span>
-                      <span className={`mt-0.5 block text-[11px] ${active ? 'text-white/75' : 'text-slate-500'}`}>
-                        {slide.type.replace(/_/g, ' ')}
+                      <span className="min-w-0">
+                        <span className={`block truncate text-sm font-semibold ${active ? 'text-white' : 'text-black dark:text-[#E2E5E9]'}`}>
+                          {slide.title}
+                        </span>
+                        <span className={`mt-0.5 block text-[11px] ${active ? 'text-white/75' : 'text-slate-500'}`}>
+                          {slide.type.replace(/_/g, ' ')}
+                        </span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
+                    <div className="flex shrink-0 flex-col justify-center gap-1 pr-2">
+                      <button
+                        onClick={() => onMoveSlide(slide.id, -1)}
+                        disabled={index === 0}
+                        aria-label="Move slide up"
+                        title="Move slide up"
+                        className={`flex h-6 w-6 items-center justify-center rounded-md transition ${
+                          active ? 'text-white/80 hover:bg-white/15 hover:text-white disabled:text-white/25' : 'text-slate-500 hover:bg-white hover:text-slate-900 disabled:text-slate-300'
+                        } disabled:cursor-not-allowed`}
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => onMoveSlide(slide.id, 1)}
+                        disabled={index === orderedSlides.length - 1}
+                        aria-label="Move slide down"
+                        title="Move slide down"
+                        className={`flex h-6 w-6 items-center justify-center rounded-md transition ${
+                          active ? 'text-white/80 hover:bg-white/15 hover:text-white disabled:text-white/25' : 'text-slate-500 hover:bg-white hover:text-slate-900 disabled:text-slate-300'
+                        } disabled:cursor-not-allowed`}
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </li>
               )
             })}
         </ul>
+      </div>
+      <div className="border-t border-stroke p-3 dark:border-strokedark">
+        <button
+          onClick={onAddSlide}
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-800 px-3 text-sm font-bold text-white transition hover:bg-slate-900"
+        >
+          <Plus className="h-4 w-4" />
+          Add slide
+        </button>
       </div>
     </aside>
   )
@@ -313,8 +358,8 @@ function GoogleAdsSummaryBlock({
     <textarea
       value={block.value}
       onChange={(event) => onChange(event.target.value)}
-      rows={4}
-      className="w-full resize-y bg-transparent px-0 py-1 text-sm leading-7 text-[#062A63] outline-none"
+      rows={3}
+      className="w-full resize-none bg-transparent px-0 py-1 text-[13px] leading-6 text-[#062A63] outline-none"
     />
   )
 }
@@ -329,8 +374,8 @@ export function EditableTextBlock({
   minRows?: number
 }) {
   return (
-    <div className="rounded-lg border border-[#D8E4F2] bg-white p-4 shadow-[0_10px_24px_rgba(0,59,143,0.06)]">
-      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-[#0057C2]">
+    <div className="rounded-lg border border-[#D8E4F2] bg-white p-3 shadow-[0_10px_24px_rgba(0,59,143,0.06)]">
+      <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-[#0057C2]">
         {block.label}
       </label>
       <textarea
@@ -356,15 +401,15 @@ export function ReportTable({
 
   return (
     <div className="overflow-hidden rounded-lg border border-[#D8E4F2] bg-white shadow-[0_10px_24px_rgba(0,59,143,0.06)]">
-      <div className="border-b border-[#D8E4F2] px-4 py-3">
-        <h3 className="font-semibold text-[#062A63]">{table.title}</h3>
+      <div className="border-b border-[#D8E4F2] px-3 py-2">
+        <h3 className="text-sm font-semibold text-[#062A63]">{table.title}</h3>
       </div>
       <div className="overflow-x-auto custom-scrollbar">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full min-w-[720px] text-xs">
           <thead>
-            <tr className="bg-[#EAF6FF] text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#003B8F]">
+            <tr className="bg-[#EAF6FF] text-left text-[10px] font-bold uppercase tracking-[0.08em] text-[#003B8F]">
               {table.columns.map((column) => (
-                <th key={column.key} className={`px-3 py-3 ${column.align === 'right' ? 'text-right' : ''}`}>
+                <th key={column.key} className={`px-2 py-2 ${column.align === 'right' ? 'text-right' : ''}`}>
                   {column.label}
                 </th>
               ))}
@@ -373,7 +418,7 @@ export function ReportTable({
           <tbody className="divide-y divide-[#D8E4F2]">
             {visibleRows.length === 0 && (
               <tr>
-                <td colSpan={table.columns.length} className="px-4 py-8 text-center text-sm font-medium text-slate-500">
+                <td colSpan={table.columns.length} className="px-4 py-6 text-center text-sm font-medium text-slate-500">
                   {table.dataSource?.message ?? 'No rows available for this report table.'}
                 </td>
               </tr>
@@ -381,11 +426,11 @@ export function ReportTable({
             {visibleRows.map((row, rowIndex) => (
               <tr key={rowIndex} className="hover:bg-[#F7FBFF]">
                 {table.columns.map((column) => (
-                  <td key={column.key} className="px-2 py-2 align-top">
+                  <td key={column.key} className="px-1.5 py-1 align-top">
                     <input
                       value={row[column.key] ?? ''}
                       onChange={(event) => onCellChange(rowIndex, column.key, event.target.value)}
-                      className={`w-full rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-[#062A63] outline-none transition focus:border-[#0057C2] focus:bg-white ${
+                      className={`w-full rounded-md border border-transparent bg-transparent px-1.5 py-1 text-xs text-[#062A63] outline-none transition focus:border-[#0057C2] focus:bg-white ${
                         column.align === 'right' ? 'text-right tabular-nums' : ''
                       }`}
                     />
@@ -589,7 +634,7 @@ export function ReportSlide({
   if (slide.type === 'cover') {
     return (
       <section
-        className="relative mx-auto min-h-[680px] w-full max-w-5xl overflow-hidden rounded-lg border border-[#0B67D1] text-white shadow-[0_24px_60px_rgba(0,59,143,0.25)]"
+        className={`relative ${slideFrameClass} border border-[#0B67D1] text-white shadow-[0_24px_60px_rgba(0,59,143,0.25)]`}
         style={{
           background:
             `linear-gradient(135deg, ${reportTheme.darkBlue} 0%, ${reportTheme.primaryBlue} 48%, ${reportTheme.lightBlue} 100%)`,
@@ -604,8 +649,8 @@ export function ReportSlide({
           }}
         />
 
-        <div className="relative z-10 grid min-h-[680px] grid-cols-[minmax(0,1fr)_310px] max-lg:grid-cols-[minmax(0,1fr)_270px] max-md:grid-cols-1">
-          <div className="flex min-w-0 flex-col justify-between p-10 max-md:min-h-[460px] max-md:p-7">
+        <div className="relative z-10 grid h-full grid-cols-[minmax(0,1fr)_310px] max-lg:grid-cols-[minmax(0,1fr)_270px] max-md:grid-cols-1">
+          <div className="flex min-w-0 flex-col justify-between p-10 max-md:p-7">
             <header className="flex items-start justify-between gap-6">
               <div className="flex min-w-0 items-center gap-3">
                 {report.clientLogo ? (
@@ -641,7 +686,7 @@ export function ReportSlide({
             <div className="h-12" />
           </div>
 
-          <aside className="flex min-h-[680px] flex-col bg-white px-4 py-10 text-[#062A63] shadow-[-18px_0_45px_rgba(0,36,90,0.16)] max-md:min-h-0 max-md:px-6 max-md:py-7">
+          <aside className="flex h-full flex-col bg-white px-4 py-10 text-[#062A63] shadow-[-18px_0_45px_rgba(0,36,90,0.16)] max-md:px-6 max-md:py-7">
             <div className="flex justify-center">
               <XMSLogo mode="light" height={76} className="max-w-[260px]" />
             </div>
@@ -667,7 +712,7 @@ export function ReportSlide({
   if (slide.type === 'thank_you') {
     return (
       <section
-        className="relative mx-auto flex min-h-[680px] w-full max-w-5xl items-center justify-center overflow-hidden rounded-lg border border-[#0B67D1] p-10 text-center text-white shadow-[0_24px_60px_rgba(0,59,143,0.22)]"
+        className={`relative flex ${slideFrameClass} items-center justify-center border border-[#0B67D1] p-10 text-center text-white shadow-[0_24px_60px_rgba(0,59,143,0.22)]`}
         style={{
           background:
             `linear-gradient(135deg, ${reportTheme.darkBlue} 0%, ${reportTheme.primaryBlue} 58%, ${reportTheme.lightBlue} 100%)`,
@@ -696,10 +741,10 @@ export function ReportSlide({
 
   if (slide.type === 'google_ads_kpis') {
     return (
-      <section className="mx-auto min-h-[680px] w-full max-w-5xl overflow-hidden rounded-lg border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]">
-        <div className="h-3 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
-        <div className="flex min-h-[677px] flex-col p-6">
-          <div className="mb-6 border-b border-[#D8E4F2] pb-5">
+      <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
+        <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
+        <div className="flex min-h-0 flex-1 flex-col p-5">
+          <div className="mb-5 border-b border-[#D8E4F2] pb-4">
             <div className="min-w-0">
               <AutoResizeSlideTitle
                 value={slide.title}
@@ -715,7 +760,7 @@ export function ReportSlide({
               ))}
             </div>
 
-            <div className="mt-10 flex flex-1 items-end border-t border-[#D8E4F2] pt-6">
+            <div className="mt-8 flex flex-1 items-end border-t border-[#D8E4F2] pt-5">
               <div className="w-full">
                 {slide.content.textBlocks?.map((block) => (
                   <GoogleAdsSummaryBlock key={block.id} block={block} onChange={(value) => updateTextBlock('textBlocks', block.id, value)} />
@@ -729,10 +774,10 @@ export function ReportSlide({
   }
 
   return (
-    <section className="mx-auto min-h-[680px] w-full max-w-5xl overflow-hidden rounded-lg border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]">
-      <div className="h-3 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
-      <div className="p-6">
-      <div className="mb-6 border-b border-[#D8E4F2] pb-5">
+    <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
+      <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
+      <div className="min-h-0 flex-1 p-5">
+      <div className="mb-4 border-b border-[#D8E4F2] pb-3">
         <div className="min-w-0">
           <AutoResizeSlideTitle
             value={slide.title}
@@ -741,9 +786,9 @@ export function ReportSlide({
         </div>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-4">
         {slide.content.kpis?.length ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {slide.content.kpis.map((metric) => (
               <KpiCard key={metric.id} metric={metric} onChange={(patch) => updateKpi(metric.id, patch)} />
             ))}
@@ -751,7 +796,7 @@ export function ReportSlide({
         ) : null}
 
         {slide.content.ads?.length ? (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {slide.content.ads.slice(0, 2).map((ad) => (
               <AdCard
                 key={ad.id}
@@ -766,13 +811,13 @@ export function ReportSlide({
           <ReportTable
             key={table.id}
             table={table}
-            maxRows={slide.type === 'keywords' ? 7 : undefined}
+            maxRows={sevenRowTableSlides.has(slide.type) ? 7 : undefined}
             onCellChange={(rowIndex, key, value) => updateTableCell(table.id, rowIndex, key, value)}
           />
         ))}
 
         {slide.content.charts?.length ? (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
             {slide.content.charts.map((chart) => (
               <ChartBlock key={chart.id} chart={chart} />
             ))}
@@ -809,7 +854,7 @@ export function ReportSlide({
           </div>
         ) : null}
 
-        {slide.content.textBlocks?.map((block) => (
+        {slide.type !== 'ads' && slide.content.textBlocks?.map((block) => (
           slide.type === 'keywords' || slide.type === 'ads' || slide.type === 'search_terms' ? (
             <GoogleAdsSummaryBlock key={block.id} block={block} onChange={(value) => updateTextBlock('textBlocks', block.id, value)} />
           ) : (

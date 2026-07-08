@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Clock3, FileText, FolderOpen, Plus, Save, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, FileText, FolderOpen, Plus, X } from 'lucide-react'
 import { useSEMDashboardState } from '@/features/sem/hooks/useSEMDashboardState'
 import {
   REPORT_MONTHS,
@@ -12,6 +12,7 @@ import { readStoredReports, upsertStoredReport, writeStoredReports } from '@/fea
 import { exportReportToPdf } from '@/features/sem/reports/exportReportPdf'
 import {
   hydrateReportWithRealGoogleAdsData,
+  reportNeedsGoogleAdsBreakdownHydration,
   reportNeedsGoogleAdsKeywordHydration,
   reportNeedsGoogleAdsKpiHydration,
 } from '@/features/sem/reports/reportData'
@@ -260,7 +261,7 @@ function ReportsListPage({
 function PreviewModal({ report, onClose }: { report: Report; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[120] bg-black/50 p-4 backdrop-blur-sm">
-      <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-boxdark">
+      <div className="mx-auto flex h-full max-w-[1220px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-boxdark">
         <div className="flex items-center justify-between gap-4 border-b border-stroke px-5 py-4 dark:border-strokedark">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Report Preview</p>
@@ -271,14 +272,14 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
           </button>
         </div>
         <div className="flex-1 overflow-y-auto bg-slate-100 p-5 custom-scrollbar dark:bg-boxdark-2">
-          <div className="space-y-5">
+          <div className="space-y-4">
             {report.slides
               .slice()
               .sort((a, b) => a.order - b.order)
               .map((slide) => (
-                <article key={slide.id} className="min-h-[680px] overflow-hidden rounded-lg border border-[#D8E4F2] bg-white shadow-[0_16px_40px_rgba(0,59,143,0.10)]">
+                <article key={slide.id} className="mx-auto aspect-[1164/655] w-full max-w-[1164px] overflow-hidden rounded-lg border border-[#D8E4F2] bg-white shadow-[0_16px_40px_rgba(0,59,143,0.10)]">
                   <div className="h-2 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
-                  <div className="p-6">
+                  <div className="p-5">
                   <div className="mb-4 flex items-start justify-between gap-4">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#0057C2]">Slide {slide.order}</p>
@@ -312,7 +313,7 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
                           <tr>{table.columns.map((column) => <th key={column.key} className="px-3 py-2 text-left">{column.label}</th>)}</tr>
                         </thead>
                         <tbody className="divide-y divide-[#D8E4F2]">
-                          {table.rows.slice(0, slide.type === 'keywords' ? 7 : table.rows.length).map((row, index) => (
+                          {table.rows.slice(0, slide.type === 'keywords' || slide.type === 'search_terms' ? 7 : table.rows.length).map((row, index) => (
                             <tr key={index}>
                               {table.columns.map((column) => <td key={column.key} className="px-3 py-2 text-slate-600">{row[column.key]}</td>)}
                             </tr>
@@ -351,7 +352,7 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
                       ))}
                     </ul>
                   ) : null}
-                  {[...(slide.content.textBlocks ?? []), ...(slide.content.noteBlocks ?? [])].map((block) => (
+                  {[...(slide.type === 'ads' ? [] : slide.content.textBlocks ?? []), ...(slide.content.noteBlocks ?? [])].map((block) => (
                     <div key={block.id} className="mt-4 rounded-lg border border-[#D8E4F2] bg-[#F7FBFF] p-4">
                       {slide.type === 'ads' || slide.type === 'search_terms' || slide.type === 'keywords' ? null : (
                         <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#0057C2]">{block.label}</p>
@@ -370,6 +371,37 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
       </div>
     </div>
   )
+}
+
+function renumberSlides(slides: Slide[]) {
+  return slides
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((slide, index) => ({ ...slide, order: index + 1 }))
+}
+
+function assignSlideOrder(slides: Slide[]) {
+  return slides.map((slide, index) => ({ ...slide, order: index + 1 }))
+}
+
+function createCustomSlide(order: number): Slide {
+  const id = `custom-slide-${Date.now()}`
+  return {
+    id,
+    type: 'custom',
+    title: 'New Slide',
+    order,
+    notes: '',
+    content: {
+      textBlocks: [
+        {
+          id: `${id}-content`,
+          label: 'Content',
+          value: 'Write slide content here.',
+        },
+      ],
+    },
+  }
 }
 
 function ReportEditorView({
@@ -396,7 +428,8 @@ function ReportEditorView({
   useEffect(() => {
     const needsKpis = reportNeedsGoogleAdsKpiHydration(sourceReport)
     const needsKeywords = reportNeedsGoogleAdsKeywordHydration(sourceReport)
-    if (!needsKpis && !needsKeywords) return
+    const needsBreakdowns = reportNeedsGoogleAdsBreakdownHydration(sourceReport)
+    if (!needsKpis && !needsKeywords && !needsBreakdowns) return
     let cancelled = false
 
     setGoogleAdsDataLoading(true)
@@ -420,11 +453,6 @@ function ReportEditorView({
   const sortedSlides = useMemo(() => draft.slides.slice().sort((a, b) => a.order - b.order), [draft.slides])
   const activeSlide = sortedSlides.find((slide) => slide.id === activeSlideId) ?? sortedSlides[0]
 
-  const updateDraft = (patch: Partial<Report>) => {
-    setDraft((current) => ({ ...current, ...patch }))
-    setDirty(true)
-  }
-
   const updateSlide = (slide: Slide) => {
     setDraft((current) => ({
       ...current,
@@ -433,16 +461,42 @@ function ReportEditorView({
     setDirty(true)
   }
 
-  const updateActiveSlide = (patch: Partial<Slide>) => {
-    if (!activeSlide) return
-    updateSlide({ ...activeSlide, ...patch })
-  }
-
   const saveReport = () => {
     const saved = { ...draft, updatedAt: new Date().toISOString() }
     setDraft(saved)
     onPersist(saved)
     setDirty(false)
+  }
+
+  const addSlide = () => {
+    const orderedSlides = renumberSlides(draft.slides)
+    const slide = createCustomSlide(orderedSlides.length + 1)
+    setDraft((current) => ({
+      ...current,
+      slides: [...renumberSlides(current.slides), slide],
+    }))
+    setActiveSlideId(slide.id)
+    setDirty(true)
+  }
+
+  const moveSlide = (slideId: string, direction: -1 | 1) => {
+    setDraft((current) => {
+      const orderedSlides = renumberSlides(current.slides)
+      const currentIndex = orderedSlides.findIndex((slide) => slide.id === slideId)
+      const targetIndex = currentIndex + direction
+      if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedSlides.length) return current
+
+      const nextSlides = orderedSlides.slice()
+      const currentSlide = nextSlides[currentIndex]
+      nextSlides[currentIndex] = nextSlides[targetIndex]
+      nextSlides[targetIndex] = currentSlide
+      return {
+        ...current,
+        slides: assignSlideOrder(nextSlides),
+      }
+    })
+    setActiveSlideId(slideId)
+    setDirty(true)
   }
 
   if (!activeSlide) {
@@ -469,11 +523,17 @@ function ReportEditorView({
         onPreview={() => setPreviewOpen(true)}
         onExportPdf={() => exportReportToPdf(draft)}
       />
-      <div className="grid min-h-[calc(100vh-122px)] grid-cols-[260px_minmax(0,1fr)_320px] max-2xl:grid-cols-[240px_minmax(0,1fr)_300px] max-xl:grid-cols-1">
+      <div className="grid min-h-[calc(100vh-122px)] grid-cols-[280px_minmax(0,1fr)] max-xl:grid-cols-1">
         <div className="max-xl:hidden">
-          <ReportSidebar slides={sortedSlides} activeSlideId={activeSlide.id} onSelect={setActiveSlideId} />
+          <ReportSidebar
+            slides={sortedSlides}
+            activeSlideId={activeSlide.id}
+            onSelect={setActiveSlideId}
+            onAddSlide={addSlide}
+            onMoveSlide={moveSlide}
+          />
         </div>
-        <main className="min-w-0 p-6">
+        <main className="flex min-w-0 flex-col items-center p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 xl:hidden">
             <select
               value={activeSlide.id}
@@ -484,79 +544,39 @@ function ReportEditorView({
                 <option key={slide.id} value={slide.id}>Slide {slide.order} - {slide.title}</option>
               ))}
             </select>
-          </div>
-          <ReportSlide report={draft} slide={activeSlide} onChange={updateSlide} />
-        </main>
-        <aside className="border-l border-stroke bg-white p-5 max-xl:border-l-0 max-xl:border-t dark:border-strokedark dark:bg-boxdark">
-          <div className="space-y-5">
-            {googleAdsDataLoading && (
-              <div className="rounded-lg border border-stroke bg-slate-50 p-4 text-sm font-semibold text-slate-700 dark:border-strokedark dark:bg-slate-800 dark:text-slate-200">
-                Loading real Google Ads report data...
-              </div>
-            )}
-            <div className="rounded-lg border border-stroke p-4 dark:border-strokedark">
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Report Settings</p>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Status</span>
-                <select
-                  value={draft.status}
-                  onChange={(event) => updateDraft({ status: event.target.value as ReportStatus })}
-                  className="h-10 w-full rounded-md border border-stroke bg-white px-3 text-sm font-semibold text-black outline-none focus:border-slate-500 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
-                >
-                  <option value="Draft">Draft</option>
-                  <option value="In Review">In Review</option>
-                  <option value="Ready">Ready</option>
-                </select>
-              </label>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-md bg-slate-50 p-3 dark:bg-slate-800">
-                  <p className="text-xs text-slate-500">Month</p>
-                  <p className="mt-1 font-bold text-black dark:text-[#E2E5E9]">{draft.month}</p>
-                </div>
-                <div className="rounded-md bg-slate-50 p-3 dark:bg-slate-800">
-                  <p className="text-xs text-slate-500">Year</p>
-                  <p className="mt-1 font-bold text-black dark:text-[#E2E5E9]">{draft.year}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-stroke p-4 dark:border-strokedark">
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Current Slide</p>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Title</span>
-                <input
-                  value={activeSlide.title}
-                  onChange={(event) => updateActiveSlide({ title: event.target.value })}
-                  className="h-10 w-full rounded-md border border-stroke bg-white px-3 text-sm font-semibold text-black outline-none focus:border-slate-500 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
-                />
-              </label>
-              <label className="mt-4 block">
-                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Notes</span>
-                <textarea
-                  value={activeSlide.notes}
-                  onChange={(event) => updateActiveSlide({ notes: event.target.value })}
-                  rows={7}
-                  className="w-full resize-y rounded-md border border-stroke bg-white px-3 py-2 text-sm leading-6 text-black outline-none focus:border-slate-500 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
-                />
-              </label>
+            <div className="flex items-center gap-2">
               <button
-                onClick={saveReport}
-                className="mt-4 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-slate-800 px-3 text-sm font-bold text-white transition hover:bg-slate-900"
+                onClick={() => moveSlide(activeSlide.id, -1)}
+                disabled={activeSlide.order === 1}
+                aria-label="Move slide up"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-stroke bg-white text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-strokedark dark:bg-boxdark dark:text-slate-200"
               >
-                <Save className="h-4 w-4" />
-                Save Current Slide
+                <ArrowUp className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => moveSlide(activeSlide.id, 1)}
+                disabled={activeSlide.order === sortedSlides.length}
+                aria-label="Move slide down"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-stroke bg-white text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-strokedark dark:bg-boxdark dark:text-slate-200"
+              >
+                <ArrowDown className="h-4 w-4" />
+              </button>
+              <button
+                onClick={addSlide}
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-800 px-3 text-sm font-bold text-white transition hover:bg-slate-900"
+              >
+                <Plus className="h-4 w-4" />
+                Add slide
               </button>
             </div>
-
-            <div className="rounded-lg border border-stroke p-4 dark:border-strokedark">
-              <div className="mb-3 flex items-center gap-2">
-                <Clock3 className="h-4 w-4 text-slate-500" />
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Last Updated</p>
-              </div>
-              <p className="text-sm font-semibold text-black dark:text-[#E2E5E9]">{formatUpdated(draft.updatedAt)}</p>
-            </div>
           </div>
-        </aside>
+          {googleAdsDataLoading && (
+            <div className="mx-auto mb-4 w-full max-w-[1164px] rounded-lg border border-stroke bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm dark:border-strokedark dark:bg-boxdark dark:text-slate-200">
+              Loading real Google Ads report data...
+            </div>
+          )}
+          <ReportSlide report={draft} slide={activeSlide} onChange={updateSlide} />
+        </main>
       </div>
       {previewOpen && <PreviewModal report={draft} onClose={() => setPreviewOpen(false)} />}
     </div>

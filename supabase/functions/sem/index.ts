@@ -208,6 +208,118 @@ async function fetchPerformance(token: string, params: URLSearchParams) {
   }
 }
 
+// ── /breakdowns ──────────────────────────────────────────────────────────────
+
+function mapBreakdownRow(row: any, key: string | number, label?: string) {
+  const m = row.metrics ?? {}
+  return {
+    key,
+    label,
+    impressions: Math.round(Number(m.impressions ?? 0)),
+    clicks: Math.round(Number(m.clicks ?? 0)),
+    cost: safeFloat(m.costMicros, MICROS),
+    conversions: safeFloat(m.conversions),
+  }
+}
+
+function aggregateBreakdownRows(rows: Array<{
+  key: string | number
+  label?: string
+  impressions: number
+  clicks: number
+  cost: number
+  conversions: number
+}>) {
+  const grouped = new Map<string, {
+    key: string | number
+    label?: string
+    impressions: number
+    clicks: number
+    cost: number
+    conversions: number
+  }>()
+
+  rows.forEach((row) => {
+    const mapKey = String(row.key)
+    const current = grouped.get(mapKey) ?? {
+      key: row.key,
+      label: row.label,
+      impressions: 0,
+      clicks: 0,
+      cost: 0,
+      conversions: 0,
+    }
+    current.impressions += row.impressions
+    current.clicks += row.clicks
+    current.cost = Math.round((current.cost + row.cost) * 100) / 100
+    current.conversions = Math.round((current.conversions + row.conversions) * 100) / 100
+    grouped.set(mapKey, current)
+  })
+
+  return Array.from(grouped.values())
+}
+
+async function fetchBreakdowns(token: string, params: URLSearchParams) {
+  const accountId = (params.get("accountId") ?? "").replace(/-/g, "")
+  const startDate = params.get("startDate") ?? ""
+  const endDate = params.get("endDate") ?? ""
+
+  if (!accountId || !startDate || !endDate) throw new Error("Missing required params: accountId, startDate, endDate")
+
+  const baseWhere = `
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+      AND campaign.status != 'REMOVED'
+  `
+
+  const deviceQuery = `
+    SELECT
+      segments.device,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM campaign
+    ${baseWhere}
+  `
+
+  const dayQuery = `
+    SELECT
+      segments.day_of_week,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM campaign
+    ${baseWhere}
+  `
+
+  const hourQuery = `
+    SELECT
+      segments.hour,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM campaign
+    ${baseWhere}
+  `
+
+  const [deviceData, dayData, hourData] = await Promise.all([
+    adsSearch(token, accountId, deviceQuery).catch(() => ({ results: [] })),
+    adsSearch(token, accountId, dayQuery).catch(() => ({ results: [] })),
+    adsSearch(token, accountId, hourQuery).catch(() => ({ results: [] })),
+  ])
+
+  // deno-lint-ignore no-explicit-any
+  const devices = aggregateBreakdownRows((deviceData.results ?? []).map((row: any) => mapBreakdownRow(row, row.segments?.device ?? "UNKNOWN")))
+  // deno-lint-ignore no-explicit-any
+  const days = aggregateBreakdownRows((dayData.results ?? []).map((row: any) => mapBreakdownRow(row, row.segments?.dayOfWeek ?? "UNKNOWN")))
+  // deno-lint-ignore no-explicit-any
+  const hours = aggregateBreakdownRows((hourData.results ?? []).map((row: any) => mapBreakdownRow(row, Number(row.segments?.hour ?? 0))))
+
+  return { devices, days, hours, dateRange: { start: startDate, end: endDate } }
+}
+
 // ── /search-terms ─────────────────────────────────────────────────────────────
 
 async function fetchSearchTerms(token: string, params: URLSearchParams) {
@@ -312,7 +424,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS })
 
   const url = new URL(req.url)
-  const segment = url.pathname.split("/").pop() // 'accounts', 'performance', 'search-terms'
+  const segment = url.pathname.split("/").pop() // 'accounts', 'performance', 'breakdowns', 'search-terms'
 
   try {
     const token = await getAccessToken()
@@ -324,6 +436,8 @@ serve(async (req) => {
       result = await syncAccounts(token)
     } else if (segment === "performance") {
       result = await fetchPerformance(token, url.searchParams)
+    } else if (segment === "breakdowns") {
+      result = await fetchBreakdowns(token, url.searchParams)
     } else if (segment === "search-terms") {
       result = await fetchSearchTerms(token, url.searchParams)
     } else {

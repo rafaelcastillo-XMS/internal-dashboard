@@ -54,7 +54,7 @@ const NAV_GROUPS = [
         ),
       },
       {
-        label: 'Reports',
+        label: 'Monthly Reports',
         href: '/sem/reports',
         icon: (
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
