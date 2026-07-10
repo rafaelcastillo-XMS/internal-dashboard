@@ -4,7 +4,7 @@ import DOMPurify from 'dompurify'
 import { supabase } from '../../lib/supabase'
 import { GBPReport } from '../../features/seo/components/GBPReport'
 import type { GBPReportHandle } from '../../features/seo/components/GBPReport'
-import { InitialStatus } from '../../features/seo/components/InitialStatus'
+import { InitialAnalysis } from '../../features/seo/components/InitialAnalysis'
 import { Comparative } from '../../features/seo/components/Comparative'
 import { useSEODashboardState } from '../../features/seo/hooks/useSEODashboardState'
 import { DashboardControls } from '../../features/seo/components/DashboardControls'
@@ -336,25 +336,9 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
   return (
     <div className="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10">
 
-      {/* Tab: Initial Status */}
+      {/* Tab: Initial Analysis */}
       {activeTab === 'initial-status' && (
-        <>
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1A72D9]/15 border border-[#1A72D9]/20">
-                <svg className="h-4 w-4 text-[#1A72D9]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round"
-                        d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
-                </svg>
-              </div>
-              <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Initial Status</h1>
-            </div>
-            <p className="text-sm text-body dark:text-bodydark ml-11">
-              Baseline SEO snapshot recorded at client onboarding
-            </p>
-          </div>
-          <InitialStatus />
-        </>
+        <InitialAnalysis clientName={seoState.clientName} domain={auditDomain} />
       )}
 
       {/* Tab: Comparative */}
