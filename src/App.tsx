@@ -25,6 +25,7 @@ const SEOLayout = lazy(() => import("./features/seo/layout/SEOLayout").then(modu
 const SEODashboard = lazy(() => import("./pages/seo/SEODashboard").then(module => ({ default: module.SEODashboard })))
 const SEOVisibility = lazy(() => import("./pages/seo/SEOVisibility").then(module => ({ default: module.SEOVisibility })))
 const SEOKeywords = lazy(() => import("./pages/seo/SEOKeywords").then(module => ({ default: module.SEOKeywords })))
+const SEORankings = lazy(() => import("./pages/seo/SEORankings").then(module => ({ default: module.SEORankings })))
 const SEOEngagement = lazy(() => import("./pages/seo/SEOEngagement").then(module => ({ default: module.SEOEngagement })))
 const SEOTraffic = lazy(() => import("./pages/seo/SEOTraffic").then(module => ({ default: module.SEOTraffic })))
 const SEOCoreWebVitals = lazy(() => import("./pages/seo/SEOCoreWebVitals").then(module => ({ default: module.SEOCoreWebVitals })))
@@ -125,6 +126,7 @@ function App() {
                                 <Route path="/seo" element={<SEODashboard />} />
                                 <Route path="/seo/visibility" element={<SEOVisibility />} />
                                 <Route path="/seo/keywords" element={<SEOKeywords />} />
+                                <Route path="/seo/rankings" element={<SEORankings />} />
                                 <Route path="/seo/engagement" element={<SEOEngagement />} />
                                 <Route path="/seo/traffic" element={<SEOTraffic />} />
                                 <Route path="/seo/cwv" element={<SEOCoreWebVitals />} />

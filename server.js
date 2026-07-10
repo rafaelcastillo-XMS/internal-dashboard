@@ -1,8 +1,16 @@
 import express from "express"
 import { fileURLToPath } from "url"
 import path from "path"
+import fs from "fs"
+import os from "os"
+import { execFile } from "child_process"
+import { promisify } from "util"
 import Anthropic from "@anthropic-ai/sdk"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
+import { getGbpReport } from "./server/gbpReport.js"
+import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
+
+const execFileAsync = promisify(execFile)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -593,6 +601,56 @@ app.get('/api/seo/ahrefs-snapshot', async (req, res) => {
     const message = err instanceof Error ? err.message : 'Ahrefs request failed'
     console.error('[seo/ahrefs]', message)
     res.status(500).json({ error: message })
+  }
+})
+
+// ── Google OAuth reconnect (status / start / callback) ───────────────────────
+registerGoogleAuthRoutes(app)
+registerGbpAuthRoutes(app)
+
+// ── SEO: Google Business Profile report ──────────────────────────────────────
+app.get('/api/seo/gbp', async (req, res) => {
+  try {
+    const data = await getGbpReport({
+      site: req.query.site,
+      ga4: req.query.ga4,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+    })
+    res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'GBP report failed'
+    console.error('[seo/gbp]', message)
+    res.status(500).json({ error: message })
+  }
+})
+
+// ── PDF export (ReportLab via tools/pdf_export.py) ───────────────────────────
+app.post('/api/export/pdf', async (req, res) => {
+  const { filename, payload } = req.body ?? {}
+  if (!payload) return res.status(400).json({ error: 'payload is required' })
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), '.pdf-export-'))
+  const inputPath = path.join(tmpDir, 'payload.json')
+  const outputPath = path.join(tmpDir, 'report.pdf')
+  try {
+    fs.writeFileSync(inputPath, JSON.stringify(payload))
+    await execFileAsync('python3', [path.join(__dirname, 'tools', 'pdf_export.py'), '--input', inputPath, '--output', outputPath], {
+      cwd: __dirname,
+      timeout: 60_000,
+    })
+    const pdfBuffer = fs.readFileSync(outputPath)
+    const safeFilename = String(filename ?? 'xms-report.pdf')
+      .replace(/["\r\n\\]/g, '').replace(/[^a-zA-Z0-9._\- ]/g, '_') || 'report.pdf'
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`)
+    res.end(pdfBuffer)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'PDF export error'
+    console.error('[pdf-export]', message)
+    res.status(500).json({ error: message })
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })
 

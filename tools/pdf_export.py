@@ -156,20 +156,49 @@ def build_styles():
 
 # ─── Header / Footer ────────────────────────────────────────────────────────────
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_LOGO_CANDIDATES = [
+    os.path.join(_HERE, "..", "public", "XMS LOGO - BLACK BACKGROUND.png"),
+    os.path.join(_HERE, "..", "dist", "XMS LOGO - BLACK BACKGROUND.png"),
+]
+LOGO_PATH = next((p for p in _LOGO_CANDIDATES if os.path.exists(p)), None)
+LOGO_ASPECT = 1314 / 370  # width / height of the logo image
+
+BANNER_H = 44
+
+
 def _draw_header_footer(canvas, doc, report_title: str):
     canvas.saveState()
     width, height = A4
 
-    # Top accent bar
+    # Blue banner with XMS logo
     canvas.setFillColor(BRAND_BLUE)
-    canvas.rect(0, height - 28, width, 28, fill=True, stroke=False)
+    canvas.rect(0, height - BANNER_H, width, BANNER_H, fill=True, stroke=False)
+    # Thin orange accent line under the banner
+    canvas.setFillColor(BRAND_ORANGE)
+    canvas.rect(0, height - BANNER_H - 2, width, 2, fill=True, stroke=False)
 
-    # Header: report title left, XMS Ai right
+    if LOGO_PATH:
+        logo_h = BANNER_H - 14
+        logo_w = logo_h * LOGO_ASPECT
+        canvas.drawImage(
+            LOGO_PATH,
+            0.5 * inch,
+            height - BANNER_H + 7,
+            width=logo_w,
+            height=logo_h,
+            mask="auto",
+            preserveAspectRatio=True,
+        )
+    else:
+        canvas.setFillColor(BRAND_WHITE)
+        canvas.setFont("Helvetica-Bold", 11)
+        canvas.drawString(0.5 * inch, height - BANNER_H / 2 - 4, "XMS Ai Platform")
+
+    # Report title, right-aligned in banner
     canvas.setFillColor(BRAND_WHITE)
     canvas.setFont("Helvetica-Bold", 9)
-    canvas.drawString(0.5 * inch, height - 18, report_title)
-    canvas.setFont("Helvetica", 9)
-    canvas.drawRightString(width - 0.5 * inch, height - 18, "XMS Ai Platform")
+    canvas.drawRightString(width - 0.5 * inch, height - BANNER_H / 2 - 3, report_title)
 
     # Footer separator
     canvas.setStrokeColor(BRAND_SLATE_200)

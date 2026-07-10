@@ -9,6 +9,7 @@ import react from '@vitejs/plugin-react'
 import Anthropic from "@anthropic-ai/sdk"
 import type { IncomingMessage, ServerResponse } from "http"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
+import { getGbpReport } from "./server/gbpReport.js"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
 
@@ -152,6 +153,7 @@ const GOOGLE_API_SCOPES = [
   "https://www.googleapis.com/auth/webmasters.readonly",
   "https://www.googleapis.com/auth/analytics.readonly",
   "https://www.googleapis.com/auth/adwords",
+  "https://www.googleapis.com/auth/business.manage",
 ]
 const GOOGLE_REDIRECT_URI = "http://localhost:5173/api/auth/google/callback"
 const GOOGLE_TOKEN_PATH = path.resolve(__dirname, "token.json")
@@ -499,6 +501,25 @@ function seoDevPlugin() {
           }
           auditResultStore.set(url, { html, receivedAt: Date.now() })
           sendJson(res, 200, { success: true })
+          return
+        }
+
+        // Google Business Profile report
+        if (req.url.startsWith("/api/seo/gbp") && req.method === "GET") {
+          const { searchParams: sp } = new URL(req.url, "http://localhost")
+          try {
+            const data = await getGbpReport({
+              site: sp.get("site") ?? "",
+              ga4: sp.get("ga4") ?? "",
+              startDate: sp.get("startDate") ?? "",
+              endDate: sp.get("endDate") ?? "",
+            })
+            sendJson(res, 200, data)
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "GBP report failed"
+            console.error("[seo-api/gbp]", message)
+            sendJson(res, 500, { error: message })
+          }
           return
         }
 

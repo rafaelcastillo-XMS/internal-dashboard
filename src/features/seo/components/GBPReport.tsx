@@ -1,8 +1,6 @@
 import { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import ReactApexChart from 'react-apexcharts'
 import type { ApexOptions } from 'apexcharts'
-import { edgeFetch } from '@/lib/edgeFetch'
-import { SEO_API } from '../hooks/useSEODashboardState'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -250,7 +248,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
         startDate: dateRange.startDate,
         endDate:   dateRange.endDate,
       })
-      const res  = await edgeFetch(`${SEO_API}/gbp?${params}`)
+      const res  = await fetch(`/api/seo/gbp?${params}`)
       const json = await res.json()
       if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`)
       setData(json as GBPData)

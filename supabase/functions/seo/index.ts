@@ -163,6 +163,39 @@ async function fetchGSC(token: string, params: URLSearchParams) {
   }
 }
 
+// ── /rankings ────────────────────────────────────────────────────────────────
+
+async function fetchRankings(token: string, params: URLSearchParams) {
+  const siteUrl = params.get("siteUrl") ?? ""
+  const startDate = params.get("startDate") ?? ""
+  const endDate = params.get("endDate") ?? ""
+
+  if (!siteUrl || !startDate || !endDate) throw new Error("Missing required params: siteUrl, startDate, endDate")
+
+  const base = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`
+  const res = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ startDate, endDate, dimensions: ["query", "country"], rowLimit: 1000, dataState: "final" }),
+  })
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message ?? "GSC rankings request failed")
+
+  // deno-lint-ignore no-explicit-any
+  const rows: any[] = (data.rows ?? []).sort((a: any, b: any) => b.impressions - a.impressions)
+
+  return {
+    rankings: rows.map((r) => ({
+      query: r.keys[0],
+      country: r.keys[1],
+      clicks: Math.round(r.clicks),
+      impressions: Math.round(r.impressions),
+      ctr: Math.round(r.ctr * 1e4) / 1e4,
+      position: Math.round(r.position * 10) / 10,
+    })),
+  }
+}
+
 // ── /ga4 ─────────────────────────────────────────────────────────────────────
 
 async function fetchGA4(token: string, params: URLSearchParams) {
@@ -386,6 +419,9 @@ serve(async (req) => {
     } else if (segment === "gsc") {
       const token = await getAccessToken()
       result = await fetchGSC(token, url.searchParams)
+    } else if (segment === "rankings") {
+      const token = await getAccessToken()
+      result = await fetchRankings(token, url.searchParams)
     } else if (segment === "ga4") {
       const token = await getAccessToken()
       result = await fetchGA4(token, url.searchParams)

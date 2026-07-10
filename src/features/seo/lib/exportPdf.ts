@@ -50,6 +50,12 @@ const PAGE_DESCRIPTIONS: Record<string, string> = {
     'position, impressions, clicks, and CTR. Queries ranking in positions 4–10 are flagged as Quick Wins — ' +
     'these represent the best optimization opportunities to push rankings into the top 3 with targeted content improvements.',
 
+  'Keyword-Rankings':
+    'This report shows keyword ranking positions segmented by geographic target, sourced from Google Search Console. ' +
+    'Each row pairs a search query with the country where it triggered impressions, along with its average ranking ' +
+    'position, impressions, clicks, and CTR. Use this data to understand how your domain ranks for each keyword ' +
+    'across different geographic markets and to prioritize geo-specific optimization opportunities.',
+
   'Core-Web-Vitals':
     'This report presents Core Web Vitals performance scores sourced from PageSpeed Insights (Google PSI). ' +
     'It evaluates Largest Contentful Paint (LCP), First Input Delay (FID), Cumulative Layout Shift (CLS), ' +
@@ -215,7 +221,7 @@ async function exportViaScreenshot(title: string, filename: string): Promise<voi
     const canvas = await html2canvas(element as HTMLElement, {
       scale: 2,
       useCORS: true,
-      backgroundColor: '#0F1117',
+      backgroundColor: '#FFFFFF',
       logging: false,
       windowWidth: element.scrollWidth,
       windowHeight: element.scrollHeight,

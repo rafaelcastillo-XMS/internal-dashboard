@@ -43,3 +43,5 @@ opentestai-screenshot*
 # Supabase local state
 supabase/.temp/
 .pdf-export-*
+token-gbp.json
+credentials-gbp.json
