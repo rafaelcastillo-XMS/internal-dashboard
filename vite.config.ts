@@ -10,6 +10,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import type { IncomingMessage, ServerResponse } from "http"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { getGbpReport } from "./server/gbpReport.js"
+import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
 
@@ -525,45 +526,19 @@ function seoDevPlugin() {
 
         // Ahrefs snapshot — uses its own API key, no Google auth needed
         if (req.url.startsWith("/api/seo/ahrefs-snapshot") && req.method === "GET") {
-          const ahrefsApiKey = process.env.AHREFS_API_KEY ?? ""
-          if (!ahrefsApiKey) {
-            sendJson(res, 503, { error: "AHREFS_API_KEY is not configured in .env" })
-            return
-          }
           const { searchParams: sp } = new URL(req.url, "http://localhost")
           const target = sp.get("target") ?? ""
-          if (!target) {
-            sendJson(res, 400, { error: "target param is required" })
-            return
-          }
-          const cleanTarget = target.replace(/^https?:\/\//, "").replace(/\/+$/, "").split("/")[0]
-          const date = new Date().toISOString().slice(0, 10)
           try {
-            const ahrefsRes = await fetch(
-              `https://api.ahrefs.com/v3/site-explorer/overview?target=${encodeURIComponent(cleanTarget)}&date=${date}&mode=domain`,
-              { headers: { Authorization: `Bearer ${ahrefsApiKey}` } }
-            )
-            if (!ahrefsRes.ok) {
-              const errText = await ahrefsRes.text()
-              console.error("[seo-api/ahrefs]", ahrefsRes.status, errText)
-              sendJson(res, 502, { error: `Ahrefs API error: ${ahrefsRes.status}` })
-              return
-            }
-            const d = await ahrefsRes.json() as Record<string, unknown>
-            sendJson(res, 200, {
-              domain:            cleanTarget,
-              snapshot_date:     date,
-              domain_rating:     d.domain_rating     ?? null,
-              ahrefs_rank:       d.ahrefs_rank        ?? null,
-              organic_keywords:  d.org_keywords       ?? d.organic_keywords  ?? null,
-              organic_traffic:   d.org_traffic        ?? d.organic_traffic   ?? null,
-              backlinks:         d.backlinks          ?? null,
-              referring_domains: d.refdomains         ?? d.referring_domains ?? null,
+            const snapshot = await getAhrefsSnapshot({
+              apiKey: process.env.AHREFS_API_KEY ?? "",
+              target,
             })
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : "Ahrefs request failed"
-            console.error("[seo-api/ahrefs]", msg)
-            sendJson(res, 500, { error: msg })
+            sendJson(res, 200, snapshot)
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Ahrefs request failed"
+            const status = error instanceof AhrefsApiError ? error.upstreamStatus : 500
+            console.error("[seo-api/ahrefs]", status, message)
+            sendJson(res, status >= 400 && status < 600 ? status : 502, { error: message })
           }
           return
         }

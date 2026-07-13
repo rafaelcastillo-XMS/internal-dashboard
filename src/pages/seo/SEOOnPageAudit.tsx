@@ -352,13 +352,16 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
                         d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Comparative</h1>
+              <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Audit Comparison</h1>
             </div>
             <p className="text-sm text-body dark:text-bodydark ml-11">
-              Initial Status vs. current audit — track progress since onboarding
+              Compare historical snapshots to analyze SEO progress and performance trends.
             </p>
           </div>
-          <Comparative selectedGscSite={seoState.selectedGscSite} />
+          <Comparative
+            selectedGscSite={seoState.selectedGscSite}
+            clientName={seoState.clientName}
+          />
         </>
       )}
 
