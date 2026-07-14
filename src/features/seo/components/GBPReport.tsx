@@ -1,10 +1,12 @@
 import { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import ReactApexChart from 'react-apexcharts'
 import type { ApexOptions } from 'apexcharts'
+import { supabase } from '@/lib/supabase'
+import { exportQuarterlySeoReport } from '@/features/seo/lib/exportQuarterlySeoReport'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface GBPData {
+export interface GBPData {
   interactions:   { total: number; labels: string[]; values: number[] }
   profileViews:   { total: number; breakdown: { label: string; value: number; pct: number; color: string }[] }
   searches:       { total: number; keywords: { term: string; count: string }[] }
@@ -223,8 +225,10 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
   const [, setExp] = useState(false)
   const [loading, setLoad]  = useState(false)
   const [isSample, setSample] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [data, setData]     = useState<GBPData | null>(null)
   const [isDark, setIsDark] = useState(false)
+  const [clientLogoUrl, setClientLogoUrl] = useState('')
 
   useEffect(() => {
     const obs = new MutationObserver(() =>
@@ -235,16 +239,18 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
     return () => obs.disconnect()
   }, [])
 
-  useImperativeHandle(ref, () => ({ triggerDownload: handleDownloadPDF }), [])
+  useImperativeHandle(ref, () => ({ triggerDownload: handleDownloadPDF }))
 
   const fetchData = useCallback(async () => {
     if (!selectedGscSite) return
     setLoad(true)
     setSample(false)
+    setLoadError('')
     try {
       const params = new URLSearchParams({
         site:      selectedGscSite,
         ga4:       selectedGa4Id,
+        client:    clientLabel ?? '',
         startDate: dateRange.startDate,
         endDate:   dateRange.endDate,
       })
@@ -252,111 +258,59 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
       const json = await res.json()
       if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`)
       setData(json as GBPData)
-    } catch {
+    } catch (error) {
       // API not connected yet — show sample data
       setData(SAMPLE)
       setSample(true)
+      setLoadError(error instanceof Error ? error.message : 'GBP report data is unavailable.')
     } finally {
       setLoad(false)
     }
-  }, [selectedGscSite, selectedGa4Id, dateRange])
+  }, [selectedGscSite, selectedGa4Id, clientLabel, dateRange])
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  useEffect(() => {
+    let cancelled = false
+    if (!clientLabel) { setClientLogoUrl(''); return }
+
+    async function loadClientLogo() {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('name', clientLabel)
+        .maybeSingle()
+      if (cancelled) return
+      if (!client?.id) { setClientLogoUrl(''); return }
+
+      const { data: profile } = await supabase
+        .from('client_profiles')
+        .select('logo_url')
+        .eq('client_id', client.id)
+        .maybeSingle()
+      if (!cancelled) setClientLogoUrl(profile?.logo_url ?? '')
+    }
+
+    loadClientLogo()
+    return () => { cancelled = true }
+  }, [clientLabel])
+
   async function handleDownloadPDF() {
-    if (!reportRef.current) return
+    if (!data) return
+    if (isSample) {
+      window.alert(`This report is still showing sample data and cannot be exported yet. ${loadError}`)
+      return
+    }
     setExp(true)
     try {
-      const [h2cMod, jspdfMod] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf'),
-      ])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const html2canvas = (h2cMod as any).default ?? h2cMod
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { jsPDF }   = jspdfMod as any
-
-      const PAD = 16 // mm padding on all sides
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      const pdfW = pdf.internal.pageSize.getWidth()
-      const pdfH = pdf.internal.pageSize.getHeight()
-      const cW   = pdfW - PAD * 2
-      const cH   = pdfH - PAD * 2
-
-      // ── 1. Render header element off-screen ──────────────────────────
-      const escapeHtml = (s: string) => s.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!))
-      const clientName = escapeHtml(clientLabel || (selectedGscSite ? selectedGscSite.replace(/^https?:\/\//, '').replace(/\/$/, '') : ''))
-      const dateStr    = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-
-      const hEl = document.createElement('div')
-      hEl.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;background:#ffffff;padding:44px 60px 36px;box-sizing:border-box;font-family:Inter,system-ui,sans-serif;'
-      hEl.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
-          <img src="/XMS LOGO - WHITE BACKGROUND.png" style="height:52px;object-fit:contain;" crossorigin="anonymous" />
-          <span style="font-size:11px;color:#94a3b8;font-weight:500;letter-spacing:0.02em;">${dateStr}</span>
-        </div>
-        <div style="border-top:2.5px solid #1A72D9;padding-top:22px;">
-          <h1 style="font-size:22px;font-weight:700;color:#0f172a;margin:0 0 10px;letter-spacing:-0.4px;line-height:1.2;">
-            Google Business Profile Report
-          </h1>
-          <p style="font-size:12.5px;color:#64748b;margin:0;line-height:1.75;max-width:580px;">
-            This report summarizes your Google Business Profile performance, Google Analytics activity, and Search Console visibility for the selected period. Use these insights to evaluate your local SEO presence and digital marketing effectiveness.
-          </p>
-          ${clientName ? `<div style="margin-top:16px;display:inline-flex;align-items:center;background:#EEF4FF;border:1.5px solid #C7D9FF;border-radius:8px;padding:6px 16px;"><span style="font-size:12px;color:#1A72D9;font-weight:600;">${clientName}</span></div>` : ''}
-        </div>
-      `
-      document.body.appendChild(hEl)
-      const hCanvas = await html2canvas(hEl, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false })
-      document.body.removeChild(hEl)
-
-      // ── 2. Capture report content (white bg, no dark mode) ───────────
-      const rCanvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false })
-
-      // ── 3. Scale to PDF content width ────────────────────────────────
-      const hNatW  = hCanvas.width  / 2
-      const hNatH  = hCanvas.height / 2
-      const rNatW  = rCanvas.width  / 2
-      const rNatH  = rCanvas.height / 2
-      const hMmH   = (hNatH / hNatW) * cW        // header height in mm
-      const rMmH   = (rNatH / rNatW) * cW        // full report height in mm
-      const rPxPerMm = (rNatH / rMmH)            // report natural px per mm
-
-      // ── 4. Canvas slicer ─────────────────────────────────────────────
-      function sliceCanvas(src: HTMLCanvasElement, yMm: number, heightMm: number): string {
-        const yPx   = Math.round(yMm * rPxPerMm * 2)
-        const hPx   = Math.round(Math.min(heightMm * rPxPerMm * 2, src.height - yPx))
-        const c     = document.createElement('canvas')
-        c.width     = src.width
-        c.height    = Math.max(hPx, 1)
-        const ctx   = c.getContext('2d')!
-        ctx.fillStyle = '#ffffff'
-        ctx.fillRect(0, 0, c.width, c.height)
-        ctx.drawImage(src, 0, yPx, src.width, hPx, 0, 0, src.width, hPx)
-        return c.toDataURL('image/jpeg', 0.92)
-      }
-
-      // ── 5. Page 1: header + first report slice ───────────────────────
-      pdf.addImage(hCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', PAD, PAD, cW, hMmH)
-
-      const gapMm          = 8
-      const firstSliceMm   = cH - hMmH - gapMm
-      let   reportYMm      = 0
-
-      if (firstSliceMm > 15 && rMmH > 0) {
-        const actualFirstMm = Math.min(firstSliceMm, rMmH)
-        pdf.addImage(sliceCanvas(rCanvas, 0, actualFirstMm), 'JPEG', PAD, PAD + hMmH + gapMm, cW, actualFirstMm)
-        reportYMm = actualFirstMm
-      }
-
-      // ── 6. Remaining pages ───────────────────────────────────────────
-      while (reportYMm < rMmH) {
-        pdf.addPage()
-        const pageH = Math.min(cH, rMmH - reportYMm)
-        pdf.addImage(sliceCanvas(rCanvas, reportYMm, pageH), 'JPEG', PAD, PAD, cW, pageH)
-        reportYMm += pageH
-      }
-
-      pdf.save(`GBP-Report-${new Date().toISOString().slice(0, 10)}.pdf`)
+      await exportQuarterlySeoReport({
+        data,
+        clientName: clientLabel || selectedGscSite.replace(/^sc-domain:/, '').replace(/^https?:\/\//, ''),
+        site: selectedGscSite,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        clientLogoUrl,
+      })
     } finally {
       setExp(false)
     }
@@ -404,7 +358,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
           <div>
             <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Sample Data</p>
             <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5 leading-relaxed">
-              Google Business Profile integration is not yet connected for this client. The layout below shows a sample report — connect GBP to display real data.
+              {loadError || 'Google Business Profile data is unavailable for this client.'} The layout below shows sample data and cannot be exported as a client report.
             </p>
           </div>
         </div>

@@ -1,5 +1,22 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
+import {
+  CalendarDays,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Download,
+  Eye,
+  FileSearch,
+  GitCompareArrows,
+  Globe2,
+  History,
+  PlayCircle,
+  RefreshCw,
+  Search,
+  XCircle,
+} from 'lucide-react'
 import DOMPurify from 'dompurify'
 import { supabase } from '../../lib/supabase'
 import { GBPReport } from '../../features/seo/components/GBPReport'
@@ -8,6 +25,7 @@ import { InitialAnalysis } from '../../features/seo/components/InitialAnalysis'
 import { Comparative } from '../../features/seo/components/Comparative'
 import { useSEODashboardState } from '../../features/seo/hooks/useSEODashboardState'
 import { DashboardControls } from '../../features/seo/components/DashboardControls'
+import { AuditWorkflowHeader } from '../../features/seo/components/AuditWorkflowHeader'
 
 const STATUS = { idle: 'idle', loading: 'loading', ready: 'ready', error: 'error' } as const
 type StatusKey = typeof STATUS[keyof typeof STATUS]
@@ -87,6 +105,10 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
   const [client, setClient]         = useState('')
   const [audits, setAudits]         = useState<OnPageAuditRow[]>([])
   const [viewingId, setViewingId]   = useState<number | null>(null)
+  const [historyQuery, setHistoryQuery] = useState('')
+  const [historyStatus, setHistoryStatus] = useState('all')
+  const [historyRange, setHistoryRange] = useState('all')
+  const [historyPage, setHistoryPage] = useState(1)
   const [screamingFrogEnabled, setScreamingFrogEnabled] = useState(true)
   const [ahrefsEnabled, setAhrefsEnabled] = useState(true)
   const [ahrefsStatus, setAhrefsStatus] = useState<AhrefsRunStatus>('idle')
@@ -333,31 +355,80 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
   const secs = String(elapsedSecs % 60).padStart(2, '0')
   const showingAuditReport = (activeTab === 'run-audit' || activeTab === 'audit-history') && status === STATUS.ready
 
+  const historySummary = useMemo(() => ({
+    total: audits.length,
+    completed: audits.filter(audit => audit.status === 'completed').length,
+    running: audits.filter(audit => audit.status === 'running').length,
+    failed: audits.filter(audit => audit.status === 'error').length,
+  }), [audits])
+
+  const historyTimeline = useMemo(() => audits.slice(0, 6).reverse(), [audits])
+
+  const filteredAudits = useMemo(() => {
+    const query = historyQuery.trim().toLowerCase()
+    const rangeDays = historyRange === 'all' ? null : Number(historyRange)
+    const threshold = rangeDays ? Date.now() - rangeDays * 24 * 60 * 60 * 1000 : null
+    return audits.filter(audit => {
+      const matchesQuery = !query || audit.client.toLowerCase().includes(query) || audit.landing_page_url.toLowerCase().includes(query)
+      const matchesStatus = historyStatus === 'all' || audit.status === historyStatus
+      const matchesRange = threshold === null || new Date(audit.created_at).getTime() >= threshold
+      return matchesQuery && matchesStatus && matchesRange
+    })
+  }, [audits, historyQuery, historyRange, historyStatus])
+
+  const historyPageSize = 8
+  const historyPageCount = Math.max(1, Math.ceil(filteredAudits.length / historyPageSize))
+  const paginatedAudits = filteredAudits.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize)
+
+  useEffect(() => {
+    setHistoryPage(1)
+  }, [historyQuery, historyRange, historyStatus])
+
+  useEffect(() => {
+    if (historyPage > historyPageCount) setHistoryPage(historyPageCount)
+  }, [historyPage, historyPageCount])
+
+  function exportAuditHistory() {
+    const escapeCell = (value: string) => `"${value.replace(/"/g, '""')}"`
+    const rows = filteredAudits.map(audit => [
+      formatAuditDate(audit.created_at),
+      audit.client,
+      audit.landing_page_url,
+      audit.status,
+      audit.completed_at ? formatAuditDate(audit.completed_at) : '',
+    ].map(escapeCell).join(','))
+    const csv = ['Date,Client,Landing Page,Status,Completed', ...rows].join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `audit-history-${auditDomain || 'all-clients'}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
-    <div className="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10">
+    <div className="mx-auto max-w-screen-2xl p-4 md:p-6">
 
       {/* Tab: Initial Analysis */}
       {activeTab === 'initial-status' && (
-        <InitialAnalysis clientName={seoState.clientName} domain={auditDomain} />
+        <>
+          <AuditWorkflowHeader
+            title={`Initial Analysis${seoState.clientName ? `: ${seoState.clientName}` : ''}`}
+            description="Review the SEO foundation, assign findings and track evidence before running the technical audit."
+            icon={<FileSearch className="h-4 w-4" />}
+          />
+          <InitialAnalysis clientName={seoState.clientName} domain={auditDomain} />
+        </>
       )}
 
       {/* Tab: Comparative */}
       {activeTab === 'comparative' && (
         <>
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round"
-                        d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                </svg>
-              </div>
-              <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Audit Comparison</h1>
-            </div>
-            <p className="text-sm text-body dark:text-bodydark ml-11">
-              Compare historical snapshots to analyze SEO progress and performance trends.
-            </p>
-          </div>
+          <AuditWorkflowHeader
+            title={`Audit Comparison${auditDomain ? `: ${auditDomain}` : ''}`}
+            description="Compare historical snapshots to analyze SEO progress and performance trends."
+            icon={<GitCompareArrows className="h-4 w-4" />}
+          />
           <Comparative
             selectedGscSite={seoState.selectedGscSite}
             clientName={seoState.clientName}
@@ -405,20 +476,11 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
 
       {/* Tab: Run Audit */}
       {activeTab === 'run-audit' && (
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1A72D9]/15 border border-[#1A72D9]/20">
-              <svg className="h-4 w-4 text-[#1A72D9]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">On-Page SEO Audit</h1>
-          </div>
-          <p className="text-sm text-body dark:text-bodydark ml-11">
-            Technical · Content · Screaming Frog analysis — results displayed here
-          </p>
-        </div>
+        <AuditWorkflowHeader
+          title={`Run Audit${auditDomain ? `: ${auditDomain}` : ''}`}
+          description="Configure and run the technical, content, Screaming Frog and Ahrefs analysis."
+          icon={<PlayCircle className="h-4 w-4" />}
+        />
       )}
 
       {showingAuditReport ? (
@@ -763,100 +825,197 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
       ) : null}
 
       {activeTab === 'audit-history' && !showingAuditReport && (
-        <div className="space-y-6">
-          <div className="mb-6">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1A72D9]/15 border border-[#1A72D9]/20">
-                <svg className="h-4 w-4 text-[#1A72D9]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round"
-                        d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Audit History</h1>
-            </div>
-            <p className="text-sm text-body dark:text-bodydark ml-11">
-              Every audit run is registered per client — reopen any saved report
-            </p>
-          </div>
+        <div className="space-y-5">
+          <AuditWorkflowHeader
+            title={`Audit History${auditDomain ? `: ${auditDomain}` : ''}`}
+            description="Manage, review and export past audit logs to track website evolution over time."
+            icon={<History className="h-4 w-4" />}
+            actions={(
+              <button
+                type="button"
+                onClick={() => void loadAudits()}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-stroke bg-white px-3 text-xs font-semibold text-body shadow-sm transition hover:border-[#1A72D9]/50 hover:text-[#1A72D9] dark:border-strokedark dark:bg-boxdark dark:text-bodydark"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </button>
+            )}
+          />
 
-          <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-            <div className="border-b border-stroke px-6 py-4 dark:border-strokedark flex items-center justify-between gap-2 flex-wrap">
-              <div>
-                <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Saved Audits</h3>
-                <p className="mt-0.5 text-xs text-body dark:text-bodydark">
-                  Use the SEO client selector to work in the right client context
-                </p>
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              { label: 'Total Audits', value: historySummary.total, icon: <Clock3 className="h-4 w-4" />, tone: 'text-slate-500 bg-slate-100 dark:bg-slate-500/15' },
+              { label: 'Completed', value: historySummary.completed, icon: <CheckCircle2 className="h-4 w-4" />, tone: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-500/15' },
+              { label: 'In Progress', value: historySummary.running, icon: <RefreshCw className="h-4 w-4" />, tone: 'text-[#1A72D9] bg-blue-100 dark:bg-blue-500/15' },
+              { label: 'Needs Attention', value: historySummary.failed, icon: <XCircle className="h-4 w-4" />, tone: 'text-rose-600 bg-rose-100 dark:bg-rose-500/15' },
+            ].map(stat => (
+              <div key={stat.label} className="rounded-xl border border-stroke bg-white p-4 shadow-sm dark:border-strokedark dark:bg-boxdark">
+                <div className={`mb-3 flex h-8 w-8 items-center justify-center rounded-lg ${stat.tone}`}>{stat.icon}</div>
+                <p className="text-xl font-bold tabular-nums text-black dark:text-[#E2E5E9]">{stat.value}</p>
+                <p className="mt-0.5 text-[11px] font-medium text-body dark:text-bodydark">{stat.label}</p>
               </div>
-              {audits.length > 0 && (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                  {audits.length} audit{audits.length !== 1 ? 's' : ''} registered
-                </span>
-              )}
+            ))}
+          </section>
+
+          <section className="rounded-xl border border-stroke bg-white p-4 shadow-sm dark:border-strokedark dark:bg-boxdark md:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-black dark:text-[#E2E5E9]">Audit Activity Timeline</h2>
+                <p className="mt-0.5 text-[11px] text-body dark:text-bodydark">The six most recent audit runs</p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-semibold text-body dark:bg-white/5 dark:text-bodydark">Latest activity</span>
+            </div>
+            {historyTimeline.length > 0 ? (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                {historyTimeline.map(audit => {
+                  const completed = audit.status === 'completed'
+                  const failed = audit.status === 'error'
+                  return (
+                    <div key={audit.id} className="min-w-0">
+                      <div className={`h-2 rounded-full ${completed ? 'bg-emerald-400' : failed ? 'bg-rose-400' : 'bg-[#1A72D9]'}`} />
+                      <p className="mt-2 truncate text-[11px] font-semibold text-black dark:text-[#E2E5E9]">{audit.client}</p>
+                      <p className="mt-0.5 text-[10px] text-body dark:text-bodydark">
+                        {new Date(audit.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="py-5 text-center text-sm text-body dark:text-bodydark">Activity will appear after the first audit.</p>
+            )}
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-stroke bg-white shadow-sm dark:border-strokedark dark:bg-boxdark">
+            <div className="flex flex-col gap-3 border-b border-stroke p-4 dark:border-strokedark lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                <label className="relative min-w-0 sm:max-w-[270px] sm:flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-body" />
+                  <input
+                    value={historyQuery}
+                    onChange={event => setHistoryQuery(event.target.value)}
+                    placeholder="Search client or URL"
+                    className="h-9 w-full rounded-lg border border-stroke bg-white pl-9 pr-3 text-xs text-black outline-none transition placeholder:text-body focus:border-[#1A72D9] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
+                  />
+                </label>
+                <select
+                  value={historyStatus}
+                  onChange={event => setHistoryStatus(event.target.value)}
+                  className="h-9 rounded-lg border border-stroke bg-white px-3 text-xs font-medium text-body outline-none focus:border-[#1A72D9] dark:border-strokedark dark:bg-boxdark dark:text-bodydark"
+                  aria-label="Filter by status"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="completed">Completed</option>
+                  <option value="running">In progress</option>
+                  <option value="error">Needs attention</option>
+                </select>
+                <label className="relative">
+                  <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-body" />
+                  <select
+                    value={historyRange}
+                    onChange={event => setHistoryRange(event.target.value)}
+                    className="h-9 rounded-lg border border-stroke bg-white pl-9 pr-3 text-xs font-medium text-body outline-none focus:border-[#1A72D9] dark:border-strokedark dark:bg-boxdark dark:text-bodydark"
+                    aria-label="Filter by date range"
+                  >
+                    <option value="all">All time</option>
+                    <option value="30">Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="365">Last year</option>
+                  </select>
+                </label>
+              </div>
+              <div className="flex items-center justify-between gap-3 lg:justify-end">
+                <span className="text-[11px] text-body dark:text-bodydark">{filteredAudits.length} result{filteredAudits.length === 1 ? '' : 's'}</span>
+                <button
+                  type="button"
+                  onClick={exportAuditHistory}
+                  disabled={filteredAudits.length === 0}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-stroke px-3 text-xs font-semibold text-body transition hover:border-[#1A72D9]/50 hover:text-[#1A72D9] disabled:cursor-not-allowed disabled:opacity-40 dark:border-strokedark dark:text-bodydark"
+                >
+                  Export CSV <Download className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px]">
+              <table className="w-full min-w-[780px]">
                 <thead>
-                  <tr className="border-b border-stroke bg-gray-50/50 dark:border-strokedark dark:bg-black/10">
-                    {['Client', 'Landing Page', 'Date', 'Status', ''].map(col => (
-                      <th key={col} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-body dark:text-bodydark whitespace-nowrap">
-                        {col}
-                      </th>
+                  <tr className="border-b border-stroke bg-gray-50/60 dark:border-strokedark dark:bg-black/10">
+                    {['Date & Time', 'Client', 'Website', 'Status', 'Completed', 'Action'].map(col => (
+                      <th key={col} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-body dark:text-bodydark whitespace-nowrap">{col}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stroke dark:divide-strokedark">
-                  {audits.length === 0 ? (
+                  {paginatedAudits.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-sm text-body dark:text-bodydark">
-                        No audits registered yet. Run your first audit from Run Audit.
+                      <td colSpan={6} className="px-6 py-14 text-center">
+                        <FileSearch className="mx-auto h-7 w-7 text-body/50" />
+                        <p className="mt-3 text-sm font-semibold text-black dark:text-[#E2E5E9]">No audits found</p>
+                        <p className="mt-1 text-xs text-body dark:text-bodydark">Try a different filter or run the first audit for this client.</p>
                       </td>
                     </tr>
-                  ) : audits.map(a => (
-                    <tr key={a.id} className="transition-colors hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
-                      <td className="px-5 py-3.5 text-sm font-medium text-black dark:text-[#E2E5E9] whitespace-nowrap">{a.client}</td>
-                      <td className="px-5 py-3.5 font-mono text-xs text-[#1A72D9] max-w-[280px] truncate">{a.landing_page_url}</td>
-                      <td className="px-5 py-3.5 text-xs text-body dark:text-bodydark whitespace-nowrap">
-                        {new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          a.status === 'completed'
-                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
-                            : a.status === 'running'
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400'
-                              : 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'
-                        }`}>
-                          {a.status === 'running' && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />}
-                          {a.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        {a.status === 'completed' && (
-                          <button
-                            type="button"
-                            onClick={() => viewSavedAudit(a)}
-                            disabled={viewingId === a.id}
-                            className="rounded-lg border border-[#1A72D9]/30 bg-[#1A72D9]/10 px-3 py-1.5
-                                       text-xs font-medium text-[#1A72D9] transition
-                                       disabled:opacity-50 hover:bg-[#1A72D9]/20 active:scale-[0.98]"
-                          >
-                            {viewingId === a.id ? 'Loading...' : 'View Report'}
-                          </button>
-                        )}
-                        {a.status === 'error' && a.error_message && (
-                          <span className="text-xs text-red-500/80 max-w-[180px] inline-block truncate" title={a.error_message}>
-                            {a.error_message}
+                  ) : paginatedAudits.map(audit => {
+                    const date = new Date(audit.created_at)
+                    return (
+                      <tr key={audit.id} className="transition-colors hover:bg-gray-50/60 dark:hover:bg-white/[0.025]">
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          <p className="text-xs font-semibold text-black dark:text-[#E2E5E9]">{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                          <p className="mt-0.5 text-[10px] text-body dark:text-bodydark">{date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
+                        </td>
+                        <td className="px-5 py-4 text-xs font-medium text-black dark:text-[#E2E5E9]">{audit.client}</td>
+                        <td className="max-w-[260px] px-5 py-4">
+                          <div className="flex items-center gap-2 text-xs text-[#1A72D9]">
+                            <Globe2 className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate" title={audit.landing_page_url}>{audit.landing_page_url.replace(/^https?:\/\//, '')}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-[10px] font-semibold ${
+                            audit.status === 'completed'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+                              : audit.status === 'running'
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400'
+                                : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400'
+                          }`}>
+                            {audit.status === 'completed' ? <CheckCircle2 className="h-3 w-3" /> : audit.status === 'running' ? <RefreshCw className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
+                            {audit.status === 'completed' ? 'Completed' : audit.status === 'running' ? 'In progress' : 'Needs attention'}
                           </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-5 py-4 text-[11px] text-body dark:text-bodydark whitespace-nowrap">
+                          {audit.completed_at ? new Date(audit.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          {audit.status === 'completed' ? (
+                            <button
+                              type="button"
+                              onClick={() => viewSavedAudit(audit)}
+                              disabled={viewingId === audit.id}
+                              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#1A72D9]/50 px-3 text-[11px] font-semibold text-[#1A72D9] transition hover:bg-[#1A72D9]/5 disabled:opacity-50"
+                            >
+                              <Eye className="h-3.5 w-3.5" /> {viewingId === audit.id ? 'Loading…' : 'View Report'} <ChevronRight className="h-3 w-3" />
+                            </button>
+                          ) : audit.error_message ? (
+                            <span className="inline-block max-w-[170px] truncate text-[10px] text-rose-500" title={audit.error_message}>{audit.error_message}</span>
+                          ) : <span className="text-body">—</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
-          </div>
+
+            <div className="flex flex-col gap-3 border-t border-stroke px-5 py-3 dark:border-strokedark sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[10px] text-body dark:text-bodydark">
+                Showing {filteredAudits.length === 0 ? 0 : (historyPage - 1) * historyPageSize + 1}–{Math.min(historyPage * historyPageSize, filteredAudits.length)} of {filteredAudits.length} audits
+              </p>
+              <div className="flex items-center gap-1">
+                <button type="button" aria-label="Previous page" disabled={historyPage === 1} onClick={() => setHistoryPage(page => page - 1)} className="flex h-7 w-7 items-center justify-center rounded-md border border-stroke text-body disabled:opacity-35 dark:border-strokedark"><ChevronLeft className="h-3.5 w-3.5" /></button>
+                <span className="flex h-7 min-w-7 items-center justify-center rounded-md bg-[#1A72D9] px-2 text-[10px] font-semibold text-white">{historyPage}</span>
+                <button type="button" aria-label="Next page" disabled={historyPage === historyPageCount} onClick={() => setHistoryPage(page => page + 1)} className="flex h-7 w-7 items-center justify-center rounded-md border border-stroke text-body disabled:opacity-35 dark:border-strokedark"><ChevronRight className="h-3.5 w-3.5" /></button>
+              </div>
+            </div>
+          </section>
         </div>
       )}
 

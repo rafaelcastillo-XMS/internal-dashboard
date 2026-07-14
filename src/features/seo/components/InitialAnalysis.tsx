@@ -191,28 +191,32 @@ export function InitialAnalysis({ clientName, domain }: { clientName: string; do
     <div className="space-y-6">
 
       {/* ── Header ── */}
-      <div className="rounded-xl border border-stroke bg-white px-6 py-6 shadow-default dark:border-strokedark dark:bg-boxdark">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-body dark:text-bodydark">Initial Analysis</p>
-        <h1 className="mt-1 text-3xl font-bold text-black dark:text-[#E2E5E9]">{clientName}</h1>
-        <div className="mt-2 flex items-center gap-3">
-          {domain && (
-            <a
-              href={`https://${domain}`} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-[#1A72D9] hover:underline"
-            >
-              {domain}
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
-            </a>
-          )}
-          <span className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
-            overallPct === 100
-              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
-              : 'bg-orange-100 text-orange-600 dark:bg-orange-500/15 dark:text-orange-400'
-          }`}>
-            {overallPct === 100 ? 'Completed' : 'In Progress'}
-          </span>
+      <div className="rounded-xl border border-stroke bg-white px-5 py-5 shadow-sm dark:border-strokedark dark:bg-boxdark md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-body dark:text-bodydark">Team progress</p>
+            <p className="mt-1 text-sm text-body dark:text-bodydark">Diagnostic checklist and supporting evidence</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {domain && (
+              <a
+                href={`https://${domain}`} target="_blank" rel="noreferrer"
+                className="inline-flex items-center gap-1 text-sm font-medium text-[#1A72D9] hover:underline"
+              >
+                {domain}
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+              </a>
+            )}
+            <span className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
+              overallPct === 100
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+                : 'bg-orange-100 text-orange-600 dark:bg-orange-500/15 dark:text-orange-400'
+            }`}>
+              {overallPct === 100 ? 'Completed' : 'In Progress'}
+            </span>
+          </div>
         </div>
 
         {/* Overall progress */}

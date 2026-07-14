@@ -512,6 +512,7 @@ function seoDevPlugin() {
             const data = await getGbpReport({
               site: sp.get("site") ?? "",
               ga4: sp.get("ga4") ?? "",
+              client: sp.get("client") ?? "",
               startDate: sp.get("startDate") ?? "",
               endDate: sp.get("endDate") ?? "",
             })

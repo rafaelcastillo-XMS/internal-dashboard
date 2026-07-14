@@ -591,6 +591,7 @@ app.get('/api/seo/gbp', async (req, res) => {
     const data = await getGbpReport({
       site: req.query.site,
       ga4: req.query.ga4,
+      client: req.query.client,
       startDate: req.query.startDate,
       endDate: req.query.endDate,
     })

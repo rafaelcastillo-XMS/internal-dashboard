@@ -119,10 +119,41 @@ function normalizeDomain(input) {
     .toLowerCase()
 }
 
-async function findLocationForSite(site) {
+function normalizeBusinessName(input) {
+  const ignored = new Set(["llc", "inc", "corp", "corporation", "company", "co", "ltd"])
+  return String(input ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word && !ignored.has(word))
+    .join(" ")
+}
+
+function businessNameScore(left, right) {
+  const a = normalizeBusinessName(left)
+  const b = normalizeBusinessName(right)
+  if (!a || !b) return 0
+  if (a === b) return 1
+  if (a.includes(b) || b.includes(a)) return 0.9
+  const aWords = new Set(a.split(" "))
+  const bWords = new Set(b.split(" "))
+  const shared = [...aWords].filter((word) => bWords.has(word)).length
+  return shared / Math.max(aWords.size, bWords.size)
+}
+
+async function findLocationForSite(site, clientName) {
   const domain = normalizeDomain(site)
   const locations = await listAllLocations()
-  const match = locations.find((l) => l.websiteUri && normalizeDomain(l.websiteUri) === domain)
+  const domainMatch = locations.find((l) => l.websiteUri && normalizeDomain(l.websiteUri) === domain)
+  if (domainMatch) return domainMatch
+
+  const rankedByName = locations
+    .map((location) => ({ location, score: businessNameScore(location.title, clientName) }))
+    .sort((a, b) => b.score - a.score)
+  const match = rankedByName[0]?.score >= 0.6 ? rankedByName[0].location : null
   if (!match) throw new Error(`No GBP location found with website ${domain}`)
   return match
 }
@@ -452,14 +483,17 @@ async function fetchGscSection(site, startDate, endDate) {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export async function getGbpReport({ site, ga4, startDate, endDate }) {
+export async function getGbpReport({ site, ga4, client, startDate, endDate }) {
   if (!site || !startDate || !endDate) throw new Error("site, startDate and endDate are required")
 
-  const location = await findLocationForSite(site)
+  const location = await findLocationForSite(site, client)
 
   const [gbp, ga4Sections, gsc] = await Promise.all([
     fetchGbpSections(location, startDate, endDate),
-    ga4 ? fetchGa4Sections(ga4, startDate, endDate) : Promise.resolve(null),
+    ga4 ? fetchGa4Sections(ga4, startDate, endDate).catch((error) => {
+      console.warn("[gbp-report] GA4 unavailable:", error instanceof Error ? error.message : error)
+      return null
+    }) : Promise.resolve(null),
     fetchGscSection(site, startDate, endDate).catch(() => null),
   ])
 
