@@ -1,6 +1,7 @@
 export interface GbpReportInput {
   site: string
   ga4?: string
+  client?: string
   startDate: string
   endDate: string
 }
