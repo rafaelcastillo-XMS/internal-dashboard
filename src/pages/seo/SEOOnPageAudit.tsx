@@ -459,7 +459,7 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
               {...seoState}
               showDateRange={true}
               pageTitle="GBP-Report"
-              onRefresh={() => {}}
+              onRefresh={() => { void gbpRef.current?.refresh() }}
               onExportPdf={() => gbpRef.current?.triggerDownload() ?? Promise.resolve()}
             />
           </div>

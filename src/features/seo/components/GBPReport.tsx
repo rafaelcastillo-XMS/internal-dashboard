@@ -213,6 +213,7 @@ interface GBPReportProps {
 
 export interface GBPReportHandle {
   triggerDownload: () => Promise<void>
+  refresh: () => Promise<void>
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -238,8 +239,6 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
     setIsDark(document.documentElement.classList.contains('dark'))
     return () => obs.disconnect()
   }, [])
-
-  useImperativeHandle(ref, () => ({ triggerDownload: handleDownloadPDF }))
 
   const fetchData = useCallback(async () => {
     if (!selectedGscSite) return
@@ -267,6 +266,11 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
       setLoad(false)
     }
   }, [selectedGscSite, selectedGa4Id, clientLabel, dateRange])
+
+  useImperativeHandle(ref, () => ({
+    triggerDownload: handleDownloadPDF,
+    refresh: fetchData,
+  }))
 
   useEffect(() => { fetchData() }, [fetchData])
 
