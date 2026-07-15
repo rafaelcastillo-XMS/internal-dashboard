@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Search, Check, ChevronDown, Building2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { SEOClientOption } from '@/features/seo/hooks/useSEODashboardState'
+import { fetchClientProfiles } from '@/features/clients/profiles'
 
 const CLIENTS_KEY  = 'xms_seo_clients'
 const SELECTED_KEY = 'xms_seo_client'
@@ -15,6 +16,7 @@ export function SEOClientSelector() {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [clients, setClients] = useState<SEOClientOption[]>([])
+  const [clientLogos, setClientLogos] = useState<Record<string, string>>({})
   const [selectedId, setSelectedId] = useState<string>('')
   const buttonRef = useRef<HTMLButtonElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -43,10 +45,20 @@ export function SEOClientSelector() {
 
   useEffect(() => {
     loadClients()
+    let active = true
+    fetchClientProfiles()
+      .then(profiles => {
+        if (!active) return
+        setClientLogos(Object.fromEntries(
+          profiles.filter(profile => profile.logo_url).map(profile => [profile.client_id, profile.logo_url as string]),
+        ))
+      })
+      .catch(() => { /* Keep the existing initials fallback. */ })
     try {
       const sel = JSON.parse(sessionStorage.getItem(SELECTED_KEY) || 'null')
       if (sel?.clientId) setSelectedId(sel.clientId)
     } catch { /* ignore */ }
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
@@ -89,8 +101,10 @@ export function SEOClientSelector() {
         className="w-full text-left rounded-md border border-[var(--sidebar-border)] bg-[var(--bg-surface)] dark:bg-white/[0.03] px-3 py-2.5 hover:bg-[var(--bg-subtle)] transition-colors group"
       >
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-[#1A72D9] flex items-center justify-center text-white text-[10px] font-bold shrink-0 ring-2 ring-[#1A72D9]/20">
-            {selectedClient ? getInitials(selectedClient.name) : <Building2 className="w-3.5 h-3.5" />}
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full text-[10px] font-bold text-white ring-2 ${selectedClient && clientLogos[selectedClient.id] ? 'bg-white ring-slate-200' : 'bg-[#1A72D9] ring-[#1A72D9]/20'}`}>
+            {selectedClient && clientLogos[selectedClient.id] ? (
+              <img src={clientLogos[selectedClient.id]} alt={`${selectedClient.name} logo`} className="h-full w-full object-contain p-0.5" />
+            ) : selectedClient ? getInitials(selectedClient.name) : <Building2 className="w-3.5 h-3.5" />}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
@@ -145,8 +159,10 @@ export function SEOClientSelector() {
                         onClick={() => handleSelect(client)}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors hover:bg-[var(--hover-bg)] ${isSelected ? 'font-semibold text-[var(--text-primary)] bg-[var(--hover-bg)]' : 'font-medium text-[var(--text-secondary)]'}`}
                       >
-                        <div className="w-8 h-8 rounded-full bg-[#1A72D9] flex items-center justify-center text-white text-[10px] font-bold shrink-0 ring-2 ring-[#1A72D9]/20">
-                          {getInitials(client.name)}
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full text-[10px] font-bold text-white ring-2 ${clientLogos[client.id] ? 'bg-white ring-slate-200' : 'bg-[#1A72D9] ring-[#1A72D9]/20'}`}>
+                          {clientLogos[client.id] ? (
+                            <img src={clientLogos[client.id]} alt={`${client.name} logo`} className="h-full w-full object-contain p-0.5" />
+                          ) : getInitials(client.name)}
                         </div>
                         <span className="flex-1 text-left">{client.name}</span>
                         {isSelected && <Check className="w-3.5 h-3.5 text-[#1A72D9] shrink-0" />}

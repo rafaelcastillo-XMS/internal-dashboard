@@ -4,10 +4,12 @@ import { useNavigate } from "react-router-dom"
 import { Users, Settings2, Sparkles, BarChart2, Search as SearchIcon, ExternalLink, Plus, X } from "lucide-react"
 import { fetchClientRecords, createClientRecord, type ClientRecord } from "@/features/clients/clientsTable"
 import { clientColor, clientInitials } from "@/features/clients/useClientRecord"
+import { fetchClientProfiles } from "@/features/clients/profiles"
 
 export function AllClients() {
   const navigate = useNavigate()
   const [clients, setClients] = useState<ClientRecord[]>([])
+  const [clientLogos, setClientLogos] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -17,8 +19,14 @@ export function AllClients() {
 
   const loadClients = useCallback(() => {
     setLoading(true)
-    fetchClientRecords()
-      .then(rows => { setClients(rows); setLoadError(null) })
+    Promise.all([fetchClientRecords(), fetchClientProfiles().catch(() => [])])
+      .then(([rows, profiles]) => {
+        setClients(rows)
+        setClientLogos(Object.fromEntries(
+          profiles.filter(profile => profile.logo_url).map(profile => [profile.client_id, profile.logo_url as string]),
+        ))
+        setLoadError(null)
+      })
       .catch(err => setLoadError(err instanceof Error ? err.message : "Unable to load clients."))
       .finally(() => setLoading(false))
   }, [])
@@ -149,8 +157,10 @@ export function AllClients() {
                         onClick={() => navigate(`/clients/${client.id}`)}
                         role="button"
                       >
-                        <div className={`w-11 h-11 rounded-xl ${clientColor(client.id)} flex items-center justify-center text-white font-bold text-base shrink-0 shadow-sm`}>
-                          {clientInitials(client.name)}
+                        <div className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-base font-bold text-white shadow-sm ${clientLogos[client.id] ? "border border-slate-200 bg-white dark:border-slate-700" : clientColor(client.id)}`}>
+                          {clientLogos[client.id] ? (
+                            <img src={clientLogos[client.id]} alt={`${client.name} logo`} className="h-full w-full object-contain p-1" />
+                          ) : clientInitials(client.name)}
                         </div>
                         <div className="pt-0.5 flex-1 min-w-0">
                           <div className="flex items-center gap-1">

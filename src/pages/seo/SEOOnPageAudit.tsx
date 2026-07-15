@@ -113,6 +113,7 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
   const [ahrefsEnabled, setAhrefsEnabled] = useState(true)
   const [ahrefsStatus, setAhrefsStatus] = useState<AhrefsRunStatus>('idle')
   const [ahrefsError, setAhrefsError] = useState('')
+  const [reportGbpMapping, setReportGbpMapping] = useState({ account: '', location: '' })
 
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -159,6 +160,27 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
   useEffect(() => {
     setClient(seoState.clientName || '')
   }, [seoState.clientName])
+
+  // GBP belongs only to Reports. Keeping this query local prevents an unavailable
+  // GBP mapping from affecting the global GSC/GA4 client selector or other SEO pages.
+  useEffect(() => {
+    if (activeTab !== 'download-reports' || !seoState.selectedClientId) return
+    let active = true
+    setReportGbpMapping({ account: '', location: '' })
+    supabase
+      .from('clients')
+      .select('gbp_account_id, gbp_location_id')
+      .eq('id', seoState.selectedClientId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!active || !data) return
+        setReportGbpMapping({
+          account: data.gbp_account_id || '',
+          location: data.gbp_location_id || '',
+        })
+      })
+    return () => { active = false }
+  }, [activeTab, seoState.selectedClientId])
 
   async function markAuditFailed(message: string) {
     if (auditIdRef.current === null) return
@@ -468,6 +490,8 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
             ref={gbpRef}
             selectedGscSite={seoState.selectedGscSite}
             selectedGa4Id={seoState.selectedGa4Id}
+            selectedGbpAccount={reportGbpMapping.account}
+            selectedGbpLocation={reportGbpMapping.location}
             dateRange={seoState.dateRange}
             clientLabel={seoState.clientName || undefined}
           />

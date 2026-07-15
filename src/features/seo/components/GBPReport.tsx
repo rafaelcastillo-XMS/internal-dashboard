@@ -207,6 +207,8 @@ function SectionHeader({ color, icon, title }: { color: string; icon: React.Reac
 interface GBPReportProps {
   selectedGscSite: string
   selectedGa4Id:   string
+  selectedGbpAccount: string
+  selectedGbpLocation: string
   dateRange:       { startDate: string; endDate: string }
   clientLabel?:    string
 }
@@ -219,7 +221,7 @@ export interface GBPReportHandle {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GBPReport(
-  { selectedGscSite, selectedGa4Id, dateRange, clientLabel },
+  { selectedGscSite, selectedGa4Id, selectedGbpAccount, selectedGbpLocation, dateRange, clientLabel },
   ref,
 ) {
   const reportRef           = useRef<HTMLDivElement>(null)
@@ -241,7 +243,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
   }, [])
 
   const fetchData = useCallback(async () => {
-    if (!selectedGscSite) return
+    if (!selectedGbpLocation) return
     setLoad(true)
     setSample(false)
     setLoadError('')
@@ -250,6 +252,8 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
         site:      selectedGscSite,
         ga4:       selectedGa4Id,
         client:    clientLabel ?? '',
+        gbpAccount: selectedGbpAccount,
+        gbpLocation: selectedGbpLocation,
         startDate: dateRange.startDate,
         endDate:   dateRange.endDate,
       })
@@ -265,7 +269,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
     } finally {
       setLoad(false)
     }
-  }, [selectedGscSite, selectedGa4Id, clientLabel, dateRange])
+  }, [selectedGscSite, selectedGa4Id, selectedGbpAccount, selectedGbpLocation, clientLabel, dateRange])
 
   useImperativeHandle(ref, () => ({
     triggerDownload: handleDownloadPDF,
@@ -321,7 +325,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
   }
 
   // ── No site selected ──────────────────────────────────────────────────────
-  if (!selectedGscSite) {
+  if (!selectedGbpLocation) {
     return (
       <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark px-8 py-20 text-center">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#4285F4]/10 border border-[#4285F4]/20">
@@ -333,7 +337,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
           Select a client to generate the report
         </h3>
         <p className="text-sm text-body dark:text-bodydark max-w-xs mx-auto">
-          Use the GSC selector above to choose a client — their Google Business Profile data will appear here.
+          This client does not have a Google Business Profile location assigned. Select one from Client Integrations.
         </p>
       </div>
     )
@@ -350,6 +354,13 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
   }
 
   const d = data
+  const postClientName = clientLabel?.trim() || 'Client'
+  const postClientInitials = postClientName
+    .split(/\s+/)
+    .map(word => word[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase()
 
   return (
     <div>
@@ -489,11 +500,15 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             {d.posts.map((post, i) => (
               <div key={i} className="rounded-lg border border-stroke dark:border-strokedark p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="h-8 w-8 rounded-full bg-[#1A72D9]/15 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-bold text-[#1A72D9]">AC</span>
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full ${clientLogoUrl ? 'border border-stroke bg-white dark:border-strokedark' : 'bg-[#1A72D9]/15'}`}>
+                    {clientLogoUrl ? (
+                      <img src={clientLogoUrl} alt={`${postClientName} logo`} className="h-full w-full object-contain p-0.5" />
+                    ) : (
+                      <span className="text-[10px] font-bold text-[#1A72D9]">{postClientInitials}</span>
+                    )}
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-black dark:text-[#E2E5E9]">A/C Now</p>
+                    <p className="text-xs font-semibold text-black dark:text-[#E2E5E9]">{postClientName}</p>
                     <p className="text-[10px] text-body dark:text-bodydark">{post.date}</p>
                   </div>
                 </div>

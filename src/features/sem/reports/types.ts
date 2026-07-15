@@ -48,7 +48,17 @@ export interface SlideContent {
   charts?: ChartBlockData[]
   highlights?: string[]
   noteBlocks?: TextBlock[]
+  supportingImageSrc?: string
+  lsaKeyResults?: LsaKeyResultsData
   finalMessage?: string
+}
+
+export interface LsaKeyResultsData {
+  totalSpend: number
+  chargedLeads: number
+  adImpressions: number
+  topImpressionRate: number
+  absoluteTopImpressionRate: number
 }
 
 export interface ReportDataSource {
@@ -109,6 +119,23 @@ export interface ChartBlockData {
   title: string
   description?: string
   series: ChartSeriesPoint[]
+  deviceData?: DevicePerformanceDatum[]
+  heatmapData?: DayHourHeatmapData
+}
+
+export interface DevicePerformanceDatum {
+  key: string
+  label: string
+  cost: number
+  clicks: number
+  conversions: number
+}
+
+export interface DayHourHeatmapData {
+  metric: 'impressions'
+  days: string[]
+  hours: number[]
+  values: number[][]
 }
 
 export interface ChartSeriesPoint {

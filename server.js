@@ -7,9 +7,10 @@ import { execFile } from "child_process"
 import { promisify } from "util"
 import Anthropic from "@anthropic-ai/sdk"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
-import { getGbpReport } from "./server/gbpReport.js"
+import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
+import { handleNotionClientSyncRequest } from "./server/notionSync.js"
 
 const execFileAsync = promisify(execFile)
 
@@ -60,6 +61,17 @@ async function mondayGraphQL(token, query, variables = {}) {
 
 const SUPABASE_URL      = "https://sjpvyxdyleebhqlmqscy.supabase.co"
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcHZ5eGR5bGVlYmhxbG1xc2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzgxODksImV4cCI6MjA4ODc1NDE4OX0.ZvzbBm-L8Jt3FzhmmX3qd7_inwrupjQrfh9JWIlX1ng"
+
+// ─── POST /api/notion/clients/:clientId/sync ────────────────────────────────
+app.post("/api/notion/clients/:clientId/sync", async (req, res) => {
+  await handleNotionClientSyncRequest(req, res, {
+    clientId: req.params.clientId,
+    notionApiKey: process.env.NOTION_API_KEY ?? "",
+    notionDataSourceId: process.env.NOTION_DATA_SOURCE_ID ?? "",
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY,
+  })
+})
 
 // ─── GET /api/sem/search-terms?accountId=...&startDate=...&endDate=... ────────
 app.get("/api/sem/search-terms", async (req, res) => {
@@ -586,12 +598,24 @@ registerGoogleAuthRoutes(app)
 registerGbpAuthRoutes(app)
 
 // ── SEO: Google Business Profile report ──────────────────────────────────────
+app.get('/api/seo/gbp/locations', async (_req, res) => {
+  try {
+    res.json({ locations: await listGbpLocations() })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'GBP locations failed'
+    console.error('[seo/gbp/locations]', message)
+    res.status(500).json({ error: message })
+  }
+})
+
 app.get('/api/seo/gbp', async (req, res) => {
   try {
     const data = await getGbpReport({
       site: req.query.site,
       ga4: req.query.ga4,
       client: req.query.client,
+      gbpAccount: req.query.gbpAccount,
+      gbpLocation: req.query.gbpLocation,
       startDate: req.query.startDate,
       endDate: req.query.endDate,
     })

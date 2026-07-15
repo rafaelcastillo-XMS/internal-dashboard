@@ -69,6 +69,15 @@ export async function fetchClientProfile(clientId: string) {
     return data as ClientProfileRow | null
 }
 
+export async function fetchClientProfiles() {
+    const { data, error } = await supabase
+        .from("client_profiles")
+        .select("*")
+
+    if (error) throw error
+    return (data ?? []) as ClientProfileRow[]
+}
+
 export async function saveClientProfile(clientId: string, form: ClientProfileForm) {
     const payload = {
         client_id: clientId,

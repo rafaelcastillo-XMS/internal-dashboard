@@ -86,7 +86,7 @@ async function gFetch(url) {
 let locationsCache = null // { at, locations }
 const LOCATIONS_TTL_MS = 10 * 60 * 1000
 
-async function listAllLocations() {
+export async function listGbpLocations() {
   if (locationsCache && Date.now() - locationsCache.at < LOCATIONS_TTL_MS) return locationsCache.locations
 
   const accountsData = await gFetch(`${GBP_ACCOUNT_BASE}/accounts`)
@@ -100,7 +100,12 @@ async function listAllLocations() {
       if (pageToken) params.set("pageToken", pageToken)
       const data = await gFetch(`${GBP_INFO_BASE}/${account.name}/locations?${params}`)
       for (const loc of data.locations ?? []) {
-        all.push({ ...loc, accountName: account.name })
+        all.push({
+          accountName: account.name,
+          locationName: loc.name,
+          title: loc.title ?? "",
+          websiteUri: loc.websiteUri ?? "",
+        })
       }
       pageToken = data.nextPageToken ?? null
     } while (pageToken)
@@ -110,51 +115,14 @@ async function listAllLocations() {
   return all
 }
 
-function normalizeDomain(input) {
-  return String(input)
-    .replace(/^sc-domain:/, "")
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .replace(/\/.*$/, "")
-    .toLowerCase()
-}
-
-function normalizeBusinessName(input) {
-  const ignored = new Set(["llc", "inc", "corp", "corporation", "company", "co", "ltd"])
-  return String(input ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter((word) => word && !ignored.has(word))
-    .join(" ")
-}
-
-function businessNameScore(left, right) {
-  const a = normalizeBusinessName(left)
-  const b = normalizeBusinessName(right)
-  if (!a || !b) return 0
-  if (a === b) return 1
-  if (a.includes(b) || b.includes(a)) return 0.9
-  const aWords = new Set(a.split(" "))
-  const bWords = new Set(b.split(" "))
-  const shared = [...aWords].filter((word) => bWords.has(word)).length
-  return shared / Math.max(aWords.size, bWords.size)
-}
-
-async function findLocationForSite(site, clientName) {
-  const domain = normalizeDomain(site)
-  const locations = await listAllLocations()
-  const domainMatch = locations.find((l) => l.websiteUri && normalizeDomain(l.websiteUri) === domain)
-  if (domainMatch) return domainMatch
-
-  const rankedByName = locations
-    .map((location) => ({ location, score: businessNameScore(location.title, clientName) }))
-    .sort((a, b) => b.score - a.score)
-  const match = rankedByName[0]?.score >= 0.6 ? rankedByName[0].location : null
-  if (!match) throw new Error(`No GBP location found with website ${domain}`)
+async function findLocationById(accountName, locationName) {
+  if (!locationName) return null
+  const locations = await listGbpLocations()
+  const match = locations.find((location) =>
+    location.locationName === locationName &&
+    (!accountName || location.accountName === accountName)
+  )
+  if (!match) throw new Error(`GBP location ${locationName} is not available to the connected account`)
   return match
 }
 
@@ -227,7 +195,7 @@ async function fetchDailyMetric(locationPath, metric, startDate, endDate) {
 
 async function fetchGbpSections(location, startDate, endDate) {
   // Performance API wants bare "locations/{id}"
-  const locId = location.name.split("/").pop()
+  const locId = location.locationName.split("/").pop()
   const locationPath = `locations/${locId}`
 
   const metricNames = [...INTERACTION_METRICS, ...IMPRESSION_METRICS.map((m) => m.metric)]
@@ -291,7 +259,7 @@ async function fetchGbpSections(location, startDate, endDate) {
   }
   let posts = []
   try {
-    const postsData = await gFetch(`${GBP_V4_BASE}/${location.accountName}/${location.name}/localPosts?pageSize=8`)
+    const postsData = await gFetch(`${GBP_V4_BASE}/${location.accountName}/${location.locationName}/localPosts?pageSize=8`)
     posts = (postsData.localPosts ?? []).map((p) => {
       const summary = p.summary ?? ""
       const hashtags = (summary.match(/#[\w]+/g) ?? []).join(" ")
@@ -483,10 +451,11 @@ async function fetchGscSection(site, startDate, endDate) {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export async function getGbpReport({ site, ga4, client, startDate, endDate }) {
-  if (!site || !startDate || !endDate) throw new Error("site, startDate and endDate are required")
+export async function getGbpReport({ site, ga4, client, gbpAccount, gbpLocation, startDate, endDate }) {
+  if (!gbpLocation || !startDate || !endDate) throw new Error("gbpLocation, startDate and endDate are required")
 
-  const location = await findLocationForSite(site, client)
+  // Reports use the exact GBP location explicitly assigned to the client.
+  const location = await findLocationById(gbpAccount, gbpLocation)
 
   const [gbp, ga4Sections, gsc] = await Promise.all([
     fetchGbpSections(location, startDate, endDate),
@@ -494,7 +463,7 @@ export async function getGbpReport({ site, ga4, client, startDate, endDate }) {
       console.warn("[gbp-report] GA4 unavailable:", error instanceof Error ? error.message : error)
       return null
     }) : Promise.resolve(null),
-    fetchGscSection(site, startDate, endDate).catch(() => null),
+    site ? fetchGscSection(site, startDate, endDate).catch(() => null) : Promise.resolve(null),
   ])
 
   const EMPTY_GA4 = {

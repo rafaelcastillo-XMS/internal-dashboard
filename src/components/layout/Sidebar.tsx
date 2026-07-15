@@ -11,6 +11,7 @@ import {
 import { XMSLogo } from "@/components/ui/XMSLogo"
 import { useSidebar } from "@/context/useSidebar"
 import { getClients } from "@/features/clients/repository"
+import { fetchClientProfiles } from "@/features/clients/profiles"
 import { supabase } from "@/lib/supabase"
 
 const activeClass = "bg-[#1F2937] text-white border border-transparent shadow-sm"
@@ -70,9 +71,23 @@ export function Sidebar() {
     const [bugOpen, setBugOpen] = useState(false)
     const [bugText, setBugText] = useState("")
     const [bugSent, setBugSent] = useState(false)
+    const [clientLogos, setClientLogos] = useState<Record<string, string>>({})
     const bugTextareaRef = useRef<HTMLTextAreaElement>(null)
     const { collapsed, isMobileOpen, closeMobile } = useSidebar()
     const clients = getClients()
+
+    useEffect(() => {
+        let active = true
+        fetchClientProfiles()
+            .then(profiles => {
+                if (!active) return
+                setClientLogos(Object.fromEntries(
+                    profiles.filter(profile => profile.logo_url).map(profile => [profile.client_id, profile.logo_url as string]),
+                ))
+            })
+            .catch(() => { /* Keep the existing initials fallback. */ })
+        return () => { active = false }
+    }, [])
 
     useEffect(() => {
         if (bugOpen) setTimeout(() => bugTextareaRef.current?.focus(), 80)
@@ -242,8 +257,10 @@ export function Sidebar() {
                                                             }`
                                                         }
                                                     >
-                                                        <div className={`w-6 h-6 rounded-md ${client.color} flex items-center justify-center text-white font-bold text-[9px] shrink-0`}>
-                                                            {client.initials}
+                                                        <div className={`flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md text-[9px] font-bold text-white ${clientLogos[client.id] ? "border border-slate-200 bg-white" : client.color}`}>
+                                                            {clientLogos[client.id] ? (
+                                                                <img src={clientLogos[client.id]} alt={`${client.name} logo`} className="h-full w-full object-contain p-0.5" />
+                                                            ) : client.initials}
                                                         </div>
                                                         <span className="truncate">{client.name}</span>
                                                         <span className={`ml-auto w-1.5 h-1.5 rounded-full shrink-0 ${client.status === "active" ? "bg-green-500" : "bg-slate-400"}`} />

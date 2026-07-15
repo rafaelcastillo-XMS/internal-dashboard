@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, Check, ChevronDown, Building2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { fetchClientProfiles } from '@/features/clients/profiles'
 
 const ACCOUNTS_KEY = 'xms_sem_accounts'
 const SELECTED_KEY = 'xms_sem_selected'
@@ -20,6 +21,7 @@ export function SEMAccountSelector() {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [accounts, setAccounts] = useState<AdsAccount[]>([])
+  const [accountLogos, setAccountLogos] = useState<Record<string, string>>({})
   const [selectedId, setSelectedId] = useState<string>('')
   const buttonRef = useRef<HTMLButtonElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -44,10 +46,26 @@ export function SEMAccountSelector() {
 
   useEffect(() => {
     loadAccounts()
+    let active = true
+    Promise.all([
+      supabase.from('clients').select('id, sem_account_id').not('sem_account_id', 'is', null),
+      fetchClientProfiles().catch(() => []),
+    ]).then(([{ data, error }, profiles]) => {
+      if (!active || error) return
+      const logosByClient = Object.fromEntries(
+        profiles.filter(profile => profile.logo_url).map(profile => [profile.client_id, profile.logo_url as string]),
+      )
+      setAccountLogos(Object.fromEntries(
+        (data ?? [])
+          .filter(client => client.sem_account_id && logosByClient[client.id])
+          .map(client => [client.sem_account_id as string, logosByClient[client.id]]),
+      ))
+    }).catch(() => { /* Keep the existing initials fallback. */ })
     try {
       const sel = JSON.parse(sessionStorage.getItem(SELECTED_KEY) || 'null')
       if (sel?.accountId) setSelectedId(sel.accountId)
     } catch { /* ignore */ }
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
@@ -90,8 +108,10 @@ export function SEMAccountSelector() {
         className="w-full text-left rounded-md border border-[var(--sidebar-border)] bg-[var(--bg-surface)] dark:bg-white/[0.03] px-3 py-2.5 hover:bg-[var(--bg-subtle)] transition-colors group"
       >
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-[#15803D] flex items-center justify-center text-white text-[10px] font-bold shrink-0 ring-2 ring-[#15803D]/20">
-            {selectedAccount ? getInitials(selectedAccount.name) : <Building2 className="w-3.5 h-3.5" />}
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full text-[10px] font-bold text-white ring-2 ${selectedAccount && accountLogos[selectedAccount.id] ? 'bg-white ring-slate-200' : 'bg-[#15803D] ring-[#15803D]/20'}`}>
+            {selectedAccount && accountLogos[selectedAccount.id] ? (
+              <img src={accountLogos[selectedAccount.id]} alt={`${selectedAccount.name} logo`} className="h-full w-full object-contain p-0.5" />
+            ) : selectedAccount ? getInitials(selectedAccount.name) : <Building2 className="w-3.5 h-3.5" />}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
@@ -146,8 +166,10 @@ export function SEMAccountSelector() {
                         onClick={() => handleSelect(account)}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors hover:bg-[var(--hover-bg)] ${isSelected ? 'font-semibold text-[var(--text-primary)] bg-[var(--hover-bg)]' : 'font-medium text-[var(--text-secondary)]'}`}
                       >
-                        <div className="w-8 h-8 rounded-full bg-[#15803D] flex items-center justify-center text-white text-[10px] font-bold shrink-0 ring-2 ring-[#15803D]/20">
-                          {getInitials(account.name)}
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full text-[10px] font-bold text-white ring-2 ${accountLogos[account.id] ? 'bg-white ring-slate-200' : 'bg-[#15803D] ring-[#15803D]/20'}`}>
+                          {accountLogos[account.id] ? (
+                            <img src={accountLogos[account.id]} alt={`${account.name} logo`} className="h-full w-full object-contain p-0.5" />
+                          ) : getInitials(account.name)}
                         </div>
                         <span className="flex-1 text-left">{account.name}</span>
                         {isSelected && <Check className="w-3.5 h-3.5 text-green-600 shrink-0" />}

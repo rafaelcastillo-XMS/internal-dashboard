@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import type { Client } from "@/data/dummy"
@@ -23,7 +23,7 @@ type Message = {
     timestamp: Date
 }
 
-function ChatArea({ client, notebook }: { client: Client; notebook: NotebookIntegrationConfig }) {
+function ChatArea({ client, notebook, logoUrl }: { client: Client; notebook: NotebookIntegrationConfig; logoUrl: string }) {
     const navigate = useNavigate()
     const [messages, setMessages] = useState<Message[]>([
         {
@@ -113,6 +113,7 @@ function ChatArea({ client, notebook }: { client: Client; notebook: NotebookInte
         <div className="flex-1 flex flex-col h-full border-r border-slate-200/70 dark:border-white/10">
             <div className="p-5 border-b border-slate-200/70 dark:border-white/10 flex items-center gap-3 bg-[var(--bg-surface)]/90 backdrop-blur-md sticky top-0 z-10">
                 <Avatar className="w-10 h-10 border border-slate-200/70 dark:border-white/10 shadow-sm">
+                    {logoUrl && <AvatarImage src={logoUrl} alt={`${client.name} logo`} className="object-contain bg-white p-1" />}
                     <AvatarFallback className={`${client.color} text-white font-bold`}>{client.initials}</AvatarFallback>
                 </Avatar>
                 <div>
@@ -155,6 +156,7 @@ function ChatArea({ client, notebook }: { client: Client; notebook: NotebookInte
                                 <div className={`flex items-end max-w-[78%] gap-2 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
                                     {msg.sender === "client" && (
                                         <Avatar className="w-7 h-7 mb-1 border border-slate-200/70 dark:border-white/10 shadow-sm">
+                                            {logoUrl && <AvatarImage src={logoUrl} alt={`${client.name} logo`} className="object-contain bg-white p-0.5" />}
                                             <AvatarFallback className={`${client.color} text-white text-xs font-bold`}>{client.initials}</AvatarFallback>
                                         </Avatar>
                                     )}
@@ -178,6 +180,7 @@ function ChatArea({ client, notebook }: { client: Client; notebook: NotebookInte
                             >
                                 <div className="flex items-end gap-2">
                                     <Avatar className="w-7 h-7 mb-1 border border-slate-200/70 dark:border-white/10 shadow-sm">
+                                        {logoUrl && <AvatarImage src={logoUrl} alt={`${client.name} logo`} className="object-contain bg-white p-0.5" />}
                                         <AvatarFallback className="text-xs">{client.initials}</AvatarFallback>
                                     </Avatar>
                                     <div className="bg-[var(--bg-subtle)] px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1.5 items-center h-11">
@@ -212,12 +215,14 @@ function ChatArea({ client, notebook }: { client: Client; notebook: NotebookInte
     )
 }
 
-function SidebarInfo({ client }: { client: Client }) {
+function SidebarInfo({ client, logoUrl }: { client: Client; logoUrl: string }) {
     return (
         <div className="w-[320px] bg-[var(--bg-surface)] h-full shrink-0 overflow-hidden hidden lg:flex flex-col">
             <div className="p-6 flex flex-col items-center border-b border-slate-200/70 dark:border-white/10">
-                <div className={`mb-4 h-24 w-24 rounded-3xl shadow-xl flex items-center justify-center ${client.color} text-3xl font-bold text-white`}>
-                    {client.initials}
+                <div className={`mb-4 flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl text-3xl font-bold text-white shadow-xl ${logoUrl ? "border border-slate-200 bg-white dark:border-slate-700" : client.color}`}>
+                    {logoUrl ? (
+                        <img src={logoUrl} alt={`${client.name} logo`} className="h-full w-full object-contain p-2" />
+                    ) : client.initials}
                 </div>
                 <h3 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] mb-1">{client.name}</h3>
                 <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${client.status === "active"
@@ -287,15 +292,16 @@ function InfoItem({ icon: Icon, label, value, isLink, linkUrl, badge }: { icon: 
 
 export function Clients() {
     const { clientId } = useParams<{ clientId: string }>()
-    const { client, record } = useClientRecord(clientId)
+    const { client, profile, record } = useClientRecord(clientId)
     const notebook = notebookConfigFromRecord(record)
+    const logoUrl = profile?.logo_url ?? ""
 
     return (
         <div className="h-full overflow-y-auto bg-[var(--bg-app)] custom-scrollbar">
             <div className="mx-auto max-w-screen-2xl p-6 h-full">
                 <div className="flex h-full w-full overflow-hidden rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-                    <ChatArea client={client} notebook={notebook} />
-                    <SidebarInfo client={client} />
+                    <ChatArea client={client} notebook={notebook} logoUrl={logoUrl} />
+                    <SidebarInfo client={client} logoUrl={logoUrl} />
                 </div>
             </div>
         </div>

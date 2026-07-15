@@ -304,10 +304,23 @@ async function fetchBreakdowns(token: string, params: URLSearchParams) {
     ${baseWhere}
   `
 
-  const [deviceData, dayData, hourData] = await Promise.all([
+  const dayHourQuery = `
+    SELECT
+      segments.day_of_week,
+      segments.hour,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM campaign
+    ${baseWhere}
+  `
+
+  const [deviceData, dayData, hourData, dayHourData] = await Promise.all([
     adsSearch(token, accountId, deviceQuery).catch(() => ({ results: [] })),
     adsSearch(token, accountId, dayQuery).catch(() => ({ results: [] })),
     adsSearch(token, accountId, hourQuery).catch(() => ({ results: [] })),
+    adsSearch(token, accountId, dayHourQuery).catch(() => ({ results: [] })),
   ])
 
   // deno-lint-ignore no-explicit-any
@@ -317,7 +330,19 @@ async function fetchBreakdowns(token: string, params: URLSearchParams) {
   // deno-lint-ignore no-explicit-any
   const hours = aggregateBreakdownRows((hourData.results ?? []).map((row: any) => mapBreakdownRow(row, Number(row.segments?.hour ?? 0))))
 
-  return { devices, days, hours, dateRange: { start: startDate, end: endDate } }
+  // Day and hour must be requested together to build an accurate Google Ads
+  // heatmap. Aggregate campaign rows into one cell per weekday/hour pair.
+  // deno-lint-ignore no-explicit-any
+  const dayHours = aggregateBreakdownRows((dayHourData.results ?? []).map((row: any) => {
+    const day = row.segments?.dayOfWeek ?? "UNKNOWN"
+    const hour = Number(row.segments?.hour ?? 0)
+    return mapBreakdownRow(row, `${day}:${hour}`, `${day}:${hour}`)
+  })).map((row) => {
+    const [day, rawHour] = String(row.key).split(":")
+    return { ...row, day, hour: Number(rawHour) }
+  })
+
+  return { devices, days, hours, dayHours, dateRange: { start: startDate, end: endDate } }
 }
 
 // ── /search-terms ─────────────────────────────────────────────────────────────
@@ -364,6 +389,79 @@ async function fetchSearchTerms(token: string, params: URLSearchParams) {
   }))
 
   return { searchTerms, dateRange: { start: startDate, end: endDate } }
+}
+
+// ── /lsa-performance ─────────────────────────────────────────────────────────
+
+async function fetchLsaPerformance(token: string, params: URLSearchParams) {
+  const accountId = (params.get("accountId") ?? "").replace(/-/g, "")
+  const startDate = params.get("startDate") ?? ""
+  const endDate = params.get("endDate") ?? ""
+  if (!accountId || !startDate || !endDate) throw new Error("Missing required params: accountId, startDate, endDate")
+
+  const campaignQuery = `
+    SELECT
+      metrics.cost_micros,
+      metrics.impressions
+    FROM campaign
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+      AND campaign.advertising_channel_type = 'LOCAL_SERVICES'
+      AND campaign.status != 'REMOVED'
+  `
+  const impressionShareQuery = `
+    SELECT
+      metrics.impressions,
+      metrics.search_top_impression_share,
+      metrics.search_absolute_top_impression_share
+    FROM campaign
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+      AND campaign.advertising_channel_type = 'LOCAL_SERVICES'
+      AND campaign.status != 'REMOVED'
+  `
+  const leadsQuery = `
+    SELECT
+      local_services_lead.lead_charged
+    FROM local_services_lead
+    WHERE local_services_lead.creation_date_time >= '${startDate} 00:00:00'
+      AND local_services_lead.creation_date_time <= '${endDate} 23:59:59'
+  `
+
+  const [campaignData, shareData, leadsData] = await Promise.all([
+    adsSearch(token, accountId, campaignQuery).catch(() => ({ results: [] })),
+    adsSearch(token, accountId, impressionShareQuery).catch(() => ({ results: [] })),
+    adsSearch(token, accountId, leadsQuery).catch(() => ({ results: [] })),
+  ])
+
+  let totalSpend = 0
+  let adImpressions = 0
+  // deno-lint-ignore no-explicit-any
+  for (const row of (campaignData.results ?? []) as any[]) {
+    totalSpend += safeFloat(row.metrics?.costMicros, MICROS)
+    adImpressions += Math.round(Number(row.metrics?.impressions ?? 0))
+  }
+
+  let topWeighted = 0
+  let absoluteTopWeighted = 0
+  let shareImpressions = 0
+  // deno-lint-ignore no-explicit-any
+  for (const row of (shareData.results ?? []) as any[]) {
+    const impressions = Math.round(Number(row.metrics?.impressions ?? 0))
+    shareImpressions += impressions
+    topWeighted += safeFloat(row.metrics?.searchTopImpressionShare) * impressions
+    absoluteTopWeighted += safeFloat(row.metrics?.searchAbsoluteTopImpressionShare) * impressions
+  }
+
+  // deno-lint-ignore no-explicit-any
+  const chargedLeads = (leadsData.results ?? []).filter((row: any) => Boolean(row.localServicesLead?.leadCharged)).length
+
+  return {
+    totalSpend: Math.round(totalSpend * 100) / 100,
+    chargedLeads,
+    adImpressions,
+    topImpressionRate: shareImpressions > 0 ? Math.round((topWeighted / shareImpressions) * 10000) / 100 : 0,
+    absoluteTopImpressionRate: shareImpressions > 0 ? Math.round((absoluteTopWeighted / shareImpressions) * 10000) / 100 : 0,
+    dateRange: { start: startDate, end: endDate },
+  }
 }
 
 // ── /sync ──────────────────────────────────────────────────────────────────────
@@ -424,7 +522,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS })
 
   const url = new URL(req.url)
-  const segment = url.pathname.split("/").pop() // 'accounts', 'performance', 'breakdowns', 'search-terms'
+  const segment = url.pathname.split("/").pop() // 'accounts', 'performance', 'breakdowns', 'search-terms', 'lsa-performance'
 
   try {
     const token = await getAccessToken()
@@ -440,6 +538,8 @@ serve(async (req) => {
       result = await fetchBreakdowns(token, url.searchParams)
     } else if (segment === "search-terms") {
       result = await fetchSearchTerms(token, url.searchParams)
+    } else if (segment === "lsa-performance") {
+      result = await fetchLsaPerformance(token, url.searchParams)
     } else {
       return new Response(JSON.stringify({ error: `Unknown endpoint: ${segment}` }), {
         status: 404,

@@ -15,17 +15,45 @@ import {
   reportNeedsGoogleAdsBreakdownHydration,
   reportNeedsGoogleAdsKeywordHydration,
   reportNeedsGoogleAdsKpiHydration,
+  reportNeedsGoogleAdsSearchTermHydration,
+  reportNeedsLsaKeyResultsHydration,
 } from '@/features/sem/reports/reportData'
 import {
   ChartBlock,
   KpiCard,
+  LsaKeyResultsPanel,
   ReportActionsBar,
   ReportSidebar,
   ReportSlide,
 } from '@/features/sem/reports/components'
 import type { Report, ReportStatus, Slide } from '@/features/sem/reports/types'
+import { fetchClientProfile } from '@/features/clients/profiles'
+import { supabase } from '@/lib/supabase'
 
 type AccountChoice = { value: string; label: string }
+
+async function resolveClientLogo(identifier: string) {
+  const byId = await supabase
+    .from('clients')
+    .select('id')
+    .eq('id', identifier)
+    .maybeSingle()
+  if (byId.error) throw byId.error
+
+  let dashboardClientId = byId.data?.id ?? ''
+  if (!dashboardClientId) {
+    const byAccount = await supabase
+      .from('clients')
+      .select('id')
+      .eq('sem_account_id', identifier)
+      .maybeSingle()
+    if (byAccount.error) throw byAccount.error
+    dashboardClientId = byAccount.data?.id ?? ''
+  }
+
+  if (!dashboardClientId) return ''
+  return (await fetchClientProfile(dashboardClientId))?.logo_url ?? ''
+}
 
 function formatUpdated(iso: string) {
   return new Date(iso).toLocaleString('en-US', {
@@ -296,13 +324,23 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
                       <p className="mt-6 text-2xl font-bold text-white/85">{report.clientName}</p>
                     </div>
                   )}
-                  {slide.content.kpis?.length ? (
+                  {slide.type === 'lsa_key_results' && <LsaKeyResultsPanel slide={slide} />}
+                  {slide.type !== 'lsa_key_results' && slide.content.kpis?.length ? (
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {slide.content.kpis.map((metric) => <KpiCard key={metric.id} metric={metric} />)}
                     </div>
                   ) : null}
+                  {slide.type === 'google_ads_kpis' && slide.content.supportingImageSrc ? (
+                    <div className="mt-3 flex max-h-[210px] items-center justify-center overflow-hidden bg-[#F7FBFF]">
+                      <img
+                        src={slide.content.supportingImageSrc}
+                        alt="Supporting Google Ads performance"
+                        className="max-h-[210px] max-w-full object-contain"
+                      />
+                    </div>
+                  ) : null}
                   {slide.content.charts?.length ? (
-                    <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+                    <div className={`mt-4 grid grid-cols-1 gap-3 ${slide.type === 'devices_day_hour' ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
                       {slide.content.charts.map((chart) => <ChartBlock key={chart.id} chart={chart} />)}
                     </div>
                   ) : null}
@@ -313,7 +351,7 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
                           <tr>{table.columns.map((column) => <th key={column.key} className="px-3 py-2 text-left">{column.label}</th>)}</tr>
                         </thead>
                         <tbody className="divide-y divide-[#D8E4F2]">
-                          {table.rows.slice(0, slide.type === 'keywords' || slide.type === 'search_terms' ? 7 : table.rows.length).map((row, index) => (
+                          {table.rows.slice(0, slide.type === 'keywords' ? 7 : slide.type === 'search_terms' ? 9 : table.rows.length).map((row, index) => (
                             <tr key={index}>
                               {table.columns.map((column) => <td key={column.key} className="px-3 py-2 text-slate-600">{row[column.key]}</td>)}
                             </tr>
@@ -352,8 +390,8 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
                       ))}
                     </ul>
                   ) : null}
-                  {[...(slide.type === 'ads' ? [] : slide.content.textBlocks ?? []), ...(slide.content.noteBlocks ?? [])].map((block) => (
-                    <div key={block.id} className="mt-4 rounded-lg border border-[#D8E4F2] bg-[#F7FBFF] p-4">
+                  {[...(slide.type === 'ads' || slide.type === 'lsa_key_results' ? [] : slide.content.textBlocks ?? []), ...(slide.content.noteBlocks ?? [])].map((block) => (
+                    <div key={block.id} className={slide.type === 'google_ads_kpis' ? 'mt-3 border-t border-[#D8E4F2] pt-3' : 'mt-4 rounded-lg border border-[#D8E4F2] bg-[#F7FBFF] p-4'}>
                       {slide.type === 'ads' || slide.type === 'search_terms' || slide.type === 'keywords' ? null : (
                         <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#0057C2]">{block.label}</p>
                       )}
@@ -429,7 +467,9 @@ function ReportEditorView({
     const needsKpis = reportNeedsGoogleAdsKpiHydration(sourceReport)
     const needsKeywords = reportNeedsGoogleAdsKeywordHydration(sourceReport)
     const needsBreakdowns = reportNeedsGoogleAdsBreakdownHydration(sourceReport)
-    if (!needsKpis && !needsKeywords && !needsBreakdowns) return
+    const needsSearchTerms = reportNeedsGoogleAdsSearchTermHydration(sourceReport)
+    const needsLsa = reportNeedsLsaKeyResultsHydration(sourceReport)
+    if (!needsKpis && !needsKeywords && !needsBreakdowns && !needsSearchTerms && !needsLsa) return
     let cancelled = false
 
     setGoogleAdsDataLoading(true)
@@ -588,6 +628,7 @@ export function SEMAccountReport() {
   const { clientId, reportId } = useParams<{ clientId?: string; reportId?: string }>()
   const semState = useSEMDashboardState()
   const [reports, setReports] = useState<Report[]>(() => readStoredReports())
+  const [clientLogo, setClientLogo] = useState<string | null>(null)
 
   const routeClientId = clientId ? decodeURIComponent(clientId) : ''
   const fallbackClientId = semState.selectedAccountId || semState.accountOptions[0]?.value || 'sample-sem-client'
@@ -601,6 +642,29 @@ export function SEMAccountReport() {
   const currentClientValue = currentClient.value
   const currentClientLabel = currentClient.label
 
+  useEffect(() => {
+    let active = true
+    setClientLogo(null)
+    resolveClientLogo(effectiveClientId)
+      .then(logo => { if (active) setClientLogo(logo) })
+      .catch(() => { if (active) setClientLogo('') })
+    return () => { active = false }
+  }, [effectiveClientId])
+
+  useEffect(() => {
+    if (!clientLogo) return
+    setReports(current => {
+      let changed = false
+      const next = current.map(report => {
+        if (report.clientId !== effectiveClientId || report.clientLogo === clientLogo) return report
+        changed = true
+        return { ...report, clientLogo, updatedAt: new Date().toISOString() }
+      })
+      if (changed) writeStoredReports(next)
+      return changed ? next : current
+    })
+  }, [clientLogo, effectiveClientId])
+
   const clientOptions = useMemo(() => {
     const options = semState.accountOptions.length > 0
       ? semState.accountOptions
@@ -610,15 +674,15 @@ export function SEMAccountReport() {
   }, [semState.accountOptions, currentClientValue, currentClientLabel])
 
   useEffect(() => {
-    if (!effectiveClientId || !currentClient.label) return
+    if (!effectiveClientId || !currentClient.label || clientLogo === null) return
     setReports((current) => {
       if (current.some((report) => report.clientId === effectiveClientId)) return current
-      const seeded = createSeedReportsForClient({ id: effectiveClientId, name: currentClient.label })
+      const seeded = createSeedReportsForClient({ id: effectiveClientId, name: currentClient.label, logo: clientLogo })
       const next = [...seeded, ...current]
       writeStoredReports(next)
       return next
     })
-  }, [effectiveClientId, currentClient.label])
+  }, [effectiveClientId, currentClient.label, clientLogo])
 
   const sortedReports = useMemo(() => {
     return reports
@@ -636,9 +700,13 @@ export function SEMAccountReport() {
 
   const handleCreate = async (selectedClientId: string, month: string, year: number) => {
     const option = clientOptions.find((item) => item.value === selectedClientId)
+    const resolvedLogo = selectedClientId === effectiveClientId && clientLogo !== null
+      ? clientLogo
+      : await resolveClientLogo(selectedClientId).catch(() => '')
     const baseReport = createReportFromTemplate({
       clientId: selectedClientId,
       clientName: option?.label || selectedClientId,
+      clientLogo: resolvedLogo,
       month,
       year,
     })

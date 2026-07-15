@@ -86,6 +86,28 @@ interface GoogleAdsPerformanceResponse {
   error?: string
 }
 
+interface GoogleAdsSearchTermApiRow {
+  search_term?: string
+  impressions?: number
+  clicks?: number
+  cost?: number
+  conversions?: number
+}
+
+interface GoogleAdsSearchTermsResponse {
+  searchTerms?: GoogleAdsSearchTermApiRow[]
+  error?: string
+}
+
+interface LsaPerformanceResponse {
+  totalSpend?: number
+  chargedLeads?: number
+  adImpressions?: number
+  topImpressionRate?: number
+  absoluteTopImpressionRate?: number
+  error?: string
+}
+
 interface GoogleAdsBreakdownRow {
   key?: string | number
   label?: string
@@ -95,10 +117,16 @@ interface GoogleAdsBreakdownRow {
   conversions?: number
 }
 
+interface GoogleAdsDayHourRow extends GoogleAdsBreakdownRow {
+  day?: string
+  hour?: number
+}
+
 interface GoogleAdsBreakdownsResponse {
   devices?: GoogleAdsBreakdownRow[]
   days?: GoogleAdsBreakdownRow[]
   hours?: GoogleAdsBreakdownRow[]
+  dayHours?: GoogleAdsDayHourRow[]
   error?: string
 }
 
@@ -235,6 +263,32 @@ async function fetchGoogleAdsBreakdowns(
   const response = await edgeFetch(`${SEM_API}/breakdowns?${params}`)
   const json = await response.json() as GoogleAdsBreakdownsResponse
 
+  if (!response.ok || json.error) throw new Error(json.error ?? `Google Ads API HTTP ${response.status}`)
+  return json
+}
+
+async function fetchGoogleAdsSearchTerms(
+  accountId: string,
+  dateRange: { start: string; end: string },
+): Promise<GoogleAdsSearchTermsResponse> {
+  const params = new URLSearchParams({
+    accountId,
+    startDate: dateRange.start,
+    endDate: dateRange.end,
+  })
+  const response = await edgeFetch(`${SEM_API}/search-terms?${params}`)
+  const json = await response.json() as GoogleAdsSearchTermsResponse
+  if (!response.ok || json.error) throw new Error(json.error ?? `Google Ads API HTTP ${response.status}`)
+  return json
+}
+
+async function fetchLsaPerformance(
+  accountId: string,
+  dateRange: { start: string; end: string },
+): Promise<LsaPerformanceResponse> {
+  const params = new URLSearchParams({ accountId, startDate: dateRange.start, endDate: dateRange.end })
+  const response = await edgeFetch(`${SEM_API}/lsa-performance?${params}`)
+  const json = await response.json() as LsaPerformanceResponse
   if (!response.ok || json.error) throw new Error(json.error ?? `Google Ads API HTTP ${response.status}`)
   return json
 }
@@ -565,18 +619,6 @@ function deviceLabel(value: unknown) {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1)
 }
 
-const dayLabels: Record<string, string> = {
-  MONDAY: 'Mon',
-  TUESDAY: 'Tue',
-  WEDNESDAY: 'Wed',
-  THURSDAY: 'Thu',
-  FRIDAY: 'Fri',
-  SATURDAY: 'Sat',
-  SUNDAY: 'Sun',
-}
-
-const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']
-
 function buildShareChart(
   id: string,
   title: string,
@@ -602,43 +644,56 @@ function buildShareChart(
   }
 }
 
-function buildHourRows(rows: GoogleAdsBreakdownRow[]) {
-  const buckets = [
-    { label: '12-8 AM', min: 0, max: 8, row: { key: '12-8 AM', clicks: 0, cost: 0, conversions: 0 } },
-    { label: '8-11 AM', min: 8, max: 11, row: { key: '8-11 AM', clicks: 0, cost: 0, conversions: 0 } },
-    { label: '11-2 PM', min: 11, max: 14, row: { key: '11-2 PM', clicks: 0, cost: 0, conversions: 0 } },
-    { label: '2-5 PM', min: 14, max: 17, row: { key: '2-5 PM', clicks: 0, cost: 0, conversions: 0 } },
-    { label: '5-8 PM', min: 17, max: 20, row: { key: '5-8 PM', clicks: 0, cost: 0, conversions: 0 } },
-    { label: 'After 8 PM', min: 20, max: 24, row: { key: 'After 8 PM', clicks: 0, cost: 0, conversions: 0 } },
-  ]
+const reportDeviceDefinitions = [
+  { key: 'MOBILE', label: 'Mobile phones' },
+  { key: 'TABLET', label: 'Tablets' },
+  { key: 'DESKTOP', label: 'Computers' },
+  { key: 'CONNECTED_TV', label: 'TV screens' },
+]
 
-  rows.forEach((sourceRow) => {
-    const hour = Number(sourceRow.key)
-    const bucket = buckets.find((item) => Number.isFinite(hour) && hour >= item.min && hour < item.max)
-    if (!bucket) return
-    bucket.row.clicks += safeNumber(sourceRow.clicks)
-    bucket.row.cost += safeNumber(sourceRow.cost)
-    bucket.row.conversions += safeNumber(sourceRow.conversions)
+const heatmapDayOrder = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY']
+
+function buildDevicePerformanceData(rows: GoogleAdsBreakdownRow[]) {
+  return reportDeviceDefinitions.map((definition) => {
+    const source = rows.find((row) => String(row.key ?? '').toUpperCase() === definition.key)
+    return {
+      ...definition,
+      cost: safeNumber(source?.cost),
+      clicks: safeNumber(source?.clicks),
+      conversions: safeNumber(source?.conversions),
+    }
   })
+}
 
-  return buckets.map((bucket) => ({ ...bucket.row, label: bucket.label }))
+function buildDayHourHeatmap(rows: GoogleAdsDayHourRow[]) {
+  const hours = Array.from({ length: 24 }, (_, hour) => hour)
+  const values = heatmapDayOrder.map((day) => hours.map((hour) => {
+    const source = rows.find((row) => String(row.day ?? '').toUpperCase() === day && Number(row.hour) === hour)
+    return safeNumber(source?.impressions)
+  }))
+
+  return { metric: 'impressions' as const, days: heatmapDayOrder, hours, values }
 }
 
 function buildGoogleAdsBreakdownCharts(response: GoogleAdsBreakdownsResponse): ChartBlockData[] {
   const devices = (response.devices ?? [])
     .slice()
     .sort((a, b) => breakdownMetric(b) - breakdownMetric(a))
-
-  const days = (response.days ?? [])
-    .slice()
-    .sort((a, b) => dayOrder.indexOf(String(a.key)) - dayOrder.indexOf(String(b.key)))
-
-  const hours = buildHourRows(response.hours ?? [])
+  const deviceData = buildDevicePerformanceData(devices)
+  const heatmapData = buildDayHourHeatmap(response.dayHours ?? [])
 
   return [
-    buildShareChart('device-performance', 'Device Performance', 'Lead share by device', devices, (row) => row.label ?? deviceLabel(row.key)),
-    buildShareChart('day-performance', 'Day of Week Performance', 'Lead share by day', days, (row) => dayLabels[String(row.key)] ?? row.label ?? String(row.key ?? 'Unknown')),
-    buildShareChart('hour-performance', 'Hour of Day Performance', 'Lead share by time window', hours, (row) => row.label ?? String(row.key ?? 'Unknown')),
+    {
+      ...buildShareChart('device-performance', 'Devices', 'Ad performance across devices', devices, (row) => row.label ?? deviceLabel(row.key)),
+      deviceData,
+    },
+    {
+      id: 'day-hour-performance',
+      title: 'Day & hour',
+      description: 'Your performance by day of week and time of day',
+      series: [],
+      heatmapData,
+    },
   ]
 }
 
@@ -653,7 +708,7 @@ export async function getGoogleAdsBreakdownReportData(
   try {
     accountId = await resolveGoogleAdsAccountId(clientId)
     const json = await fetchGoogleAdsBreakdowns(accountId, dateRange)
-    const hasData = [...(json.devices ?? []), ...(json.days ?? []), ...(json.hours ?? [])]
+    const hasData = [...(json.devices ?? []), ...(json.days ?? []), ...(json.hours ?? []), ...(json.dayHours ?? [])]
       .some((row) => breakdownMetric(row) > 0)
     const dataSource = createGoogleAdsBreakdownDataSource(
       hasData ? 'connected' : 'empty',
@@ -677,8 +732,118 @@ export async function getGoogleAdsBreakdownReportData(
     const dataSource = createGoogleAdsBreakdownDataSource('error', dateRange, message, clientId, accountId || undefined)
     return {
       dataSource,
-      charts: buildGoogleAdsBreakdownCharts({ devices: [], days: [], hours: [] }),
+      charts: buildGoogleAdsBreakdownCharts({ devices: [], days: [], hours: [], dayHours: [] }),
       analysis: `Unable to load real Google Ads device, day, and hour data for ${dateRange.start} through ${dateRange.end}: ${message}`,
+    }
+  }
+}
+
+function searchTermAction(row: GoogleAdsSearchTermApiRow) {
+  const conversions = safeNumber(row.conversions)
+  const clicks = safeNumber(row.clicks)
+  const cost = safeNumber(row.cost)
+  if (conversions > 0) return 'Keep monitored'
+  if (clicks >= 10 || cost >= 50) return 'Review / add negative'
+  return 'Monitor'
+}
+
+async function getGoogleAdsSearchTermReportData(clientId: string, month: string, year: number) {
+  const dateRange = getMonthlyReportDateRange(month, year)
+  let accountId = ''
+  try {
+    accountId = await resolveGoogleAdsAccountId(clientId)
+    const response = await fetchGoogleAdsSearchTerms(accountId, dateRange)
+    const rows = (response.searchTerms ?? [])
+      .slice()
+      .sort((a, b) => safeNumber(b.cost) - safeNumber(a.cost))
+      .slice(0, 9)
+    const dataSource: ReportDataSource = {
+      source: 'google_ads_api',
+      connectionStatus: rows.length ? 'connected' : 'empty',
+      clientId,
+      accountId,
+      rangeKey: 'monthly_google_ads_search_terms',
+      integrationTarget: 'Supabase Edge Function /sem/search-terms -> Google Ads search_term_view',
+      dateRange,
+      updatedAt: new Date().toISOString(),
+      message: rows.length
+        ? `Loaded ${rows.length} real search terms from Google Ads account ${accountId}.`
+        : `Google Ads returned no search terms for account ${accountId} in this month.`,
+    }
+    return {
+      dataSource,
+      rows: rows.map((row) => ({
+        term: String(row.search_term ?? ''),
+        impressions: formatNumber(safeNumber(row.impressions)),
+        clicks: formatNumber(safeNumber(row.clicks)),
+        cost: formatCurrency(safeNumber(row.cost)),
+        conversions: formatNumber(safeNumber(row.conversions), 1),
+        action: searchTermAction(row),
+      })),
+      analysis: rows.length
+        ? `Top ${rows.length} search terms loaded from Google Ads for ${dateRange.start} through ${dateRange.end}, ordered by spend.`
+        : `No search-term activity was returned for ${dateRange.start} through ${dateRange.end}.`,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to load Google Ads search terms.'
+    const dataSource: ReportDataSource = {
+      source: 'google_ads_api',
+      connectionStatus: 'error',
+      clientId,
+      accountId: accountId || undefined,
+      rangeKey: 'monthly_google_ads_search_terms',
+      integrationTarget: 'Supabase Edge Function /sem/search-terms -> Google Ads search_term_view',
+      dateRange,
+      updatedAt: new Date().toISOString(),
+      message,
+    }
+    return { dataSource, rows: [], analysis: `Unable to load Google Ads search terms: ${message}` }
+  }
+}
+
+async function getLsaKeyResultsReportData(clientId: string, month: string, year: number) {
+  const dateRange = getMonthlyReportDateRange(month, year)
+  let accountId = ''
+  try {
+    accountId = await resolveGoogleAdsAccountId(clientId)
+    const response = await fetchLsaPerformance(accountId, dateRange)
+    const results = {
+      totalSpend: safeNumber(response.totalSpend),
+      chargedLeads: safeNumber(response.chargedLeads),
+      adImpressions: safeNumber(response.adImpressions),
+      topImpressionRate: safeNumber(response.topImpressionRate),
+      absoluteTopImpressionRate: safeNumber(response.absoluteTopImpressionRate),
+    }
+    const hasData = Object.values(results).some((value) => value > 0)
+    const dataSource: ReportDataSource = {
+      source: 'lsa_api',
+      connectionStatus: hasData ? 'connected' : 'empty',
+      clientId,
+      accountId,
+      rangeKey: 'monthly_lsa_performance',
+      integrationTarget: 'Supabase Edge Function /sem/lsa-performance -> Google Ads LOCAL_SERVICES campaigns and local_services_lead',
+      dateRange,
+      updatedAt: new Date().toISOString(),
+      message: hasData
+        ? `Loaded real Local Services Ads results from account ${accountId}.`
+        : `Google Ads returned no Local Services Ads activity for account ${accountId} in this month.`,
+    }
+    return { results, dataSource }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to load Local Services Ads results.'
+    return {
+      results: { totalSpend: 0, chargedLeads: 0, adImpressions: 0, topImpressionRate: 0, absoluteTopImpressionRate: 0 },
+      dataSource: {
+        source: 'lsa_api' as const,
+        connectionStatus: 'error' as const,
+        clientId,
+        accountId: accountId || undefined,
+        rangeKey: 'monthly_lsa_performance',
+        integrationTarget: 'Supabase Edge Function /sem/lsa-performance -> Google Ads LOCAL_SERVICES campaigns and local_services_lead',
+        dateRange,
+        updatedAt: new Date().toISOString(),
+        message,
+      },
     }
   }
 }
@@ -721,6 +886,24 @@ function replaceGoogleAdsBreakdownSlide(slide: Slide, breakdownData: GoogleAdsBr
   }
 }
 
+function replaceGoogleAdsSearchTermSlide(
+  slide: Slide,
+  data: Awaited<ReturnType<typeof getGoogleAdsSearchTermReportData>>,
+): Slide {
+  return {
+    ...slide,
+    notes: data.dataSource.message ?? slide.notes,
+    content: {
+      ...slide.content,
+      dataSource: data.dataSource,
+      tables: (slide.content.tables ?? []).map((table, index) => index === 0
+        ? { ...table, dataSource: data.dataSource, rows: data.rows }
+        : table),
+      textBlocks: [{ id: 'search-term-note', label: 'Search Term Note', value: data.analysis }],
+    },
+  }
+}
+
 function replaceGoogleAdsKpiSlide(slide: Slide, kpiData: GoogleAdsKpiReportData): Slide {
   return {
     ...slide,
@@ -736,6 +919,28 @@ function replaceGoogleAdsKpiSlide(slide: Slide, kpiData: GoogleAdsKpiReportData)
           value: kpiData.summary,
         },
       ],
+    },
+  }
+}
+
+function replaceLsaKeyResultsSlide(
+  slide: Slide,
+  data: Awaited<ReturnType<typeof getLsaKeyResultsReportData>>,
+): Slide {
+  return {
+    ...slide,
+    notes: data.dataSource.message ?? slide.notes,
+    content: {
+      ...slide.content,
+      dataSource: data.dataSource,
+      lsaKeyResults: data.results,
+      textBlocks: [{
+        id: 'lsa-summary',
+        label: 'LSA Summary',
+        value: data.dataSource.connectionStatus === 'connected'
+          ? `Real Local Services Ads results loaded for ${data.dataSource.dateRange?.start} through ${data.dataSource.dateRange?.end}.`
+          : data.dataSource.message ?? 'No Local Services Ads activity returned for this month.',
+      }],
     },
   }
 }
@@ -824,8 +1029,61 @@ export function reportNeedsGoogleAdsBreakdownHydration(report: Report): boolean 
   if (/^\d+$/.test(expectedAccountId) && source.accountId !== expectedAccountId) return true
   if (!source.accountId) return true
   if (!charts.length && source.connectionStatus === 'connected') return true
+  if (!charts.some((chart) => chart.deviceData) || !charts.some((chart) => chart.heatmapData)) return true
   if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
   return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
+}
+
+export function reportNeedsGoogleAdsSearchTermHydration(report: Report): boolean {
+  const normalizedReport = normalizeReport(report)
+  const slide = normalizedReport.slides.find((item) => item.type === 'search_terms')
+  const expectedRange = getMonthlyReportDateRange(report.month, report.year)
+  const source = slide?.content.dataSource
+  if (!source || source.source !== 'google_ads_api' || source.rangeKey !== 'monthly_google_ads_search_terms') return true
+  if (source.connectionStatus === 'error') {
+    const lastAttempt = source.updatedAt ? new Date(source.updatedAt).getTime() : 0
+    return Date.now() - lastAttempt > 5 * 60 * 1000
+  }
+  if (source.clientId !== report.clientId || !source.accountId) return true
+  if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
+  return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
+}
+
+export function reportNeedsLsaKeyResultsHydration(report: Report): boolean {
+  const normalizedReport = normalizeReport(report)
+  const slide = normalizedReport.slides.find((item) => item.type === 'lsa_key_results')
+  const expectedRange = getMonthlyReportDateRange(report.month, report.year)
+  const source = slide?.content.dataSource
+  if (!source || source.source !== 'lsa_api' || source.rangeKey !== 'monthly_lsa_performance') return true
+  if (source.connectionStatus === 'error') {
+    const lastAttempt = source.updatedAt ? new Date(source.updatedAt).getTime() : 0
+    return Date.now() - lastAttempt > 5 * 60 * 1000
+  }
+  if (source.clientId !== report.clientId || !source.accountId || !slide?.content.lsaKeyResults) return true
+  if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
+  return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
+}
+
+async function hydrateReportWithRealGoogleAdsSearchTerms(report: Report): Promise<Report> {
+  const normalizedReport = normalizeReport(report)
+  const data = await getGoogleAdsSearchTermReportData(normalizedReport.clientId, normalizedReport.month, normalizedReport.year)
+  return {
+    ...normalizedReport,
+    slides: normalizedReport.slides.map((slide) => (
+      slide.type === 'search_terms' ? replaceGoogleAdsSearchTermSlide(slide, data) : slide
+    )),
+  }
+}
+
+async function hydrateReportWithRealLsaKeyResults(report: Report): Promise<Report> {
+  const normalizedReport = normalizeReport(report)
+  const data = await getLsaKeyResultsReportData(normalizedReport.clientId, normalizedReport.month, normalizedReport.year)
+  return {
+    ...normalizedReport,
+    slides: normalizedReport.slides.map((slide) => (
+      slide.type === 'lsa_key_results' ? replaceLsaKeyResultsSlide(slide, data) : slide
+    )),
+  }
 }
 
 export async function hydrateReportWithRealGoogleAdsBreakdowns(report: Report): Promise<Report> {
@@ -842,7 +1100,9 @@ export async function hydrateReportWithRealGoogleAdsBreakdowns(report: Report): 
 export async function hydrateReportWithRealGoogleAdsData(report: Report): Promise<Report> {
   const withKpis = await hydrateReportWithRealGoogleAdsKpis(normalizeReport(report))
   const withKeywords = await hydrateReportWithRealGoogleAdsKeywords(withKpis)
-  return hydrateReportWithRealGoogleAdsBreakdowns(withKeywords)
+  const withSearchTerms = await hydrateReportWithRealGoogleAdsSearchTerms(withKeywords)
+  const withBreakdowns = await hydrateReportWithRealGoogleAdsBreakdowns(withSearchTerms)
+  return hydrateReportWithRealLsaKeyResults(withBreakdowns)
 }
 
 // MOCK DATA LAYER: this is intentionally separate from Google Ads so the LSA API

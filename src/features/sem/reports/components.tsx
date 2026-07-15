@@ -5,13 +5,19 @@ import {
   ArrowRight,
   ArrowUp,
   ArrowUpRight,
+  Clock3,
   Download,
   Eye,
   ImagePlus,
   Layers3,
+  Monitor,
+  MoreVertical,
   Plus,
   Save,
+  Smartphone,
+  Tablet,
   Trash2,
+  Tv,
 } from 'lucide-react'
 import { XMSLogo } from '@/components/ui/XMSLogo'
 import type {
@@ -33,7 +39,6 @@ const coverTrustLogos = {
 }
 
 const googleAdsKpiOrder = ['impressions', 'clicks', 'cost', 'avg-cpc']
-const sevenRowTableSlides = new Set<Slide['type']>(['keywords', 'search_terms'])
 const slideFrameClass = 'mx-auto aspect-[1164/655] w-full max-w-[1164px] overflow-hidden rounded-lg'
 const googleAdsKpiStyles: Record<string, {
   card: string
@@ -446,6 +451,9 @@ export function ReportTable({
 }
 
 export function ChartBlock({ chart }: { chart: ChartBlockData }) {
+  if (chart.deviceData) return <DevicePerformanceChart chart={chart} />
+  if (chart.heatmapData) return <DayHourHeatmap chart={chart} />
+
   const max = Math.max(...chart.series.map((point) => point.value), 1)
   return (
     <div className="rounded-lg border border-[#D8E4F2] bg-white p-4 shadow-[0_10px_24px_rgba(0,59,143,0.06)]">
@@ -466,6 +474,203 @@ export function ChartBlock({ chart }: { chart: ChartBlockData }) {
               <p className="text-xs font-bold tabular-nums text-[#062A63]">{point.displayValue}</p>
               {point.detail && <p className="break-words text-[10px] leading-tight text-slate-500">{point.detail}</p>}
             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const deviceVisuals = [
+  { key: 'MOBILE', color: '#4285F4', Icon: Smartphone },
+  { key: 'TABLET', color: '#EA4335', Icon: Tablet },
+  { key: 'DESKTOP', color: '#F9AB00', Icon: Monitor },
+  { key: 'CONNECTED_TV', color: '#34A853', Icon: Tv },
+]
+
+function DevicePerformanceChart({ chart }: { chart: ChartBlockData }) {
+  const devices = chart.deviceData ?? []
+  const metrics = [
+    { key: 'cost' as const, label: 'Cost' },
+    { key: 'clicks' as const, label: 'Clicks' },
+    { key: 'conversions' as const, label: 'Conversions' },
+  ]
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-400 bg-white shadow-[0_10px_24px_rgba(0,59,143,0.06)]">
+      <div className="flex h-10 items-center gap-2 border-b border-[#D8E4F2] px-3 text-slate-600">
+        <Monitor className="h-4 w-4" />
+        <span className="text-xs font-semibold">Devices</span>
+        <MoreVertical className="ml-auto h-4 w-4" />
+      </div>
+      <div className="p-3">
+        <h3 className="text-xs font-semibold text-slate-700">Ad performance across devices</h3>
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          {deviceVisuals.map(({ key, color, Icon }) => {
+            const device = devices.find((item) => item.key === key)
+            return (
+              <div key={key} className="flex min-h-5 min-w-0 items-center gap-1.5 text-[10px] leading-4 text-slate-500">
+                <Icon className="h-4 w-4 shrink-0" style={{ color }} />
+                <span className="whitespace-nowrap">{device?.label ?? key}</span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-4 space-y-3">
+          {metrics.map((metric) => {
+            const total = devices.reduce((sum, device) => sum + device[metric.key], 0)
+            return (
+              <div key={metric.key}>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 min-w-0 flex-1 overflow-hidden bg-slate-100">
+                    {deviceVisuals.map(({ key, color }) => {
+                      const value = devices.find((item) => item.key === key)?.[metric.key] ?? 0
+                      const share = total > 0 ? (value / total) * 100 : 0
+                      return <div key={key} style={{ width: `${share}%`, backgroundColor: color }} />
+                    })}
+                  </div>
+                  <span className="w-[72px] shrink-0 text-[10px] font-medium leading-4 text-slate-600">{metric.label}</span>
+                </div>
+                <div className="mt-1 grid grid-cols-4 gap-2">
+                  {deviceVisuals.map(({ key, color }) => {
+                    const value = devices.find((item) => item.key === key)?.[metric.key] ?? 0
+                    const share = total > 0 ? (value / total) * 100 : 0
+                    return (
+                      <span key={key} className="flex items-center gap-1 text-[9px] leading-4 tabular-nums text-slate-500">
+                        <i className="h-1.5 w-1.5 shrink-0" style={{ backgroundColor: color }} />
+                        {share.toFixed(1)}%
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DayHourHeatmap({ chart }: { chart: ChartBlockData }) {
+  const heatmap = chart.heatmapData!
+  const max = Math.max(...heatmap.values.flat(), 0)
+  const dayInitials: Record<string, string> = {
+    SUNDAY: 'S', MONDAY: 'M', TUESDAY: 'T', WEDNESDAY: 'W', THURSDAY: 'T', FRIDAY: 'F', SATURDAY: 'S',
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-400 bg-white shadow-[0_10px_24px_rgba(0,59,143,0.06)]">
+      <div className="flex h-10 items-center gap-2 border-b border-[#D8E4F2] px-3 text-slate-600">
+        <Clock3 className="h-4 w-4" />
+        <span className="text-xs font-semibold">Day &amp; hour</span>
+        <span className="ml-auto text-[10px]">Impressions</span>
+        <MoreVertical className="h-4 w-4" />
+      </div>
+      <div className="p-3">
+        <h3 className="text-xs font-semibold text-slate-700">Your performance by day of week and time of day</h3>
+        <div className="mx-auto mt-4 grid max-w-[300px] grid-cols-3 border-b border-[#D8E4F2] text-center text-[10px] font-medium text-slate-500">
+          <span className="pb-2">Day</span>
+          <span className="border-b-2 border-[#4285F4] pb-2 font-semibold text-[#4285F4]">Day &amp; Hour</span>
+          <span className="pb-2">Hour</span>
+        </div>
+        <div className="mt-3 overflow-hidden">
+          <div className="grid gap-[2px]" style={{ gridTemplateColumns: '14px repeat(24, minmax(0, 1fr))' }}>
+            {heatmap.days.flatMap((day, dayIndex) => [
+              <span key={`${day}-label`} className="flex h-3 items-center text-[9px] leading-3 text-slate-500">{dayInitials[day] ?? day.slice(0, 1)}</span>,
+              ...heatmap.hours.map((hour, hourIndex) => {
+                const value = heatmap.values[dayIndex]?.[hourIndex] ?? 0
+                const intensity = max > 0 ? value / max : 0
+                return (
+                  <span
+                    key={`${day}-${hour}`}
+                    title={`${day}, ${hour}:00 — ${value.toLocaleString()} impressions`}
+                    className="h-3"
+                    style={{ backgroundColor: intensity > 0 ? `rgba(66, 133, 244, ${0.12 + intensity * 0.82})` : '#F8FAFC' }}
+                  />
+                )
+              }),
+            ])}
+          </div>
+          <div className="ml-[16px] mt-1 flex min-h-4 items-center justify-between text-[9px] leading-4 text-slate-500">
+            <span>12AM</span><span>6AM</span><span>12PM</span><span>6PM</span><span>12AM</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function money(value: number) {
+  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+export function LsaKeyResultsPanel({ slide }: { slide: Slide }) {
+  const data = slide.content.lsaKeyResults ?? {
+    totalSpend: 0,
+    chargedLeads: 0,
+    adImpressions: 0,
+    topImpressionRate: 0,
+    absoluteTopImpressionRate: 0,
+  }
+  const lowerMetrics = [
+    {
+      label: 'Ad impressions',
+      value: Math.round(data.adImpressions).toLocaleString('en-US'),
+      description: 'The number of times your ad appeared in search results during the selected date range.',
+    },
+    {
+      label: 'Top impression rate on Search',
+      value: `${data.topImpressionRate.toFixed(2)}%`,
+      description: 'The percentage of impressions shown above unpaid search results.',
+    },
+    {
+      label: 'Absolute top impression rate on Search',
+      value: `${data.absoluteTopImpressionRate.toFixed(2)}%`,
+      description: 'The percentage of impressions shown as the very first ad in search results.',
+    },
+  ]
+
+  return (
+    <div className="overflow-hidden rounded-sm border border-slate-400 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
+      <div className="grid grid-cols-2 divide-x divide-slate-300 border-b border-slate-300">
+        <div className="flex min-h-[175px] flex-col">
+          <div className="flex-1 p-4">
+            <div className="flex items-center justify-between text-[10px] text-slate-500">
+              <span>Total lead spend</span><span className="font-semibold text-slate-700">All</span>
+            </div>
+            <p className="mt-1 text-3xl font-medium tabular-nums text-slate-800">{money(data.totalSpend)}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <div className="h-2 flex-1 bg-[#8AB4F8]" />
+              <span className="text-[10px] text-slate-500">{money(data.totalSpend)} spend</span>
+            </div>
+          </div>
+          <div className="border-t border-slate-200 px-4 py-3 text-[10px] leading-4 text-slate-600">
+            The amount spent on leads during the selected date range. This amount does not reflect pending credits.
+          </div>
+        </div>
+        <div className="flex min-h-[175px] flex-col">
+          <div className="flex-1 p-4">
+            <div className="flex items-center justify-between text-[10px] text-slate-500">
+              <span>Charged leads</span><span className="font-semibold text-slate-700">All</span>
+            </div>
+            <p className="mt-1 text-3xl font-medium tabular-nums text-slate-800">{Math.round(data.chargedLeads).toLocaleString('en-US')}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <div className="h-2 flex-1 bg-[#8AB4F8]" />
+              <span className="text-[10px] text-slate-500">{Math.round(data.chargedLeads)} charged leads</span>
+            </div>
+          </div>
+          <div className="border-t border-slate-200 px-4 py-3 text-[10px] leading-4 text-slate-600">
+            The number of leads charged during the selected date range.
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 divide-x divide-slate-300">
+        {lowerMetrics.map((metric) => (
+          <div key={metric.label} className="min-h-[125px] p-4">
+            <p className="text-[10px] text-slate-500">{metric.label}</p>
+            <p className="mt-1 text-2xl font-medium tabular-nums text-slate-800">{metric.value}</p>
+            <p className="mt-2 text-[9px] leading-4 text-slate-600">{metric.description}</p>
           </div>
         ))}
       </div>
@@ -558,12 +763,12 @@ function AdCard({
           </div>
         )}
       </div>
-      <div className="border-t border-[#D8E4F2] p-4">
+      <div className="border-t border-[#D8E4F2] px-3 py-2">
         <textarea
           value={ad.description}
           onChange={(event) => onChange({ description: event.target.value })}
-          rows={4}
-          className="w-full resize-y bg-transparent text-sm leading-7 text-[#062A63] outline-none placeholder:text-slate-400"
+          rows={2}
+          className="block w-full resize-none bg-transparent text-xs leading-5 text-[#062A63] outline-none placeholder:text-slate-400"
           placeholder="Write ad notes here..."
         />
       </div>
@@ -740,12 +945,21 @@ export function ReportSlide({
   }
 
   if (slide.type === 'google_ads_kpis') {
+    const imageInputId = `google-ads-kpi-image-${slide.id}`
+
+    const handleSupportingImageChange = (file?: File) => {
+      if (!file) return
+      readImageFile(file).then((supportingImageSrc) => {
+        if (supportingImageSrc) updateContent({ supportingImageSrc })
+      })
+    }
+
     return (
       <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
         <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
         <div className="flex min-h-0 flex-1 flex-col p-5">
           <div className="mb-5 border-b border-[#D8E4F2] pb-4">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <AutoResizeSlideTitle
                 value={slide.title}
                 onChange={(title) => onChange({ ...slide, title })}
@@ -760,14 +974,70 @@ export function ReportSlide({
               ))}
             </div>
 
-            <div className="mt-8 flex flex-1 items-end border-t border-[#D8E4F2] pt-5">
-              <div className="w-full">
+            <div className="group relative mt-3 flex min-h-[100px] flex-1 items-center justify-center overflow-hidden rounded-lg border border-[#D8E4F2] bg-[#F7FBFF]">
+              {slide.content.supportingImageSrc ? (
+                <img
+                  src={slide.content.supportingImageSrc}
+                  alt="Supporting Google Ads performance"
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : (
+                <label htmlFor={imageInputId} className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-6 text-center text-[#0057C2] transition hover:bg-[#EAF6FF]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-md border border-[#B9D8F4] bg-white">
+                    <ImagePlus className="h-5 w-5" />
+                  </span>
+                  <span className="text-sm font-bold">Add an image</span>
+                </label>
+              )}
+              <input
+                id={imageInputId}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  handleSupportingImageChange(event.target.files?.[0])
+                  event.currentTarget.value = ''
+                }}
+                className="sr-only"
+              />
+              {slide.content.supportingImageSrc && (
+                <div className="absolute right-2 top-2 flex gap-2">
+                  <label htmlFor={imageInputId} className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-xs font-bold text-[#0057C2] shadow">
+                    Replace
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => updateContent({ supportingImageSrc: undefined })}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white text-slate-500 shadow transition hover:text-danger"
+                    aria-label="Remove supporting image"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 pt-3">
+              <div className="w-full border-t border-[#D8E4F2] pt-3">
                 {slide.content.textBlocks?.map((block) => (
                   <GoogleAdsSummaryBlock key={block.id} block={block} onChange={(value) => updateTextBlock('textBlocks', block.id, value)} />
                 ))}
               </div>
             </div>
           </div>
+        </div>
+      </section>
+    )
+  }
+
+  if (slide.type === 'lsa_key_results') {
+    return (
+      <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
+        <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
+        <div className="flex min-h-0 flex-1 flex-col p-5">
+          <div className="mb-4 border-b border-[#D8E4F2] pb-3">
+            <AutoResizeSlideTitle value={slide.title} onChange={(title) => onChange({ ...slide, title })} />
+          </div>
+          <LsaKeyResultsPanel slide={slide} />
         </div>
       </section>
     )
@@ -811,13 +1081,13 @@ export function ReportSlide({
           <ReportTable
             key={table.id}
             table={table}
-            maxRows={sevenRowTableSlides.has(slide.type) ? 7 : undefined}
+            maxRows={slide.type === 'keywords' ? 7 : slide.type === 'search_terms' ? 9 : undefined}
             onCellChange={(rowIndex, key, value) => updateTableCell(table.id, rowIndex, key, value)}
           />
         ))}
 
         {slide.content.charts?.length ? (
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+          <div className={`grid grid-cols-1 gap-3 ${slide.type === 'devices_day_hour' ? 'xl:grid-cols-2' : 'xl:grid-cols-3'}`}>
             {slide.content.charts.map((chart) => (
               <ChartBlock key={chart.id} chart={chart} />
             ))}
@@ -862,9 +1132,13 @@ export function ReportSlide({
           )
         ))}
 
-        {slide.content.noteBlocks?.map((block) => (
-          <EditableTextBlock key={block.id} block={block} minRows={3} onChange={(value) => updateTextBlock('noteBlocks', block.id, value)} />
-        ))}
+        {slide.content.noteBlocks?.length ? (
+          <div className={slide.type === 'lsa_notes' ? 'grid grid-cols-2 gap-3' : 'space-y-4'}>
+            {slide.content.noteBlocks.map((block) => (
+              <EditableTextBlock key={block.id} block={block} minRows={3} onChange={(value) => updateTextBlock('noteBlocks', block.id, value)} />
+            ))}
+          </div>
+        ) : null}
       </div>
       </div>
     </section>

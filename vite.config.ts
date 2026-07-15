@@ -9,12 +9,18 @@ import react from '@vitejs/plugin-react'
 import Anthropic from "@anthropic-ai/sdk"
 import type { IncomingMessage, ServerResponse } from "http"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
-import { getGbpReport } from "./server/gbpReport.js"
+import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
+import { handleNotionClientSyncRequest } from "./server/notionSync.js"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
+const localEnvPath = path.resolve(__dirname, ".env.local")
+if (fs.existsSync(localEnvPath)) loadDotenv({ path: localEnvPath, override: true })
 
 const execFileAsync = promisify(execFile)
+
+const DASHBOARD_SUPABASE_URL = "https://sjpvyxdyleebhqlmqscy.supabase.co"
+const DASHBOARD_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcHZ5eGR5bGVlYmhxbG1xc2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzgxODksImV4cCI6MjA4ODc1NDE4OX0.ZvzbBm-L8Jt3FzhmmX3qd7_inwrupjQrfh9JWIlX1ng"
 
 type BridgeRequest = {
   id: string
@@ -159,6 +165,11 @@ const GOOGLE_API_SCOPES = [
 const GOOGLE_REDIRECT_URI = "http://localhost:5173/api/auth/google/callback"
 const GOOGLE_TOKEN_PATH = path.resolve(__dirname, "token.json")
 const GOOGLE_CREDS_PATH = path.resolve(__dirname, "credentials.json")
+const GBP_TOKEN_PATH = path.resolve(__dirname, "token-gbp.json")
+const GBP_CREDS_PATH = path.resolve(__dirname, "credentials-gbp.json")
+const GBP_REDIRECT_URI = "http://localhost:5173/api/auth/gbp/callback"
+const GBP_REQUIRED_EMAIL = normalizeGoogleEmail(process.env.GBP_REQUIRED_EMAIL ?? "xperiencemarketingsolutions@gmail.com")
+const GBP_SCOPES = ["https://www.googleapis.com/auth/business.manage"]
 function normalizeGoogleEmail(input: string) {
   const email = input.trim().toLowerCase()
   return email.endsWith("@xperienceusa") ? `${email}.com` : email
@@ -175,6 +186,13 @@ function appendAuthResult(returnPath: string, authResult: string) {
 
 function getClientCreds() {
   const raw = JSON.parse(fs.readFileSync(GOOGLE_CREDS_PATH, "utf-8"))
+  const data = raw.installed || raw.web
+  return { client_id: data.client_id as string, client_secret: data.client_secret as string }
+}
+
+function getGbpClientCreds() {
+  const credsPath = fs.existsSync(GBP_CREDS_PATH) ? GBP_CREDS_PATH : GOOGLE_CREDS_PATH
+  const raw = JSON.parse(fs.readFileSync(credsPath, "utf-8"))
   const data = raw.installed || raw.web
   return { client_id: data.client_id as string, client_secret: data.client_secret as string }
 }
@@ -312,6 +330,35 @@ async function enforceRequiredGoogleAccount(
   return false
 }
 
+function notionDevPlugin() {
+  return {
+    name: "notion-client-sync-dev-api",
+    configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
+      server.middlewares.use(async (req, res, next) => {
+        const pathname = new URL(req.url ?? "/", "http://localhost").pathname
+        const match = /^\/api\/notion\/clients\/([^/]+)\/sync$/.exec(pathname)
+        if (!match) {
+          next()
+          return
+        }
+
+        if (req.method !== "POST") {
+          sendJson(res, 405, { error: "Method not allowed" })
+          return
+        }
+
+        await handleNotionClientSyncRequest(req, res, {
+          clientId: decodeURIComponent(match[1]),
+          notionApiKey: process.env.NOTION_API_KEY ?? "",
+          notionDataSourceId: process.env.NOTION_DATA_SOURCE_ID ?? "",
+          supabaseUrl: DASHBOARD_SUPABASE_URL,
+          supabaseAnonKey: DASHBOARD_SUPABASE_ANON_KEY,
+        })
+      })
+    },
+  }
+}
+
 function notebooklmDevPlugin() {
   return {
     name: "notebooklm-dev-api",
@@ -368,9 +415,91 @@ function googleAuthPlugin() {
     name: "google-auth",
     configureServer(server: { middlewares: { use: (fn: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
       server.middlewares.use(async (req, res, next) => {
-        if (!req.url?.startsWith("/api/auth/google/")) { next(); return }
+        if (!req.url?.startsWith("/api/auth/google/") && !req.url?.startsWith("/api/auth/gbp/")) { next(); return }
 
         const url = new URL(req.url, "http://localhost")
+
+        // ── Dedicated Google Business Profile OAuth account ───────────────
+        if (url.pathname === "/api/auth/gbp/status") {
+          try {
+            const token = JSON.parse(fs.readFileSync(GBP_TOKEN_PATH, "utf-8")) as Record<string, string>
+            const email = token._connected_email ?? null
+            sendJson(res, 200, {
+              connected: !!token.refresh_token,
+              email,
+              requiredEmail: GBP_REQUIRED_EMAIL,
+              allowed: !!token.refresh_token && normalizeGoogleEmail(email ?? "") === GBP_REQUIRED_EMAIL,
+            })
+          } catch {
+            sendJson(res, 200, { connected: false, email: null, requiredEmail: GBP_REQUIRED_EMAIL, allowed: false })
+          }
+          return
+        }
+
+        if (url.pathname === "/api/auth/gbp/start") {
+          const { client_id } = getGbpClientCreds()
+          const rawReturn = url.searchParams.get("return") || "/settings"
+          const returnPath = isSafeReturnPath(rawReturn) ? rawReturn : "/settings"
+          const state = Buffer.from(JSON.stringify({ returnPath })).toString("base64url")
+          const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
+          authUrl.searchParams.set("client_id", client_id)
+          authUrl.searchParams.set("redirect_uri", GBP_REDIRECT_URI)
+          authUrl.searchParams.set("response_type", "code")
+          authUrl.searchParams.set("scope", [...GBP_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
+          authUrl.searchParams.set("access_type", "offline")
+          authUrl.searchParams.set("prompt", "consent")
+          authUrl.searchParams.set("state", state)
+          res.writeHead(302, { Location: authUrl.toString() })
+          res.end()
+          return
+        }
+
+        if (url.pathname === "/api/auth/gbp/callback") {
+          const code = url.searchParams.get("code")
+          let returnPath = "/settings"
+          try {
+            const decoded = JSON.parse(Buffer.from(url.searchParams.get("state") || "", "base64url").toString())
+            if (typeof decoded.returnPath === "string" && isSafeReturnPath(decoded.returnPath)) returnPath = decoded.returnPath
+          } catch { /* use default */ }
+
+          if (url.searchParams.get("error") || !code) {
+            res.writeHead(302, { Location: appendAuthResult(returnPath, "error") })
+            res.end()
+            return
+          }
+
+          try {
+            const { client_id, client_secret } = getGbpClientCreds()
+            const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: GBP_REDIRECT_URI, grant_type: "authorization_code" }).toString(),
+            })
+            const tokenData = await tokenResp.json() as Record<string, string>
+            const email = await fetchGoogleAccountEmail(tokenData.access_token ?? "")
+            if (tokenData.error || !email || normalizeGoogleEmail(email) !== GBP_REQUIRED_EMAIL) {
+              res.writeHead(302, { Location: appendAuthResult(returnPath, email ? "wrong-account" : "error") })
+              res.end()
+              return
+            }
+            fs.writeFileSync(GBP_TOKEN_PATH, JSON.stringify({
+              token: tokenData.access_token,
+              refresh_token: tokenData.refresh_token,
+              token_uri: "https://oauth2.googleapis.com/token",
+              client_id,
+              client_secret,
+              scopes: GBP_SCOPES,
+              _connected_email: email,
+            }, null, 2))
+            res.writeHead(302, { Location: appendAuthResult(returnPath, "success") })
+            res.end()
+          } catch (error) {
+            console.error("[gbp-auth]", error)
+            res.writeHead(302, { Location: appendAuthResult(returnPath, "error") })
+            res.end()
+          }
+          return
+        }
 
         // ── Status ──────────────────────────────────────────────────────────
         if (url.pathname === "/api/auth/google/status") {
@@ -506,6 +635,16 @@ function seoDevPlugin() {
         }
 
         // Google Business Profile report
+        if (req.url.startsWith("/api/seo/gbp/locations") && req.method === "GET") {
+          try {
+            sendJson(res, 200, { locations: await listGbpLocations() })
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "GBP locations failed"
+            sendJson(res, 500, { error: message })
+          }
+          return
+        }
+
         if (req.url.startsWith("/api/seo/gbp") && req.method === "GET") {
           const { searchParams: sp } = new URL(req.url, "http://localhost")
           try {
@@ -513,6 +652,8 @@ function seoDevPlugin() {
               site: sp.get("site") ?? "",
               ga4: sp.get("ga4") ?? "",
               client: sp.get("client") ?? "",
+              gbpAccount: sp.get("gbpAccount") ?? "",
+              gbpLocation: sp.get("gbpLocation") ?? "",
               startDate: sp.get("startDate") ?? "",
               endDate: sp.get("endDate") ?? "",
             })
@@ -1372,7 +1513,7 @@ Use the dashboard context below to give specific, data-driven answers. Never inv
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin(), companySkillsPlugin(), mondayPlugin(), aiPlugin()],
+  plugins: [react(), notionDevPlugin(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin(), companySkillsPlugin(), mondayPlugin(), aiPlugin()],
   server: {},
   build: {
     rollupOptions: {

@@ -1,19 +1,17 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { motion } from "framer-motion"
 import { ArrowLeft, Camera, ChevronDown, Database, Save, Upload, CheckCircle2, XCircle, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { notebookConfigFromRecord, type NotebookIntegrationConfig } from "@/features/clients/integrations"
 import { updateClientRecord, deleteClientRecord, type ClientRecord } from "@/features/clients/clientsTable"
-import { fetchNotebooklmNotebooks, type NotebookSummary } from "@/features/clients/notebooklm"
-import { createClientProfileForm, saveClientProfile, type ClientProfileForm, uploadClientLogo } from "@/features/clients/profiles"
+import { createClientProfileForm, fetchClientProfile, saveClientProfile, type ClientProfileForm, uploadClientLogo } from "@/features/clients/profiles"
 import { useClientRecord } from "@/features/clients/useClientRecord"
 import { useTrackPageLoading } from "@/context/PageLoadingContext"
 import { SEO_API } from "@/features/seo/hooks/useSEODashboardState"
 import { edgeFetch } from "@/lib/edgeFetch"
 import { supabase } from "@/lib/supabase"
-import notebooklmIcon from "@/assets/notebooklm-icon.svg"
+import notionIcon from "@/assets/notion-icon.svg"
 import googleAdsIcon from "@/assets/google-ads-icon.png"
 import openaiIcon from "@/assets/openai-icon.svg"
 
@@ -32,10 +30,33 @@ interface GoogleProperties {
     ga4Properties: { id: string; name?: string }[]
 }
 
+interface GbpLocationOption {
+    accountName: string
+    locationName: string
+    title: string
+    websiteUri: string
+}
+
+interface ClientGbpMapping {
+    gbp_account_id: string | null
+    gbp_location_id: string | null
+    gbp_location_name: string | null
+}
+
 interface SemAccountOption {
     id: string
     name: string
     status: string
+}
+
+interface NotionSyncResponse {
+    success?: boolean
+    logoUrl?: string | null
+    monthlySemBudget?: number | null
+    budgetAppliedToAccount?: boolean
+    lastSyncedAt?: string
+    warnings?: string[]
+    error?: string
 }
 
 const BUDGET_TYPES = [
@@ -52,14 +73,22 @@ export function ClientIntegrations() {
     const { client, profile, record, loading: profileLoading, setProfile, setRecord } = useClientRecord(clientId)
 
     const [activeTab, setActiveTab] = useState<Tab>("Integrations")
-    const [config, setConfig] = useState<NotebookIntegrationConfig>(() => notebookConfigFromRecord(record))
     const [profileForm, setProfileForm] = useState<ClientProfileForm>(() => createClientProfileForm(client))
-    const [notebooks, setNotebooks] = useState<NotebookSummary[]>([])
-    const [loadingNotebooks, setLoadingNotebooks] = useState(true)
-    const [integrationError, setIntegrationError] = useState("")
+    const [syncingNotion, setSyncingNotion] = useState(false)
+    const [notionLastSyncedAt, setNotionLastSyncedAt] = useState<string | null>(null)
+    const [notionMessage, setNotionMessage] = useState<{ ok: boolean; text: string } | null>(null)
     const [saveError, setSaveError] = useState("")
     const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null)
     const [loadingGoogle, setLoadingGoogle] = useState(true)
+    const [gbpStatus, setGbpStatus] = useState<GoogleStatus | null>(null)
+    const [gbpLocations, setGbpLocations] = useState<GbpLocationOption[]>([])
+    const [loadingGbp, setLoadingGbp] = useState(true)
+    const [gbpError, setGbpError] = useState("")
+    const [gbpMapping, setGbpMapping] = useState<ClientGbpMapping>({
+        gbp_account_id: null,
+        gbp_location_id: null,
+        gbp_location_name: null,
+    })
     const authResult = searchParams.get("auth")
     const [savingProfile, setSavingProfile] = useState(false)
     const [profileMessage, setProfileMessage] = useState<{ ok: boolean; text: string } | null>(null)
@@ -87,15 +116,6 @@ export function ClientIntegrations() {
     const [savingToken, setSavingToken] = useState(false)
     const [tokenMessage, setTokenMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
-    const selectedNotebook = useMemo(
-        () => notebooks.find(notebook => notebook.id === config.notebookId),
-        [config.notebookId, notebooks],
-    )
-
-    useEffect(() => {
-        setConfig(notebookConfigFromRecord(record))
-    }, [record])
-
     useEffect(() => {
         setProfileForm(createClientProfileForm(client, profile))
     }, [client, profile])
@@ -115,31 +135,6 @@ export function ClientIntegrations() {
     }, [logoFile])
 
     useEffect(() => {
-        let active = true
-
-        async function loadNotebooks() {
-            setLoadingNotebooks(true)
-            setIntegrationError("")
-
-            try {
-                const data = await fetchNotebooklmNotebooks()
-                if (active) setNotebooks(data)
-            } catch (err) {
-                if (active) {
-                    setIntegrationError(err instanceof Error ? err.message : "Unable to load NotebookLM notebooks.")
-                }
-            } finally {
-                if (active) setLoadingNotebooks(false)
-            }
-        }
-
-        void loadNotebooks()
-        return () => {
-            active = false
-        }
-    }, [])
-
-    useEffect(() => {
         setLoadingGoogle(true)
         fetch("/api/auth/google/status")
             .then(r => r.json())
@@ -147,6 +142,70 @@ export function ClientIntegrations() {
             .catch(() => setGoogleStatus({ connected: false, email: null, requiredEmail: "eva@xperienceusa.com", allowed: false }))
             .finally(() => setLoadingGoogle(false))
     }, [authResult])
+
+    useEffect(() => {
+        setLoadingGbp(true)
+        fetch("/api/auth/gbp/status")
+            .then(r => r.json())
+            .then(d => setGbpStatus(d as GoogleStatus))
+            .catch(() => setGbpStatus({ connected: false, email: null, requiredEmail: "xperiencemarketingsolutions@gmail.com", allowed: false }))
+            .finally(() => setLoadingGbp(false))
+    }, [authResult])
+
+    useEffect(() => {
+        if (!gbpStatus?.allowed) {
+            setGbpLocations([])
+            return
+        }
+        let active = true
+        setLoadingGbp(true)
+        setGbpError("")
+        fetch("/api/seo/gbp/locations")
+            .then(async r => {
+                const data = await r.json()
+                if (!r.ok || data.error) throw new Error(data.error ?? `HTTP ${r.status}`)
+                return data
+            })
+            .then(data => {
+                if (active) setGbpLocations(Array.isArray(data.locations) ? data.locations : [])
+            })
+            .catch((err: Error) => { if (active) setGbpError(err.message) })
+            .finally(() => { if (active) setLoadingGbp(false) })
+        return () => { active = false }
+    }, [gbpStatus?.allowed])
+
+    useEffect(() => {
+        if (!client?.id) return
+        let active = true
+        supabase
+            .from("clients")
+            .select("gbp_account_id, gbp_location_id, gbp_location_name")
+            .eq("id", client.id)
+            .maybeSingle()
+            .then(({ data, error }) => {
+                if (!active) return
+                if (error) {
+                    setGbpError("GBP mapping is not available until its database migration is applied.")
+                    return
+                }
+                if (data) setGbpMapping(data as ClientGbpMapping)
+            })
+        return () => { active = false }
+    }, [client?.id])
+
+    useEffect(() => {
+        if (!client?.id) return
+        let active = true
+        supabase
+            .from("clients")
+            .select("notion_last_synced_at")
+            .eq("id", client.id)
+            .maybeSingle()
+            .then(({ data }) => {
+                if (active) setNotionLastSyncedAt(data?.notion_last_synced_at ?? null)
+            })
+        return () => { active = false }
+    }, [client?.id])
 
     useEffect(() => {
         let active = true
@@ -228,13 +287,56 @@ export function ClientIntegrations() {
         }
     }
 
-    function saveNotebookConfig(next: NotebookIntegrationConfig) {
-        setConfig(next)
-        void saveRecord({
-            notebooklm_enabled: next.enabled,
-            notebooklm_id: next.notebookId || null,
-            notebooklm_title: next.notebookTitle || null,
-        })
+    async function saveGbpMapping(next: ClientGbpMapping) {
+        setGbpError("")
+        const { error } = await supabase
+            .from("clients")
+            .update(next)
+            .eq("id", client.id)
+        if (error) {
+            setGbpError("Unable to save GBP location. Apply the GBP database migration first.")
+            return
+        }
+        setGbpMapping(next)
+    }
+
+    async function handleSyncNotion() {
+        if (!record || syncingNotion) return
+        setSyncingNotion(true)
+        setNotionMessage(null)
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session?.access_token) throw new Error("Your dashboard session expired. Sign in again and retry.")
+
+            const response = await fetch(`/api/notion/clients/${encodeURIComponent(client.id)}/sync`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${session.access_token}` },
+            })
+            const result = await response.json() as NotionSyncResponse
+            if (!response.ok || result.error) throw new Error(result.error ?? `Notion synchronization failed (HTTP ${response.status}).`)
+
+            const refreshedProfile = await fetchClientProfile(client.id)
+            setProfile(refreshedProfile)
+            setProfileForm(createClientProfileForm(client, refreshedProfile))
+            setLogoFile(null)
+
+            if (result.budgetAppliedToAccount && result.monthlySemBudget != null) {
+                setBudgets(current => ({ ...current, ads_monthly: String(result.monthlySemBudget) }))
+            }
+
+            setNotionLastSyncedAt(result.lastSyncedAt ?? new Date().toISOString())
+            const updated = [result.logoUrl ? "logo" : "", result.budgetAppliedToAccount ? "monthly SEM budget" : ""].filter(Boolean)
+            const successText = updated.length > 0
+                ? `Notion synchronized: ${updated.join(" and ")} updated in Supabase.`
+                : "Notion synchronization completed without replacing existing logo or budget data."
+            const warningText = result.warnings?.length ? ` ${result.warnings.join(" ")}` : ""
+            setNotionMessage({ ok: true, text: successText + warningText })
+        } catch (err) {
+            setNotionMessage({ ok: false, text: err instanceof Error ? err.message : "Unable to synchronize with Notion." })
+        } finally {
+            setSyncingNotion(false)
+        }
     }
 
     async function handleApplyBudgets() {
@@ -336,14 +438,15 @@ export function ClientIntegrations() {
         }
     }
 
-    const integrationEnabled = config.enabled
     const hasPersistedLogo = Boolean(profile?.logo_url)
     const logoPreview = logoPreviewUrl || profileForm.logoUrl || (hasPersistedLogo ? client.avatar : "")
     const googleAuthorized = !!googleStatus?.allowed
     const googleWrongAccount = !!googleStatus?.connected && !googleAuthorized
+    const gbpAuthorized = !!gbpStatus?.allowed
+    const gbpWrongAccount = !!gbpStatus?.connected && !gbpAuthorized
     const linkedSemAccount = semAccounts.find(a => a.id === record?.sem_account_id)
     const semEnabled = record?.sem_enabled !== false
-    useTrackPageLoading(loadingNotebooks || loadingGoogle || profileLoading, `client-integrations:${client.id}`)
+    useTrackPageLoading(loadingGoogle || loadingGbp || profileLoading, `client-integrations:${client.id}`)
 
     return (
         <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-950 custom-scrollbar">
@@ -441,80 +544,54 @@ export function ClientIntegrations() {
                                 </div>
                             )}
                             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-                                {/* ── NotebookLM card ── */}
+                                {/* ── Notion client sync card ── */}
                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex items-start gap-4">
-                                            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-white">
                                                 <img
-                                                    src={notebooklmIcon}
-                                                    alt="NotebookLM logo"
+                                                    src={notionIcon}
+                                                    alt="Notion logo"
                                                     className="h-10 w-10 object-contain"
                                                 />
                                             </div>
                                             <div>
-                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">NotebookLM</h3>
-                                                <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${integrationEnabled
+                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">Notion</h3>
+                                                <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${notionLastSyncedAt
                                                     ? "text-emerald-600 dark:text-emerald-400"
-                                                    : "text-slate-400"
-                                                    }`}>
-                                                    {integrationEnabled ? "Enabled" : "Disabled"}
+                                                    : "text-slate-400"}`}>
+                                                    {syncingNotion ? "Synchronizing..." : notionLastSyncedAt ? "Synchronized" : "Ready"}
                                                 </p>
                                             </div>
                                         </div>
-
-                                        <label className="inline-flex cursor-pointer items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-                                            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Enable</span>
-                                            <span className={`relative h-7 w-12 rounded-full transition ${integrationEnabled ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-700"}`}>
-                                                <input
-                                                    type="checkbox"
-                                                    className="sr-only"
-                                                    checked={integrationEnabled}
-                                                    disabled={!record}
-                                                    onChange={e => saveNotebookConfig({ ...config, enabled: e.target.checked })}
-                                                />
-                                                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${integrationEnabled ? "left-6" : "left-1"}`} />
-                                            </span>
-                                        </label>
+                                        <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${syncingNotion
+                                            ? "animate-pulse bg-blue-500"
+                                            : notionLastSyncedAt ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`} />
                                     </div>
 
-                                    <div className="mt-5 space-y-2">
-                                        <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Notebook</label>
-                                        <div className="relative">
-                                            <select
-                                                value={config.notebookId}
-                                                disabled={!integrationEnabled || loadingNotebooks || !record}
-                                                onChange={event => {
-                                                    const notebook = notebooks.find(item => item.id === event.target.value)
-                                                    saveNotebookConfig({
-                                                        ...config,
-                                                        notebookId: event.target.value,
-                                                        notebookTitle: notebook?.title ?? "",
-                                                    })
-                                                }}
-                                                className={`${selectClass} h-14`}
-                                            >
-                                                <option value="">
-                                                    {loadingNotebooks ? "Loading notebooks..." : "Select a NotebookLM notebook"}
-                                                </option>
-                                                {notebooks.map(notebook => (
-                                                    <option key={notebook.id} value={notebook.id}>
-                                                        {notebook.title}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                        </div>
-                                    </div>
-
-                                    {selectedNotebook && (
-                                        <div className="mt-4">
-                                            <p className="text-sm font-semibold text-slate-900 dark:text-[#E2E5E9]">{selectedNotebook.title}</p>
-                                            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{selectedNotebook.source_count} sources indexed</p>
-                                        </div>
+                                    <p className="mt-5 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                                        Import this client&apos;s logo and Google Ads monthly budget into Supabase.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleSyncNotion}
+                                        disabled={!record || syncingNotion}
+                                        className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                                    >
+                                        <RefreshCw className={`h-4 w-4 ${syncingNotion ? "animate-spin" : ""}`} />
+                                        {syncingNotion ? "Sincronizando..." : "Sincronizar con Notion"}
+                                    </button>
+                                    {notionLastSyncedAt && (
+                                        <p className="mt-3 text-xs text-slate-400">
+                                            Last sync: {new Date(notionLastSyncedAt).toLocaleString()}
+                                        </p>
                                     )}
-                                    {!selectedNotebook && integrationError && (
-                                        <p className="mt-4 text-sm text-amber-600 dark:text-amber-300">{integrationError}</p>
+                                    {notionMessage && (
+                                        <p className={`mt-3 text-sm ${notionMessage.ok
+                                            ? "text-emerald-600 dark:text-emerald-400"
+                                            : "text-red-600 dark:text-red-400"}`}>
+                                            {notionMessage.text}
+                                        </p>
                                     )}
                                 </div>
 
@@ -668,6 +745,92 @@ export function ClientIntegrations() {
                                     <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
                                         The SEO module always uses this fixed GSC + GA4 pair for this client.
                                     </p>
+                                </div>
+
+                                {/* ── Google Business Profile card ── */}
+                                <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start gap-4">
+                                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                                <svg className="h-8 w-8 text-[#4285F4]" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">Google Business Profile</h3>
+                                                <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
+                                                    loadingGbp ? "text-slate-400" :
+                                                    gbpMapping.gbp_location_id ? "text-emerald-600 dark:text-emerald-400" :
+                                                    gbpWrongAccount ? "text-amber-600 dark:text-amber-400" : "text-slate-400"
+                                                }`}>
+                                                    {loadingGbp ? "Checking..." : gbpMapping.gbp_location_id ? "Location assigned" : gbpWrongAccount ? "Wrong account" : "Not configured"}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className={`mt-1 h-2.5 w-2.5 rounded-full ${gbpAuthorized ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`} />
+                                    </div>
+
+                                    {gbpStatus?.email && (
+                                        <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900">
+                                            <span className="text-xs text-slate-400">Authorized as</span>
+                                            <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200">{gbpStatus.email}</span>
+                                        </div>
+                                    )}
+
+                                    {gbpAuthorized ? (
+                                        <div className="mt-5 space-y-2">
+                                            <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Business Profile location</label>
+                                            <div className="relative">
+                                                <select
+                                                    value={gbpMapping.gbp_location_id ?? ""}
+                                                    disabled={!record || loadingGbp}
+                                                    onChange={event => {
+                                                        const location = gbpLocations.find(item => item.locationName === event.target.value)
+                                                        void saveGbpMapping({
+                                                            gbp_account_id: location?.accountName ?? null,
+                                                            gbp_location_id: location?.locationName ?? null,
+                                                            gbp_location_name: location?.title ?? null,
+                                                        })
+                                                    }}
+                                                    className={selectClass}
+                                                >
+                                                    <option value="">{loadingGbp ? "Loading GBP locations..." : "Select GBP location"}</option>
+                                                    {gbpMapping.gbp_location_id && !gbpLocations.some(location => location.locationName === gbpMapping.gbp_location_id) && (
+                                                        <option value={gbpMapping.gbp_location_id}>{gbpMapping.gbp_location_name || gbpMapping.gbp_location_id}</option>
+                                                    )}
+                                                    {gbpLocations.map(location => (
+                                                        <option key={`${location.accountName}:${location.locationName}`} value={location.locationName}>
+                                                            {location.title}{location.websiteUri ? ` — ${location.websiteUri}` : ""}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                            </div>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                SEO Reports uses this exact GBP location for the selected client.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="mt-5">
+                                            {gbpWrongAccount && (
+                                                <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                                                    Connect as {gbpStatus?.requiredEmail || "the Google account that manages the profiles"}.
+                                                </p>
+                                            )}
+                                            <button
+                                                disabled={loadingGbp}
+                                                onClick={() => {
+                                                    window.location.href = `/api/auth/gbp/start?return=${encodeURIComponent(window.location.pathname)}`
+                                                }}
+                                                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-400 hover:text-blue-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                            >
+                                                <RefreshCw className={`h-4 w-4 ${loadingGbp ? "animate-spin" : ""}`} />
+                                                Connect Google Business Profile
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {gbpError && <p className="mt-3 text-xs text-amber-600 dark:text-amber-300">{gbpError}</p>}
                                 </div>
 
                                 {/* ── Google Ads card (account link + report budgets) ── */}
