@@ -546,10 +546,19 @@ async function fetchLsaPerformance(token: string, params: URLSearchParams) {
   `
   const leadsQuery = `
     SELECT
-      local_services_lead.lead_charged
+      local_services_lead.id,
+      local_services_lead.category_id,
+      local_services_lead.service_id,
+      local_services_lead.contact_details,
+      local_services_lead.lead_type,
+      local_services_lead.lead_status,
+      local_services_lead.lead_charged,
+      local_services_lead.credit_details.credit_state,
+      local_services_lead.creation_date_time
     FROM local_services_lead
     WHERE local_services_lead.creation_date_time >= '${startDate} 00:00:00'
       AND local_services_lead.creation_date_time <= '${endDate} 23:59:59'
+    ORDER BY local_services_lead.creation_date_time DESC
   `
 
   const [campaignData, shareData, leadsData] = await Promise.all([
@@ -579,6 +588,24 @@ async function fetchLsaPerformance(token: string, params: URLSearchParams) {
 
   // deno-lint-ignore no-explicit-any
   const chargedLeads = (leadsData.results ?? []).filter((row: any) => Boolean(row.localServicesLead?.leadCharged)).length
+  // deno-lint-ignore no-explicit-any
+  const leads = (leadsData.results ?? []).map((row: any) => {
+    const lead = row.localServicesLead ?? {}
+    const contact = lead.contactDetails ?? {}
+    return {
+      id: String(lead.id ?? ""),
+      customer_name: String(contact.consumerName ?? ""),
+      phone_number: String(contact.phoneNumber ?? ""),
+      email: String(contact.email ?? ""),
+      service_id: String(lead.serviceId ?? ""),
+      category_id: String(lead.categoryId ?? ""),
+      lead_type: String(lead.leadType ?? ""),
+      lead_status: String(lead.leadStatus ?? ""),
+      lead_charged: Boolean(lead.leadCharged),
+      credit_state: String(lead.creditDetails?.creditState ?? ""),
+      creation_date_time: String(lead.creationDateTime ?? ""),
+    }
+  })
 
   return {
     totalSpend: Math.round(totalSpend * 100) / 100,
@@ -586,6 +613,7 @@ async function fetchLsaPerformance(token: string, params: URLSearchParams) {
     adImpressions,
     topImpressionRate: shareImpressions > 0 ? Math.round((topWeighted / shareImpressions) * 10000) / 100 : 0,
     absoluteTopImpressionRate: shareImpressions > 0 ? Math.round((absoluteTopWeighted / shareImpressions) * 10000) / 100 : 0,
+    leads,
     dateRange: { start: startDate, end: endDate },
   }
 }

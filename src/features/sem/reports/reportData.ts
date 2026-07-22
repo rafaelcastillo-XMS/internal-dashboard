@@ -147,7 +147,22 @@ interface LsaPerformanceResponse {
   adImpressions?: number
   topImpressionRate?: number
   absoluteTopImpressionRate?: number
+  leads?: LsaLeadApiRow[]
   error?: string
+}
+
+interface LsaLeadApiRow {
+  id?: string
+  customer_name?: string
+  phone_number?: string
+  email?: string
+  service_id?: string
+  category_id?: string
+  lead_type?: string
+  lead_status?: string
+  lead_charged?: boolean
+  credit_state?: string
+  creation_date_time?: string
 }
 
 interface GoogleAdsBreakdownRow {
@@ -206,6 +221,18 @@ export const GOOGLE_ADS_KEYWORD_COLUMNS: ReportTableColumn[] = [
   { key: 'status', label: 'Status' },
 ]
 
+export const LSA_CREDITED_LEAD_COLUMNS: ReportTableColumn[] = [
+  { key: 'customer', label: 'Customer' },
+  { key: 'jobType', label: 'Job type' },
+  { key: 'searchIntent', label: 'Search Intent' },
+  { key: 'location', label: 'Location' },
+  { key: 'leadType', label: 'Lead type' },
+  { key: 'chargeStatus', label: 'Charge status' },
+  { key: 'leadReceived', label: 'Lead received' },
+]
+
+export const LSA_LEADS_INTRO = 'We monitored your leads received, check poor quality leads and disputed to get credited.'
+
 // TEMPLATE PLACEHOLDER: no fake performance numbers live here. The report editor
 // hydrates this slide from the real Google Ads /sem/performance endpoint when a
 // report is generated or opened.
@@ -232,6 +259,64 @@ function formatNumber(n: number, decimals = 0) {
 
 function formatCurrency(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function humanizeLsaValue(value?: string) {
+  const normalized = String(value ?? '')
+    .split(':')
+    .pop()
+    ?.replace(/^service_area_business_/, '')
+    .replace(/_/g, ' ')
+    .trim()
+  if (!normalized) return '—'
+  return normalized.replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function formatLsaPhone(value?: string) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  const localDigits = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
+  if (localDigits.length !== 10) return value || ''
+  return `(${localDigits.slice(0, 3)}) ${localDigits.slice(3, 6)}-${localDigits.slice(6)}`
+}
+
+function formatLsaLeadDate(value?: string) {
+  const match = String(value ?? '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/)
+  if (!match) return value || '—'
+  const [, year, month, day, hourValue, minute] = match
+  const hour = Number(hourValue)
+  const displayHour = hour % 12 || 12
+  return `${Number(month)}/${Number(day)}/${year.slice(2)} ${displayHour}:${minute} ${hour >= 12 ? 'PM' : 'AM'}`
+}
+
+function formatLsaLeadType(value?: string) {
+  if (value === 'PHONE_CALL') return 'Phone'
+  return humanizeLsaValue(value)
+}
+
+export function createLsaCreditedLeadsTable(
+  leads: LsaLeadApiRow[],
+  dataSource: ReportDataSource,
+): ReportTableData {
+  const rows = leads
+    .filter((lead) => lead.credit_state === 'CREDITED')
+    .slice(0, 7)
+    .map((lead) => ({
+      customer: lead.customer_name || formatLsaPhone(lead.phone_number) || lead.email || `Lead ${lead.id ?? ''}`.trim(),
+      jobType: humanizeLsaValue(lead.service_id),
+      searchIntent: humanizeLsaValue(lead.category_id),
+      location: '—',
+      leadType: formatLsaLeadType(lead.lead_type),
+      chargeStatus: 'Credited',
+      leadReceived: formatLsaLeadDate(lead.creation_date_time),
+    }))
+
+  return {
+    id: 'lsa-credited-leads',
+    title: 'Credited leads',
+    dataSource,
+    columns: LSA_CREDITED_LEAD_COLUMNS,
+    rows,
+  }
 }
 
 export function getMonthlyReportDateRange(month: string, year: number) {
@@ -381,6 +466,8 @@ function slideHasUsableConnectedData(slide: Slide) {
       ))
     case 'lsa_key_results':
       return Object.values(slide.content.lsaKeyResults ?? {}).some((value) => value > 0)
+    case 'lsa_notes':
+      return (slide.content.tables ?? []).some((table) => table.rows.length > 0)
     default:
       return false
   }
@@ -503,7 +590,10 @@ async function fetchLsaPerformanceWithSyncedFallback(
   let apiError: unknown
   try {
     apiResponse = await fetchLsaPerformance(accountId, dateRange)
-    if (Object.values(apiResponse).some((value) => typeof value === 'number' && value > 0)) return apiResponse
+    if (
+      Object.values(apiResponse).some((value) => typeof value === 'number' && value > 0)
+      || (apiResponse.leads?.length ?? 0) > 0
+    ) return apiResponse
   } catch (error) {
     apiError = error
   }
@@ -1213,22 +1303,37 @@ async function getLsaKeyResultsReportData(clientId: string, month: string, year:
         ? `Loaded real Local Services Ads results from account ${accountId}.`
         : `Google Ads returned no Local Services Ads activity for account ${accountId} in this month.`,
     }
-    return { results, dataSource }
+    const leadRows = response.leads ?? []
+    const creditedLeadCount = leadRows.filter((lead) => lead.credit_state === 'CREDITED').length
+    const leadsDataSource: ReportDataSource = {
+      ...dataSource,
+      connectionStatus: creditedLeadCount > 0 ? 'connected' : 'empty',
+      rangeKey: 'monthly_lsa_credited_leads',
+      message: creditedLeadCount > 0
+        ? `Loaded ${creditedLeadCount} credited Local Services Ads lead${creditedLeadCount === 1 ? '' : 's'} from account ${accountId}.`
+        : `Google Ads returned no credited Local Services Ads leads for account ${accountId} in this month.`,
+    }
+    return { results, dataSource, leadsTable: createLsaCreditedLeadsTable(leadRows, leadsDataSource) }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load Local Services Ads results.'
+    const dataSource: ReportDataSource = {
+      source: 'lsa_api' as const,
+      connectionStatus: 'error' as const,
+      clientId,
+      accountId: accountId || undefined,
+      rangeKey: 'monthly_lsa_performance',
+      integrationTarget: 'Supabase Edge Function /sem/lsa-performance -> Google Ads LOCAL_SERVICES campaigns and local_services_lead',
+      dateRange,
+      updatedAt: new Date().toISOString(),
+      message,
+    }
     return {
       results: { totalSpend: 0, chargedLeads: 0, adImpressions: 0, topImpressionRate: 0, absoluteTopImpressionRate: 0 },
-      dataSource: {
-        source: 'lsa_api' as const,
-        connectionStatus: 'error' as const,
-        clientId,
-        accountId: accountId || undefined,
-        rangeKey: 'monthly_lsa_performance',
-        integrationTarget: 'Supabase Edge Function /sem/lsa-performance -> Google Ads LOCAL_SERVICES campaigns and local_services_lead',
-        dateRange,
-        updatedAt: new Date().toISOString(),
-        message,
-      },
+      dataSource,
+      leadsTable: createLsaCreditedLeadsTable([], {
+        ...dataSource,
+        rangeKey: 'monthly_lsa_credited_leads',
+      }),
     }
   }
 }
@@ -1327,7 +1432,7 @@ function replaceGoogleAdsAdSlide(slide: Slide, adData: GoogleAdsAdReportData): S
       ads: adData.ads,
       textBlocks: [{
         id: 'ad-performance-analysis',
-        label: 'Ad Performance Analysis',
+        label: 'Google Ads Analysis',
         value: analysis,
       }],
     },
@@ -1351,6 +1456,29 @@ function replaceLsaKeyResultsSlide(
         value: data.dataSource.connectionStatus === 'connected'
           ? `Real Local Services Ads results loaded for ${data.dataSource.dateRange?.start} through ${data.dataSource.dateRange?.end}.`
           : data.dataSource.message ?? 'No Local Services Ads activity returned for this month.',
+      }],
+    },
+  }
+}
+
+function replaceLsaLeadsSlide(
+  slide: Slide,
+  data: Awaited<ReturnType<typeof getLsaKeyResultsReportData>>,
+): Slide {
+  const content = { ...slide.content }
+  delete content.noteBlocks
+  const existingIntro = slide.content.textBlocks?.find((block) => block.id === 'lsa-leads-intro')
+  return {
+    ...slide,
+    notes: data.leadsTable.dataSource?.message ?? slide.notes,
+    content: {
+      ...content,
+      dataSource: data.leadsTable.dataSource,
+      tables: [data.leadsTable],
+      textBlocks: [{
+        id: 'lsa-leads-intro',
+        label: 'Lead Monitoring Summary',
+        value: existingIntro?.value ?? LSA_LEADS_INTRO,
       }],
     },
   }
@@ -1493,15 +1621,28 @@ export function reportNeedsGoogleAdsSearchTermHydration(report: Report): boolean
 export function reportNeedsLsaKeyResultsHydration(report: Report): boolean {
   const normalizedReport = normalizeReport(report)
   const slide = normalizedReport.slides.find((item) => item.type === 'lsa_key_results')
+  const leadsSlide = normalizedReport.slides.find((item) => item.type === 'lsa_notes')
   const expectedRange = getMonthlyReportDateRange(report.month, report.year)
   const source = slide?.content.dataSource
+  const leadsSource = leadsSlide?.content.dataSource
   if (!source || source.source !== 'lsa_api' || source.rangeKey !== 'monthly_lsa_performance') return true
   if (source.connectionStatus === 'error') {
     const lastAttempt = source.updatedAt ? new Date(source.updatedAt).getTime() : 0
     return Date.now() - lastAttempt > 5 * 60 * 1000
   }
   if (source.clientId !== report.clientId || !source.accountId || !slide?.content.lsaKeyResults) return true
-  return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
+  if (source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end) return true
+  if (!leadsSource || leadsSource.source !== 'lsa_api' || leadsSource.rangeKey !== 'monthly_lsa_credited_leads') return true
+  if (leadsSource.connectionStatus === 'error') {
+    const lastAttempt = leadsSource.updatedAt ? new Date(leadsSource.updatedAt).getTime() : 0
+    return Date.now() - lastAttempt > 5 * 60 * 1000
+  }
+  if (leadsSource.connectionStatus === 'empty') {
+    const lastAttempt = leadsSource.updatedAt ? new Date(leadsSource.updatedAt).getTime() : 0
+    return Date.now() - lastAttempt > 5 * 60 * 1000
+  }
+  if (leadsSource.clientId !== report.clientId || !leadsSource.accountId || !leadsSlide?.content.tables?.length) return true
+  return leadsSource.dateRange?.start !== expectedRange.start || leadsSource.dateRange?.end !== expectedRange.end
 }
 
 async function hydrateReportWithRealGoogleAdsSearchTerms(report: Report): Promise<Report> {
@@ -1520,9 +1661,11 @@ async function hydrateReportWithRealLsaKeyResults(report: Report): Promise<Repor
   const data = await getLsaKeyResultsReportData(normalizedReport.clientId, normalizedReport.month, normalizedReport.year)
   return {
     ...normalizedReport,
-    slides: normalizedReport.slides.map((slide) => (
-      slide.type === 'lsa_key_results' ? replaceLsaKeyResultsSlide(slide, data) : slide
-    )),
+    slides: normalizedReport.slides.map((slide) => {
+      if (slide.type === 'lsa_key_results') return replaceLsaKeyResultsSlide(slide, data)
+      if (slide.type === 'lsa_notes') return replaceLsaLeadsSlide(slide, data)
+      return slide
+    }),
   }
 }
 

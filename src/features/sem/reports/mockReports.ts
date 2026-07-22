@@ -1,6 +1,12 @@
 import type { Report, Slide } from './types'
-import { GOOGLE_ADS_KEYWORD_COLUMNS, getGoogleAdsReportData, getLsaReportData } from './reportData'
-import { normalizeReportSlides } from './reportSlides'
+import {
+  GOOGLE_ADS_KEYWORD_COLUMNS,
+  LSA_CREDITED_LEAD_COLUMNS,
+  LSA_LEADS_INTRO,
+  getGoogleAdsReportData,
+  getLsaReportData,
+} from './reportData'
+import { createHighlightsSummarySlide, normalizeReportSlides } from './reportSlides'
 
 export const REPORT_MONTHS = [
   'January',
@@ -147,7 +153,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
         textBlocks: [
           {
             id: 'ad-performance-analysis',
-            label: 'Ad Performance Analysis',
+            label: 'Google Ads Analysis',
             value: '',
           },
         ],
@@ -264,52 +270,48 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       order: 9,
       notes: 'Document completed optimization work in plain language.',
       content: {
-        highlights: [
-          'Monthly Budget reviewed and adjusted',
-          'Search Terms Reviewed',
-          'Negative Keywords Added',
-          'Search Keywords Added',
-          'Poor quality leads reviewed/disputed',
-        ],
+        subtitle: 'Summary of Highlights',
       },
     },
+    createHighlightsSummarySlide(10),
     {
       id: 'lsa-account-notes',
       type: 'lsa_notes',
       title: 'LSA Account Notes',
-      order: 10,
-      notes: 'Use this slide for operational items that can impact LSA visibility and billing.',
+      order: 11,
+      notes: 'Review credited Local Services Ads leads for the selected client and month.',
       content: {
-        noteBlocks: [
+        textBlocks: [
           {
-            id: 'document-expiration-alerts',
-            label: 'Document Expiration Alerts',
-            value: 'No active document expiration issues were found during the monthly review.',
-          },
-          {
-            id: 'missed-calls-messages',
-            label: 'Missed Calls / Messages',
-            value: 'Missed lead activity should be reviewed weekly so valid opportunities are followed up quickly.',
-          },
-          {
-            id: 'lead-quality-review',
-            label: 'Lead Quality Review',
-            value: 'Review low-quality leads and dispute any eligible leads inside the LSA dashboard.',
-          },
-          {
-            id: 'google-guaranteed-status',
-            label: 'Google Guaranteed Account Status',
-            value: 'Account appears active. Continue monitoring verification and review health.',
+            id: 'lsa-leads-intro',
+            label: 'Lead Monitoring Summary',
+            value: LSA_LEADS_INTRO,
           },
         ],
+        tables: [{
+          id: 'lsa-credited-leads',
+          title: 'Credited leads',
+          columns: LSA_CREDITED_LEAD_COLUMNS,
+          rows: [],
+        }],
       },
     },
     {
       id: 'next-steps',
       type: 'next_steps',
-      title: 'Next Steps & Recommendations',
-      order: 11,
+      title: 'Next Step & Recommendations',
+      order: 12,
       notes: 'Keep next steps practical and tied to client behavior.',
+      content: {
+        subtitle: 'Priorities for the Month Ahead',
+      },
+    },
+    {
+      id: 'recommendations-content',
+      type: 'recommendations',
+      title: 'Recommendations',
+      order: 13,
+      notes: 'Keep recommendations practical and tied to client behavior.',
       content: {
         textBlocks: [
           {
@@ -324,7 +326,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       id: 'final-thank-you',
       type: 'thank_you',
       title: 'Final Thank You Slide',
-      order: 12,
+      order: 14,
       notes: 'Close with a concise client-facing message.',
       content: {
         finalMessage: 'Thank you for your business. If you have any questions let us know, we are here to help.',

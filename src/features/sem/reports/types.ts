@@ -13,6 +13,7 @@ export type SlideType =
   | 'highlights'
   | 'lsa_notes'
   | 'next_steps'
+  | 'recommendations'
   | 'thank_you'
 
 export interface Report {
@@ -90,6 +91,7 @@ export interface TextBlock {
   id: string
   label: string
   value: string
+  html?: string
 }
 
 export interface KpiMetric {

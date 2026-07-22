@@ -10,11 +10,13 @@ import {
   ArrowUp,
   ArrowUpRight,
   Bold,
+  ChevronDown,
   Clock3,
   Download,
   ImagePlus,
   Italic,
   Layers3,
+  List as ListIcon,
   Monitor,
   MoreVertical,
   Plus,
@@ -43,6 +45,8 @@ const coverTrustLogos = {
   partner: '/sem-reports/google-partner-logo.png',
   ads: '/sem-reports/google-ads-logo.webp',
 }
+
+const thankYouBackground = '/thanksyoupage-bg.webp'
 
 const googleAdsKpiOrder = ['impressions', 'clicks', 'cost', 'avg-cpc']
 const slideFrameClass = 'mx-auto aspect-[1164/655] w-full max-w-[1164px] overflow-hidden rounded-lg'
@@ -383,6 +387,31 @@ function GoogleAdsSummaryBlock({
   )
 }
 
+function RichTextBlockEditor({
+  block,
+  onChange,
+  compact = false,
+}: {
+  block: TextBlock
+  onChange: (patch: Pick<TextBlock, 'value' | 'html'>) => void
+  compact?: boolean
+}) {
+  return (
+    <div className={`rounded-lg border border-[#D8E4F2] bg-white shadow-[0_10px_24px_rgba(0,59,143,0.06)] ${compact ? 'p-2' : 'p-3'}`}>
+      <label className={`${compact ? 'mb-1' : 'mb-2'} block text-xs font-bold uppercase tracking-[0.14em] text-[#0057C2]`}>
+        {block.label}
+      </label>
+      <RichTextEditor
+        html={block.html}
+        fallbackText={block.value}
+        placeholder={block.label}
+        editorClassName={compact ? 'min-h-[50px] max-h-[75px] text-[13px]' : 'min-h-[260px] max-h-[360px] text-xl'}
+        onChange={(html, value) => onChange({ html, value })}
+      />
+    </div>
+  )
+}
+
 export function EditableTextBlock({
   block,
   onChange,
@@ -457,6 +486,92 @@ export function ReportTable({
                 ))}
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function formatLsaDateRange(dateRange?: { start: string; end: string }) {
+  if (!dateRange) return 'Selected month'
+  const format = (value: string) => {
+    const [year, month, day] = value.split('-').map(Number)
+    if (!year || !month || !day) return value
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+      .format(new Date(Date.UTC(year, month - 1, day)))
+  }
+  return `${format(dateRange.start)} - ${format(dateRange.end)}`
+}
+
+function LsaCreditedLeadsTable({
+  table,
+  onCellChange,
+}: {
+  table: ReportTableData
+  onCellChange: (rowIndex: number, key: string, value: string) => void
+}) {
+  const rows = table.rows.slice(0, 7)
+  const filters = ['Any lead status', 'Credited leads', 'Any lead type', 'All search intents']
+  const cellClass = 'w-full bg-transparent text-[12px] font-medium text-[#3c4043] outline-none'
+
+  return (
+    <div className="overflow-hidden border border-[#b8bdc4] bg-white shadow-[0_6px_16px_rgba(60,64,67,0.08)]">
+      <div className="grid grid-cols-[1fr_1fr_1fr_1.2fr_1.5fr] border-b border-[#dadce0] bg-white">
+        {filters.map((filter) => (
+          <div key={filter} className="flex min-w-0 items-center justify-between gap-2 px-4 py-4 text-[13px] font-medium text-[#202124]">
+            <span className="truncate">{filter}</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 fill-[#9aa0a6] text-[#9aa0a6]" />
+          </div>
+        ))}
+        <div className="flex min-w-0 items-center justify-between gap-2 px-4 py-4 text-[13px] font-medium text-[#202124]">
+          <span className="truncate">{formatLsaDateRange(table.dataSource?.dateRange)}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 fill-[#9aa0a6] text-[#9aa0a6]" />
+        </div>
+      </div>
+
+      <div className="overflow-x-auto custom-scrollbar">
+        <table className="w-full min-w-[1060px] table-fixed">
+          <colgroup>
+            <col className="w-[16%]" />
+            <col className="w-[11%]" />
+            <col className="w-[15%]" />
+            <col className="w-[14%]" />
+            <col className="w-[11%]" />
+            <col className="w-[14%]" />
+            <col className="w-[19%]" />
+          </colgroup>
+          <thead>
+            <tr className="border-b border-[#c9cdd2] bg-[#f8f9fa] text-left text-[12px] font-medium text-[#3c4043]">
+              {table.columns.map((column) => (
+                <th key={column.key} className="px-4 py-4 font-medium">{column.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#dadce0]">
+            {rows.map((row, rowIndex) => (
+              <tr key={`${row.customer}-${row.leadReceived}-${rowIndex}`} className="h-12 bg-white">
+                {table.columns.map((column) => {
+                  const isCustomer = column.key === 'customer'
+                  const isChargeStatus = column.key === 'chargeStatus'
+                  return (
+                    <td key={column.key} className="px-4 py-2">
+                      <input
+                        value={row[column.key] ?? ''}
+                        onChange={(event) => onCellChange(rowIndex, column.key, event.target.value)}
+                        aria-label={`${column.label} row ${rowIndex + 1}`}
+                        className={`${cellClass} ${isCustomer ? 'text-[#0b57d0]' : ''} ${isChargeStatus ? 'rounded-sm bg-[#e6f4ea] px-1.5 py-1 text-[#188038]' : ''}`}
+                      />
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr className="h-12 bg-white">
+                <td colSpan={table.columns.length} />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -840,9 +955,9 @@ export function PmaxAdPreviewCard({
   )
 }
 
-function sanitizeCustomHtml(html: string) {
+function sanitizeRichTextHtml(html: string) {
   return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ['div', 'p', 'br', 'strong', 'b', 'em', 'i', 'span'],
+    ALLOWED_TAGS: ['div', 'p', 'br', 'strong', 'b', 'em', 'i', 'span', 'ul', 'ol', 'li'],
     ALLOWED_ATTR: ['style'],
   })
 }
@@ -855,27 +970,29 @@ function plainTextToHtml(value: string) {
     .replace(/\n/g, '<br>')
 }
 
-function CustomSlideEditor({
-  slide,
+type RichTextCommand = 'bold' | 'italic' | 'justifyLeft' | 'justifyCenter' | 'justifyRight' | 'insertUnorderedList'
+
+function RichTextEditor({
+  html,
+  fallbackText,
   onChange,
+  placeholder = 'Content',
+  editorClassName = 'min-h-[100px] flex-1 text-xl',
 }: {
-  slide: Slide
-  onChange: (slide: Slide) => void
+  html?: string
+  fallbackText: string
+  onChange: (html: string, value: string) => void
+  placeholder?: string
+  editorClassName?: string
 }) {
   const editorRef = useRef<HTMLDivElement>(null)
   const savedRangeRef = useRef<Range | null>(null)
-  const contentBlock = slide.content.textBlocks?.[0]
-  const imageInputId = `custom-slide-image-${slide.id}`
-  const initialHtml = slide.content.customHtml ?? plainTextToHtml(contentBlock?.value ?? '')
-
-  const updateContent = (patch: Partial<SlideContent>) => {
-    onChange({ ...slide, content: { ...slide.content, ...patch } })
-  }
+  const initialHtml = html ?? plainTextToHtml(fallbackText)
 
   useEffect(() => {
     const editor = editorRef.current
     if (!editor || document.activeElement === editor) return
-    const safeHtml = sanitizeCustomHtml(initialHtml)
+    const safeHtml = sanitizeRichTextHtml(initialHtml)
     if (editor.innerHTML !== safeHtml) editor.innerHTML = safeHtml
   }, [initialHtml])
 
@@ -901,17 +1018,10 @@ function CustomSlideEditor({
   const persistEditor = () => {
     const editor = editorRef.current
     if (!editor) return
-    const customHtml = sanitizeCustomHtml(editor.innerHTML)
-    const value = editor.innerText
-    updateContent({
-      customHtml,
-      textBlocks: contentBlock
-        ? (slide.content.textBlocks ?? []).map((block) => block.id === contentBlock.id ? { ...block, value } : block)
-        : slide.content.textBlocks,
-    })
+    onChange(sanitizeRichTextHtml(editor.innerHTML), editor.innerText)
   }
 
-  const applyCommand = (command: 'bold' | 'italic' | 'justifyLeft' | 'justifyCenter' | 'justifyRight') => {
+  const applyCommand = (command: RichTextCommand) => {
     if (!restoreSelection()) return
     document.execCommand(command, false)
     saveSelection()
@@ -931,14 +1041,80 @@ function CustomSlideEditor({
     persistEditor()
   }
 
+  const toolbarButton = 'flex h-8 w-8 items-center justify-center rounded border border-[#D8E4F2] bg-white text-slate-500 transition hover:border-[#0057C2] hover:bg-[#EAF6FF] hover:text-[#0057C2]'
+
+  return (
+    <>
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#D8E4F2] bg-[#F7FBFF] p-2" data-pdf-hide="true">
+        <select
+          defaultValue={20}
+          onMouseDown={saveSelection}
+          onChange={(event) => applyFontSize(Number(event.target.value))}
+          className="h-8 rounded border border-[#D8E4F2] bg-white px-2 text-xs font-semibold text-[#062A63] outline-none"
+          aria-label="Text size"
+        >
+          <option value={16}>Small</option>
+          <option value={20}>Medium</option>
+          <option value={24}>Large</option>
+          <option value={30}>Extra large</option>
+          <option value={36}>Title</option>
+        </select>
+        <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('bold') }} className={toolbarButton} aria-label="Bold selected text">
+          <Bold className="h-4 w-4" />
+        </button>
+        <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('italic') }} className={toolbarButton} aria-label="Italic selected text">
+          <Italic className="h-4 w-4" />
+        </button>
+        <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('insertUnorderedList') }} className={toolbarButton} aria-label="Toggle bullet list">
+          <ListIcon className="h-4 w-4" />
+        </button>
+        <span className="mx-1 h-5 w-px bg-[#D8E4F2]" />
+        <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('justifyLeft') }} className={toolbarButton} aria-label="Align selected paragraph left">
+          <AlignLeft className="h-4 w-4" />
+        </button>
+        <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('justifyCenter') }} className={toolbarButton} aria-label="Center selected paragraph">
+          <AlignCenter className="h-4 w-4" />
+        </button>
+        <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('justifyRight') }} className={toolbarButton} aria-label="Align selected paragraph right">
+          <AlignRight className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={persistEditor}
+        onMouseUp={saveSelection}
+        onKeyUp={saveSelection}
+        onBlur={persistEditor}
+        data-placeholder={placeholder}
+        className={`custom-slide-rich-text w-full overflow-y-auto rounded-lg border border-[#D8E4F2] bg-white p-4 leading-relaxed text-[#062A63] outline-none transition focus:border-[#0057C2] empty:before:text-slate-400 empty:before:content-[attr(data-placeholder)] [&_li]:my-1 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6 ${editorClassName}`}
+      />
+    </>
+  )
+}
+
+function CustomSlideEditor({
+  slide,
+  onChange,
+}: {
+  slide: Slide
+  onChange: (slide: Slide) => void
+}) {
+  const contentBlock = slide.content.textBlocks?.[0]
+  const imageInputId = `custom-slide-image-${slide.id}`
+
+  const updateContent = (patch: Partial<SlideContent>) => {
+    onChange({ ...slide, content: { ...slide.content, ...patch } })
+  }
+
   const handleImageChange = (file?: File) => {
     if (!file) return
     readImageFile(file).then((customImageSrc) => {
       if (customImageSrc) updateContent({ customImageSrc })
     })
   }
-
-  const toolbarButton = 'flex h-8 w-8 items-center justify-center rounded border border-[#D8E4F2] bg-white text-slate-500 transition hover:border-[#0057C2] hover:bg-[#EAF6FF] hover:text-[#0057C2]'
 
   return (
     <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
@@ -948,48 +1124,15 @@ function CustomSlideEditor({
           <AutoResizeSlideTitle value={slide.title} onChange={(title) => onChange({ ...slide, title })} />
         </div>
 
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#D8E4F2] bg-[#F7FBFF] p-2" data-pdf-hide="true">
-          <select
-            defaultValue={20}
-            onMouseDown={saveSelection}
-            onChange={(event) => applyFontSize(Number(event.target.value))}
-            className="h-8 rounded border border-[#D8E4F2] bg-white px-2 text-xs font-semibold text-[#062A63] outline-none"
-            aria-label="Text size"
-          >
-            <option value={16}>Small</option>
-            <option value={20}>Medium</option>
-            <option value={24}>Large</option>
-            <option value={30}>Extra large</option>
-            <option value={36}>Title</option>
-          </select>
-          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('bold') }} className={toolbarButton} aria-label="Bold selected text">
-            <Bold className="h-4 w-4" />
-          </button>
-          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('italic') }} className={toolbarButton} aria-label="Italic selected text">
-            <Italic className="h-4 w-4" />
-          </button>
-          <span className="mx-1 h-5 w-px bg-[#D8E4F2]" />
-          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('justifyLeft') }} className={toolbarButton} aria-label="Align selected paragraph left">
-            <AlignLeft className="h-4 w-4" />
-          </button>
-          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('justifyCenter') }} className={toolbarButton} aria-label="Center selected paragraph">
-            <AlignCenter className="h-4 w-4" />
-          </button>
-          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('justifyRight') }} className={toolbarButton} aria-label="Align selected paragraph right">
-            <AlignRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div
-          ref={editorRef}
-          contentEditable
-          suppressContentEditableWarning
-          onInput={persistEditor}
-          onMouseUp={saveSelection}
-          onKeyUp={saveSelection}
-          onBlur={persistEditor}
-          data-placeholder="Content"
-          className="custom-slide-rich-text min-h-[100px] w-full flex-1 overflow-y-auto rounded-lg border border-[#D8E4F2] bg-white p-4 text-xl leading-relaxed text-[#062A63] outline-none transition focus:border-[#0057C2] empty:before:text-slate-400 empty:before:content-[attr(data-placeholder)]"
+        <RichTextEditor
+          html={slide.content.customHtml}
+          fallbackText={contentBlock?.value ?? ''}
+          onChange={(customHtml, value) => updateContent({
+            customHtml,
+            textBlocks: contentBlock
+              ? (slide.content.textBlocks ?? []).map((block) => block.id === contentBlock.id ? { ...block, value } : block)
+              : slide.content.textBlocks,
+          })}
         />
 
         {slide.content.customImageSrc ? (
@@ -1030,6 +1173,15 @@ export function ReportSlide({
   const updateTextBlock = (key: 'textBlocks' | 'noteBlocks', id: string, value: string) => {
     const blocks = slide.content[key] ?? []
     updateContent({ [key]: blocks.map((block) => (block.id === id ? { ...block, value } : block)) })
+  }
+
+  const updateRichTextBlock = (
+    key: 'textBlocks' | 'noteBlocks',
+    id: string,
+    patch: Pick<TextBlock, 'value' | 'html'>,
+  ) => {
+    const blocks = slide.content[key] ?? []
+    updateContent({ [key]: blocks.map((block) => (block.id === id ? { ...block, ...patch } : block)) })
   }
 
   const updateKpi = (id: string, patch: Partial<KpiMetric>) => {
@@ -1154,10 +1306,13 @@ export function ReportSlide({
     )
   }
 
-  if (slide.type === 'thank_you') {
+  if (slide.type === 'highlights' || slide.type === 'next_steps') {
+    const defaultSubtitle = slide.type === 'highlights'
+      ? 'Summary of Highlights'
+      : 'Priorities for the Month Ahead'
     return (
       <section
-        className={`relative flex ${slideFrameClass} items-center justify-center border border-[#0B67D1] p-10 text-center text-white shadow-[0_24px_60px_rgba(0,59,143,0.22)]`}
+        className={`relative flex ${slideFrameClass} items-center justify-center border border-[#0B67D1] p-10 text-white shadow-[0_24px_60px_rgba(0,59,143,0.22)]`}
         style={{
           background:
             `linear-gradient(135deg, ${reportTheme.darkBlue} 0%, ${reportTheme.primaryBlue} 58%, ${reportTheme.lightBlue} 100%)`,
@@ -1171,13 +1326,57 @@ export function ReportSlide({
             backgroundSize: '44px 44px',
           }}
         />
+        <div className="relative z-10 w-full max-w-3xl text-left">
+          {slide.type === 'next_steps' ? (
+            <textarea
+              value={slide.title}
+              onChange={(event) => onChange({ ...slide, title: event.target.value })}
+              rows={2}
+              className="block w-full resize-none overflow-hidden whitespace-normal break-words bg-transparent text-left text-6xl font-bold leading-[1.08] text-white outline-none placeholder:text-white/50 max-md:text-4xl"
+            />
+          ) : (
+            <input
+              value={slide.title}
+              onChange={(event) => onChange({ ...slide, title: event.target.value })}
+              className="w-full bg-transparent text-left text-7xl font-bold leading-tight text-white outline-none placeholder:text-white/50 max-md:text-5xl"
+            />
+          )}
+          <input
+            value={slide.content.subtitle ?? defaultSubtitle}
+            onChange={(event) => updateContent({ subtitle: event.target.value })}
+            className="mt-6 w-full bg-transparent text-left text-3xl font-semibold text-[#BFEFFF] outline-none placeholder:text-white/50 max-md:text-2xl"
+          />
+        </div>
+      </section>
+    )
+  }
+
+  if (slide.type === 'thank_you') {
+    return (
+      <section
+        className={`relative flex ${slideFrameClass} items-center justify-center border border-[#0B67D1] bg-[#0057C2] p-10 text-center text-white shadow-[0_24px_60px_rgba(0,59,143,0.22)]`}
+      >
+        <img
+          src={thankYouBackground}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(255,255,255,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.18) 1px, transparent 1px)',
+            backgroundSize: '44px 44px',
+          }}
+        />
         
-          <div className="flex h-full w-full flex-col items-center justify-center gap-8 text-center">
+          <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-8 text-center">
             <textarea
               value={slide.content.finalMessage ?? ''}
               onChange={(event) => updateContent({ finalMessage: event.target.value })}
               rows={4}
-              className="relative z-10 w-full max-w-3xl resize-none bg-transparent text-center text-5xl font-bold leading-tight text-white outline-none placeholder:text-white/50 max-md:text-3xl"
+              className="w-full max-w-3xl resize-none bg-transparent text-center text-5xl font-bold leading-tight text-white outline-none placeholder:text-white/50 max-md:text-3xl"
             />
             <div className="relative rounded-md px-4 py-3">
               <XMSLogo mode="dark" height={134} />
@@ -1287,6 +1486,57 @@ export function ReportSlide({
     )
   }
 
+  if (slide.type === 'lsa_notes') {
+    const introBlock = slide.content.textBlocks?.find((block) => block.id === 'lsa-leads-intro')
+    const leadsTable = slide.content.tables?.find((table) => table.id === 'lsa-credited-leads')
+    return (
+      <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
+        <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
+        <div className="flex min-h-0 flex-1 flex-col p-5">
+          <div className="mb-3 border-b border-[#D8E4F2] pb-3">
+            <AutoResizeSlideTitle value={slide.title} onChange={(title) => onChange({ ...slide, title })} />
+          </div>
+          {introBlock ? (
+            <textarea
+              value={introBlock.value}
+              onChange={(event) => updateTextBlock('textBlocks', introBlock.id, event.target.value)}
+              rows={2}
+              className="mb-3 w-full resize-none overflow-hidden bg-transparent px-1 text-[18px] font-semibold leading-7 text-[#202124] outline-none"
+            />
+          ) : null}
+          {leadsTable ? (
+            <LsaCreditedLeadsTable
+              table={leadsTable}
+              onCellChange={(rowIndex, key, value) => updateTableCell(leadsTable.id, rowIndex, key, value)}
+            />
+          ) : null}
+        </div>
+      </section>
+    )
+  }
+
+  if (slide.type === 'recommendations') {
+    return (
+      <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
+        <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
+        <div className="flex min-h-0 flex-1 flex-col p-5">
+          <div className="mb-4 border-b border-[#D8E4F2] pb-3">
+            <AutoResizeSlideTitle value={slide.title} onChange={(title) => onChange({ ...slide, title })} />
+          </div>
+          <div className="min-h-0 flex-1">
+            {slide.content.textBlocks?.map((block) => (
+              <RichTextBlockEditor
+                key={block.id}
+                block={block}
+                onChange={(patch) => updateRichTextBlock('textBlocks', block.id, patch)}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   if (slide.type === 'custom') {
     return <CustomSlideEditor slide={slide} onChange={onChange} />
   }
@@ -1378,7 +1628,14 @@ export function ReportSlide({
         ) : null}
 
         {slide.content.textBlocks?.map((block) => (
-          slide.type === 'keywords' || slide.type === 'ads' || slide.type === 'search_terms' ? (
+          slide.type === 'ads' ? (
+            <RichTextBlockEditor
+              key={block.id}
+              block={{ ...block, label: 'Google Ads Analysis' }}
+              compact
+              onChange={(patch) => updateRichTextBlock('textBlocks', block.id, patch)}
+            />
+          ) : slide.type === 'keywords' || slide.type === 'search_terms' ? (
             <GoogleAdsSummaryBlock key={block.id} block={block} onChange={(value) => updateTextBlock('textBlocks', block.id, value)} />
           ) : (
             <EditableTextBlock key={block.id} block={block} onChange={(value) => updateTextBlock('textBlocks', block.id, value)} />
@@ -1386,7 +1643,7 @@ export function ReportSlide({
         ))}
 
         {slide.content.noteBlocks?.length ? (
-          <div className={slide.type === 'lsa_notes' ? 'grid grid-cols-2 gap-3' : 'space-y-4'}>
+          <div className="space-y-4">
             {slide.content.noteBlocks.map((block) => (
               <EditableTextBlock key={block.id} block={block} minRows={3} onChange={(value) => updateTextBlock('noteBlocks', block.id, value)} />
             ))}
