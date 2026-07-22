@@ -79,6 +79,10 @@ function replaceEditableControlsWithStaticText(container: HTMLElement) {
   })
 }
 
+function hidePdfOnlyControls(container: HTMLElement) {
+  container.querySelectorAll<HTMLElement>('[data-pdf-hide="true"]').forEach((element) => element.remove())
+}
+
 export async function exportReportToPdf(report: Report) {
   const slides = report.slides.slice().sort((a, b) => a.order - b.order)
   const host = createExportHost()
@@ -107,6 +111,7 @@ export async function exportReportToPdf(report: Report) {
     })
 
     await waitForRenderedAssets(host)
+    hidePdfOnlyControls(host)
     replaceEditableControlsWithStaticText(host)
     const slideNodes = Array.from(host.querySelectorAll<HTMLElement>('[data-pdf-slide]'))
     const pdf = new jsPDF({

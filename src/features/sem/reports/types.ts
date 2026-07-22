@@ -49,8 +49,18 @@ export interface SlideContent {
   highlights?: string[]
   noteBlocks?: TextBlock[]
   supportingImageSrc?: string
+  customImageSrc?: string
+  customHtml?: string
+  customTextFormat?: CustomTextFormat
   lsaKeyResults?: LsaKeyResultsData
   finalMessage?: string
+}
+
+export interface CustomTextFormat {
+  fontSize: number
+  bold: boolean
+  italic: boolean
+  align: 'left' | 'center' | 'right'
 }
 
 export interface LsaKeyResultsData {

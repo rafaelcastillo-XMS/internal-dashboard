@@ -1,14 +1,20 @@
 import { useEffect, useRef } from 'react'
+import DOMPurify from 'dompurify'
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   ArrowDown,
   ArrowDownRight,
   ArrowRight,
   ArrowUp,
   ArrowUpRight,
+  Bold,
   Clock3,
   Download,
   Eye,
   ImagePlus,
+  Italic,
   Layers3,
   Monitor,
   MoreVertical,
@@ -826,6 +832,180 @@ export function PmaxAdPreviewCard({
   )
 }
 
+function sanitizeCustomHtml(html: string) {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['div', 'p', 'br', 'strong', 'b', 'em', 'i', 'span'],
+    ALLOWED_ATTR: ['style'],
+  })
+}
+
+function plainTextToHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>')
+}
+
+function CustomSlideEditor({
+  slide,
+  onChange,
+}: {
+  slide: Slide
+  onChange: (slide: Slide) => void
+}) {
+  const editorRef = useRef<HTMLDivElement>(null)
+  const savedRangeRef = useRef<Range | null>(null)
+  const contentBlock = slide.content.textBlocks?.[0]
+  const imageInputId = `custom-slide-image-${slide.id}`
+  const initialHtml = slide.content.customHtml ?? plainTextToHtml(contentBlock?.value ?? '')
+
+  const updateContent = (patch: Partial<SlideContent>) => {
+    onChange({ ...slide, content: { ...slide.content, ...patch } })
+  }
+
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor || document.activeElement === editor) return
+    const safeHtml = sanitizeCustomHtml(initialHtml)
+    if (editor.innerHTML !== safeHtml) editor.innerHTML = safeHtml
+  }, [initialHtml])
+
+  const saveSelection = () => {
+    const editor = editorRef.current
+    const selection = window.getSelection()
+    if (!editor || !selection?.rangeCount) return
+    const range = selection.getRangeAt(0)
+    if (editor.contains(range.commonAncestorContainer)) savedRangeRef.current = range.cloneRange()
+  }
+
+  const restoreSelection = () => {
+    const editor = editorRef.current
+    const range = savedRangeRef.current
+    if (!editor || !range) return false
+    editor.focus()
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    return true
+  }
+
+  const persistEditor = () => {
+    const editor = editorRef.current
+    if (!editor) return
+    const customHtml = sanitizeCustomHtml(editor.innerHTML)
+    const value = editor.innerText
+    updateContent({
+      customHtml,
+      textBlocks: contentBlock
+        ? (slide.content.textBlocks ?? []).map((block) => block.id === contentBlock.id ? { ...block, value } : block)
+        : slide.content.textBlocks,
+    })
+  }
+
+  const applyCommand = (command: 'bold' | 'italic' | 'justifyLeft' | 'justifyCenter' | 'justifyRight') => {
+    if (!restoreSelection()) return
+    document.execCommand(command, false)
+    saveSelection()
+    persistEditor()
+  }
+
+  const applyFontSize = (fontSize: number) => {
+    if (!restoreSelection()) return
+    document.execCommand('fontSize', false, '7')
+    editorRef.current?.querySelectorAll('font[size="7"]').forEach((font) => {
+      const span = document.createElement('span')
+      span.style.fontSize = `${fontSize}px`
+      span.innerHTML = font.innerHTML
+      font.replaceWith(span)
+    })
+    saveSelection()
+    persistEditor()
+  }
+
+  const handleImageChange = (file?: File) => {
+    if (!file) return
+    readImageFile(file).then((customImageSrc) => {
+      if (customImageSrc) updateContent({ customImageSrc })
+    })
+  }
+
+  const toolbarButton = 'flex h-8 w-8 items-center justify-center rounded border border-[#D8E4F2] bg-white text-slate-500 transition hover:border-[#0057C2] hover:bg-[#EAF6FF] hover:text-[#0057C2]'
+
+  return (
+    <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
+      <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
+      <div className="flex min-h-0 flex-1 flex-col p-5">
+        <div className="mb-4 border-b border-[#D8E4F2] pb-3">
+          <AutoResizeSlideTitle value={slide.title} onChange={(title) => onChange({ ...slide, title })} />
+        </div>
+
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#D8E4F2] bg-[#F7FBFF] p-2" data-pdf-hide="true">
+          <select
+            defaultValue={20}
+            onMouseDown={saveSelection}
+            onChange={(event) => applyFontSize(Number(event.target.value))}
+            className="h-8 rounded border border-[#D8E4F2] bg-white px-2 text-xs font-semibold text-[#062A63] outline-none"
+            aria-label="Text size"
+          >
+            <option value={16}>Small</option>
+            <option value={20}>Medium</option>
+            <option value={24}>Large</option>
+            <option value={30}>Extra large</option>
+            <option value={36}>Title</option>
+          </select>
+          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('bold') }} className={toolbarButton} aria-label="Bold selected text">
+            <Bold className="h-4 w-4" />
+          </button>
+          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('italic') }} className={toolbarButton} aria-label="Italic selected text">
+            <Italic className="h-4 w-4" />
+          </button>
+          <span className="mx-1 h-5 w-px bg-[#D8E4F2]" />
+          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('justifyLeft') }} className={toolbarButton} aria-label="Align selected paragraph left">
+            <AlignLeft className="h-4 w-4" />
+          </button>
+          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('justifyCenter') }} className={toolbarButton} aria-label="Center selected paragraph">
+            <AlignCenter className="h-4 w-4" />
+          </button>
+          <button type="button" onMouseDown={(event) => { event.preventDefault(); applyCommand('justifyRight') }} className={toolbarButton} aria-label="Align selected paragraph right">
+            <AlignRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={persistEditor}
+          onMouseUp={saveSelection}
+          onKeyUp={saveSelection}
+          onBlur={persistEditor}
+          data-placeholder="Content"
+          className="custom-slide-rich-text min-h-[100px] w-full flex-1 overflow-y-auto rounded-lg border border-[#D8E4F2] bg-white p-4 text-xl leading-relaxed text-[#062A63] outline-none transition focus:border-[#0057C2] empty:before:text-slate-400 empty:before:content-[attr(data-placeholder)]"
+        />
+
+        {slide.content.customImageSrc ? (
+          <div className="relative mt-3 flex h-[230px] shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#D8E4F2] bg-[#F7FBFF]">
+            <img src={slide.content.customImageSrc} alt="Custom slide" className="h-full w-full object-contain" />
+            <div className="absolute right-3 top-3 flex gap-2" data-pdf-hide="true">
+              <label htmlFor={imageInputId} className="inline-flex h-8 cursor-pointer items-center rounded-md bg-white px-3 text-xs font-bold text-[#0057C2] shadow">Replace</label>
+              <button type="button" onClick={() => updateContent({ customImageSrc: undefined })} className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white text-slate-500 shadow" aria-label="Remove image">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <label htmlFor={imageInputId} className="mt-3 inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-[#B9D8F4] text-sm font-semibold text-[#0057C2] hover:bg-[#F7FBFF]" data-pdf-hide="true">
+            <ImagePlus className="h-4 w-4" />
+            Add image
+          </label>
+        )}
+        <input id={imageInputId} type="file" accept="image/*" onChange={(event) => handleImageChange(event.target.files?.[0])} className="sr-only" data-pdf-hide="true" />
+      </div>
+    </section>
+  )
+}
+
 export function ReportSlide({
   report,
   slide,
@@ -983,15 +1163,19 @@ export function ReportSlide({
             backgroundSize: '44px 44px',
           }}
         />
-        <div className="absolute right-8 top-8 rounded-md bg-white/10 px-4 py-3 backdrop-blur">
-          <XMSLogo mode="dark" height={34} />
-        </div>
-        <textarea
-          value={slide.content.finalMessage ?? ''}
-          onChange={(event) => updateContent({ finalMessage: event.target.value })}
-          rows={4}
-          className="relative z-10 w-full max-w-3xl resize-none bg-transparent text-center text-4xl font-bold leading-tight text-white outline-none placeholder:text-white/50 max-md:text-3xl"
-        />
+        
+          <div className="flex h-full w-full flex-col items-center justify-center gap-8 text-center">
+            <textarea
+              value={slide.content.finalMessage ?? ''}
+              onChange={(event) => updateContent({ finalMessage: event.target.value })}
+              rows={4}
+              className="relative z-10 w-full max-w-3xl resize-none bg-transparent text-center text-5xl font-bold leading-tight text-white outline-none placeholder:text-white/50 max-md:text-3xl"
+            />
+            <div className="relative rounded-md px-4 py-3">
+              <XMSLogo mode="dark" height={134} />
+            </div>
+          </div>
+
       </section>
     )
   }
@@ -1093,6 +1277,10 @@ export function ReportSlide({
         </div>
       </section>
     )
+  }
+
+  if (slide.type === 'custom') {
+    return <CustomSlideEditor slide={slide} onChange={onChange} />
   }
 
   return (

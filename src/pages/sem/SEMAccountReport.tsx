@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import DOMPurify from 'dompurify'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, FileText, FolderOpen, Plus, X } from 'lucide-react'
 import { useSEMDashboardState } from '@/features/sem/hooks/useSEMDashboardState'
@@ -327,6 +328,28 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
                       <p className="mt-6 text-2xl font-bold text-white/85">{report.clientName}</p>
                     </div>
                   )}
+                  {slide.type === 'custom' && (() => {
+                    const customHtml = slide.content.customHtml
+                    return (
+                      <div className="flex min-h-[500px] flex-col">
+                        {customHtml ? (
+                          <div
+                            className="min-h-0 flex-1 whitespace-pre-wrap p-4 text-xl leading-relaxed text-[#062A63]"
+                            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(customHtml) }}
+                          />
+                        ) : (
+                          <p className="min-h-0 flex-1 whitespace-pre-wrap p-4 text-xl leading-relaxed text-[#062A63]">
+                            {slide.content.textBlocks?.[0]?.value ?? ''}
+                          </p>
+                        )}
+                        {slide.content.customImageSrc ? (
+                          <div className="mt-3 flex h-[230px] items-center justify-center overflow-hidden">
+                            <img src={slide.content.customImageSrc} alt="Custom slide" className="h-full w-full object-contain" />
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })()}
                   {slide.type === 'lsa_key_results' && <LsaKeyResultsPanel slide={slide} />}
                   {slide.type !== 'lsa_key_results' && slide.content.kpis?.length ? (
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -384,7 +407,7 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
                       ))}
                     </ul>
                   ) : null}
-                  {[...(slide.type === 'ads' || slide.type === 'lsa_key_results' ? [] : slide.content.textBlocks ?? []), ...(slide.content.noteBlocks ?? [])].map((block) => (
+                  {[...(slide.type === 'ads' || slide.type === 'lsa_key_results' || slide.type === 'custom' ? [] : slide.content.textBlocks ?? []), ...(slide.content.noteBlocks ?? [])].map((block) => (
                     <div key={block.id} className={slide.type === 'google_ads_kpis' ? 'mt-3 border-t border-[#D8E4F2] pt-3' : 'mt-4 rounded-lg border border-[#D8E4F2] bg-[#F7FBFF] p-4'}>
                       {slide.type === 'ads' || slide.type === 'search_terms' || slide.type === 'keywords' ? null : (
                         <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#0057C2]">{block.label}</p>
@@ -425,11 +448,18 @@ function createCustomSlide(order: number): Slide {
     order,
     notes: '',
     content: {
+      customTextFormat: {
+        fontSize: 20,
+        bold: false,
+        italic: false,
+        align: 'left',
+      },
+      customHtml: '',
       textBlocks: [
         {
           id: `${id}-content`,
           label: 'Content',
-          value: 'Write slide content here.',
+          value: '',
         },
       ],
     },
