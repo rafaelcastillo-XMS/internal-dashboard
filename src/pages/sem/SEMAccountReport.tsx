@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, FileText, FolderOpen, Plus, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, FileText, FolderOpen, Plus, RotateCcw, Trash2, X } from 'lucide-react'
 import { useSEMDashboardState } from '@/features/sem/hooks/useSEMDashboardState'
 import {
   REPORT_MONTHS,
@@ -9,7 +9,13 @@ import {
   createSeedReportsForClient,
   initialsForName,
 } from '@/features/sem/reports/mockReports'
-import { readStoredReports, upsertStoredReport, writeStoredReports } from '@/features/sem/reports/storage'
+import {
+  getStoredReport,
+  listStoredReports,
+  migrateLegacyStoredReports,
+  upsertStoredReport,
+  upsertStoredReports,
+} from '@/features/sem/reports/storage'
 import { exportReportToPdf } from '@/features/sem/reports/exportReportPdf'
 import {
   hydrateReportWithRealGoogleAdsData,
@@ -89,6 +95,12 @@ function currentYearOptions() {
   return [year - 1, year, year + 1]
 }
 
+function mergeReports(current: Report[], incoming: Report[]) {
+  const merged = new Map(current.map((report) => [report.id, report]))
+  for (const report of incoming) merged.set(report.id, report)
+  return Array.from(merged.values())
+}
+
 function ReportStatusBadge({ status }: { status: ReportStatus }) {
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(status)}`}>
@@ -111,6 +123,7 @@ function CreateReportPanel({
   const [month, setMonth] = useState(REPORT_MONTHS[today.getMonth()])
   const [year, setYear] = useState(today.getFullYear())
   const [generating, setGenerating] = useState(false)
+  const [createError, setCreateError] = useState('')
 
   useEffect(() => {
     setClientId(defaultClientId)
@@ -162,8 +175,11 @@ function CreateReportPanel({
         <button
           onClick={async () => {
             setGenerating(true)
+            setCreateError('')
             try {
               await onCreate(clientId, month, year)
+            } catch (error) {
+              setCreateError(error instanceof Error ? error.message : 'Unable to create this report in Supabase.')
             } finally {
               setGenerating(false)
             }
@@ -175,6 +191,7 @@ function CreateReportPanel({
           {generating ? 'Loading Ads data...' : 'Generate Report'}
         </button>
       </div>
+      {createError && <p className="mt-3 text-sm font-semibold text-red-600">{createError}</p>}
     </div>
   )
 }
@@ -290,7 +307,7 @@ function ReportsListPage({
   )
 }
 
-function PreviewModal({ report, onClose }: { report: Report; onClose: () => void }) {
+export function PreviewModal({ report, onClose }: { report: Report; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[120] bg-black/50 p-4 backdrop-blur-sm">
       <div className="mx-auto flex h-full max-w-[1220px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-boxdark">
@@ -439,8 +456,8 @@ function assignSlideOrder(slides: Slide[]) {
   return slides.map((slide, index) => ({ ...slide, order: index + 1 }))
 }
 
-function createCustomSlide(order: number): Slide {
-  const id = `custom-slide-${Date.now()}`
+function createCustomSlide(order: number, existingId?: string): Slide {
+  const id = existingId ?? `custom-slide-${Date.now()}`
   return {
     id,
     type: 'custom',
@@ -472,19 +489,23 @@ function ReportEditorView({
   onBack,
 }: {
   sourceReport: Report
-  onPersist: (report: Report) => void
+  onPersist: (report: Report) => Promise<Report>
   onBack: () => void
 }) {
   const [draft, setDraft] = useState(sourceReport)
   const [activeSlideId, setActiveSlideId] = useState(sourceReport.slides[0]?.id ?? '')
   const [dirty, setDirty] = useState(false)
-  const [previewOpen, setPreviewOpen] = useState(false)
   const [googleAdsDataLoading, setGoogleAdsDataLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [persistenceError, setPersistenceError] = useState('')
+  const initialSlidesRef = useRef(new Map<string, Slide>())
 
   useEffect(() => {
+    initialSlidesRef.current = new Map(sourceReport.slides.map((slide) => [slide.id, structuredClone(slide)]))
     setDraft(sourceReport)
     setActiveSlideId(sourceReport.slides[0]?.id ?? '')
     setDirty(false)
+    setPersistenceError('')
   }, [sourceReport])
 
   useEffect(() => {
@@ -499,12 +520,16 @@ function ReportEditorView({
 
     setGoogleAdsDataLoading(true)
     hydrateReportWithRealGoogleAdsData(sourceReport)
-      .then((hydratedReport) => {
+      .then(async (hydratedReport) => {
         if (cancelled) return
         const saved = { ...hydratedReport, updatedAt: new Date().toISOString() }
-        setDraft(saved)
-        onPersist(saved)
+        const persisted = await onPersist(saved)
+        if (cancelled) return
+        setDraft(persisted)
         setDirty(false)
+      })
+      .catch((error) => {
+        if (!cancelled) setPersistenceError(error instanceof Error ? error.message : 'Unable to save the Google Ads report data.')
       })
       .finally(() => {
         if (!cancelled) setGoogleAdsDataLoading(false)
@@ -526,11 +551,35 @@ function ReportEditorView({
     setDirty(true)
   }
 
-  const saveReport = () => {
+  const saveReport = async () => {
     const saved = { ...draft, updatedAt: new Date().toISOString() }
-    setDraft(saved)
-    onPersist(saved)
-    setDirty(false)
+    setSaving(true)
+    setPersistenceError('')
+    try {
+      const persisted = await onPersist(saved)
+      setDraft(persisted)
+      setDirty(false)
+    } catch (error) {
+      setPersistenceError(error instanceof Error ? error.message : 'Unable to save this report in Supabase.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const refreshGoogleAdsData = async () => {
+    setGoogleAdsDataLoading(true)
+    setPersistenceError('')
+    try {
+      const hydratedReport = await hydrateReportWithRealGoogleAdsData(draft, { force: true })
+      const saved = { ...hydratedReport, updatedAt: new Date().toISOString() }
+      const persisted = await onPersist(saved)
+      setDraft(persisted)
+      setDirty(false)
+    } catch (error) {
+      setPersistenceError(error instanceof Error ? error.message : 'Unable to refresh and save the Google Ads report data.')
+    } finally {
+      setGoogleAdsDataLoading(false)
+    }
   }
 
   const addSlide = () => {
@@ -564,6 +613,31 @@ function ReportEditorView({
     setDirty(true)
   }
 
+  const restoreSlide = () => {
+    const restored = activeSlide.type === 'custom'
+      ? createCustomSlide(activeSlide.order, activeSlide.id)
+      : initialSlidesRef.current.get(activeSlide.id)
+    if (!restored) return
+
+    setDraft((current) => ({
+      ...current,
+      slides: current.slides.map((slide) => slide.id === activeSlide.id
+        ? { ...structuredClone(restored), order: activeSlide.order }
+        : slide),
+    }))
+    setDirty(true)
+  }
+
+  const deleteSlide = () => {
+    const activeIndex = sortedSlides.findIndex((slide) => slide.id === activeSlide.id)
+    const remaining = renumberSlides(sortedSlides.filter((slide) => slide.id !== activeSlide.id))
+    const nextSlide = remaining[Math.min(activeIndex, remaining.length - 1)]
+
+    setDraft((current) => ({ ...current, slides: remaining }))
+    setActiveSlideId(nextSlide?.id ?? '')
+    setDirty(true)
+  }
+
   if (!activeSlide) {
     return (
       <div className="mx-auto max-w-screen-xl p-6">
@@ -572,7 +646,15 @@ function ReportEditorView({
           Back to reports
         </button>
         <div className="rounded-lg border border-stroke bg-white p-8 text-center text-body dark:border-strokedark dark:bg-boxdark dark:text-bodydark">
-          This report has no slides.
+          <p>This report has no slides.</p>
+          <button
+            type="button"
+            onClick={addSlide}
+            className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-slate-800 px-4 text-sm font-bold text-white transition hover:bg-slate-900"
+          >
+            <Plus className="h-4 w-4" />
+            Add slide
+          </button>
         </div>
       </div>
     )
@@ -585,7 +667,9 @@ function ReportEditorView({
         dirty={dirty}
         onBack={onBack}
         onSave={saveReport}
-        onPreview={() => setPreviewOpen(true)}
+        saving={saving}
+        onRefresh={refreshGoogleAdsData}
+        refreshing={googleAdsDataLoading}
         onExportPdf={() => exportReportToPdf(draft)}
       />
       <div className="grid min-h-[calc(100vh-122px)] grid-cols-[280px_minmax(0,1fr)] max-xl:grid-cols-1">
@@ -640,10 +724,32 @@ function ReportEditorView({
               Loading real Google Ads report data...
             </div>
           )}
+          {persistenceError && (
+            <div className="mx-auto mb-4 w-full max-w-[1164px] rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {persistenceError}
+            </div>
+          )}
           <ReportSlide report={draft} slide={activeSlide} onChange={updateSlide} />
+          <div className="mt-4 flex w-full max-w-[1164px] items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={restoreSlide}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Restore
+            </button>
+            <button
+              type="button"
+              onClick={deleteSlide}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-red-200 bg-white px-4 text-sm font-bold text-red-600 transition hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Slide
+            </button>
+          </div>
         </main>
       </div>
-      {previewOpen && <PreviewModal report={draft} onClose={() => setPreviewOpen(false)} />}
     </div>
   )
 }
@@ -652,7 +758,10 @@ export function SEMAccountReport() {
   const navigate = useNavigate()
   const { clientId, reportId } = useParams<{ clientId?: string; reportId?: string }>()
   const semState = useSEMDashboardState()
-  const [reports, setReports] = useState<Report[]>(() => readStoredReports())
+  const [reports, setReports] = useState<Report[]>([])
+  const [reportsLoading, setReportsLoading] = useState(true)
+  const [reportsLoadError, setReportsLoadError] = useState('')
+  const [reportsReloadKey, setReportsReloadKey] = useState(0)
   const [clientLogo, setClientLogo] = useState<string | null>(null)
 
   const routeClientId = clientId ? decodeURIComponent(clientId) : ''
@@ -669,6 +778,32 @@ export function SEMAccountReport() {
 
   useEffect(() => {
     let active = true
+    setReportsLoading(true)
+    setReportsLoadError('')
+
+    const loadReports = async () => {
+      await migrateLegacyStoredReports()
+      const [clientReports, routedReport] = await Promise.all([
+        listStoredReports(effectiveClientId),
+        reportId ? getStoredReport(reportId) : Promise.resolve(null),
+      ])
+      if (!active) return
+      setReports(routedReport ? mergeReports(clientReports, [routedReport]) : clientReports)
+    }
+
+    loadReports()
+      .catch((error) => {
+        if (active) setReportsLoadError(error instanceof Error ? error.message : 'Unable to load monthly reports from Supabase.')
+      })
+      .finally(() => {
+        if (active) setReportsLoading(false)
+      })
+
+    return () => { active = false }
+  }, [effectiveClientId, reportId, reportsReloadKey])
+
+  useEffect(() => {
+    let active = true
     setClientLogo(null)
     resolveClientLogo(effectiveClientId)
       .then(logo => { if (active) setClientLogo(logo) })
@@ -677,18 +812,22 @@ export function SEMAccountReport() {
   }, [effectiveClientId])
 
   useEffect(() => {
-    if (!clientLogo) return
-    setReports(current => {
-      let changed = false
-      const next = current.map(report => {
-        if (report.clientId !== effectiveClientId || report.clientLogo === clientLogo) return report
-        changed = true
-        return { ...report, clientLogo, updatedAt: new Date().toISOString() }
+    if (!clientLogo || reportsLoading) return
+    const reportsWithOldLogo = reports
+      .filter((report) => report.clientId === effectiveClientId && report.clientLogo !== clientLogo)
+      .map((report) => ({ ...report, clientLogo, updatedAt: new Date().toISOString() }))
+    if (!reportsWithOldLogo.length) return
+
+    let active = true
+    upsertStoredReports(reportsWithOldLogo)
+      .then((saved) => {
+        if (active) setReports((current) => mergeReports(current, saved))
       })
-      if (changed) writeStoredReports(next)
-      return changed ? next : current
-    })
-  }, [clientLogo, effectiveClientId])
+      .catch((error) => {
+        if (active) console.error('[sem-monthly-reports] Unable to persist client logo:', error)
+      })
+    return () => { active = false }
+  }, [clientLogo, effectiveClientId, reports, reportsLoading])
 
   const clientOptions = useMemo(() => {
     const options = semState.accountOptions.length > 0
@@ -699,15 +838,21 @@ export function SEMAccountReport() {
   }, [semState.accountOptions, currentClientValue, currentClientLabel])
 
   useEffect(() => {
+    if (reportId || reportsLoading || reportsLoadError) return
     if (!effectiveClientId || !currentClient.label || clientLogo === null) return
-    setReports((current) => {
-      if (current.some((report) => report.clientId === effectiveClientId)) return current
-      const seeded = createSeedReportsForClient({ id: effectiveClientId, name: currentClient.label, logo: clientLogo })
-      const next = [...seeded, ...current]
-      writeStoredReports(next)
-      return next
-    })
-  }, [effectiveClientId, currentClient.label, clientLogo])
+    if (reports.some((report) => report.clientId === effectiveClientId)) return
+
+    let active = true
+    const seeded = createSeedReportsForClient({ id: effectiveClientId, name: currentClient.label, logo: clientLogo })
+    upsertStoredReports(seeded)
+      .then((saved) => {
+        if (active) setReports((current) => mergeReports(current, saved))
+      })
+      .catch((error) => {
+        if (active) setReportsLoadError(error instanceof Error ? error.message : 'Unable to create the initial monthly reports in Supabase.')
+      })
+    return () => { active = false }
+  }, [effectiveClientId, currentClient.label, clientLogo, reportId, reports, reportsLoadError, reportsLoading])
 
   const sortedReports = useMemo(() => {
     return reports
@@ -718,9 +863,10 @@ export function SEMAccountReport() {
 
   const activeReport = reportId ? reports.find((report) => report.id === reportId) : null
 
-  const persistReport = useCallback((report: Report) => {
-    const next = upsertStoredReport(report)
-    setReports(next)
+  const persistReport = useCallback(async (report: Report) => {
+    const saved = await upsertStoredReport(report)
+    setReports((current) => mergeReports(current, [saved]))
+    return saved
   }, [])
 
   const handleCreate = async (selectedClientId: string, month: string, year: number) => {
@@ -739,13 +885,41 @@ export function SEMAccountReport() {
       ...(await hydrateReportWithRealGoogleAdsData(baseReport)),
       updatedAt: new Date().toISOString(),
     }
-    const next = upsertStoredReport(report)
-    setReports(next)
-    navigate(`/sem/clients/${encodeURIComponent(report.clientId)}/reports/${report.id}`)
+    const saved = await upsertStoredReport(report)
+    setReports((current) => mergeReports(current, [saved]))
+    navigate(`/sem/clients/${encodeURIComponent(saved.clientId)}/reports/${saved.id}`)
   }
 
   const openReport = (report: Report) => {
     navigate(`/sem/clients/${encodeURIComponent(report.clientId)}/reports/${report.id}`)
+  }
+
+  if (reportsLoading) {
+    return (
+      <div className="mx-auto max-w-screen-xl p-6">
+        <div className="rounded-lg border border-stroke bg-white p-8 text-center text-body shadow-sm dark:border-strokedark dark:bg-boxdark dark:text-bodydark">
+          Loading monthly reports from Supabase...
+        </div>
+      </div>
+    )
+  }
+
+  if (reportsLoadError) {
+    return (
+      <div className="mx-auto max-w-screen-xl p-6">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-8 text-center">
+          <h1 className="text-lg font-bold text-red-700">Unable to load monthly reports</h1>
+          <p className="mt-2 text-sm text-red-600">{reportsLoadError}</p>
+          <button
+            type="button"
+            onClick={() => setReportsReloadKey((value) => value + 1)}
+            className="mt-4 inline-flex h-10 items-center rounded-md bg-slate-800 px-4 text-sm font-bold text-white transition hover:bg-slate-900"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (reportId) {
@@ -759,7 +933,7 @@ export function SEMAccountReport() {
           <div className="rounded-lg border border-stroke bg-white p-8 text-center dark:border-strokedark dark:bg-boxdark">
             <FileText className="mx-auto mb-3 h-8 w-8 text-body dark:text-bodydark" />
             <h1 className="text-lg font-bold text-black dark:text-[#E2E5E9]">Report not found</h1>
-            <p className="mt-1 text-sm text-body dark:text-bodydark">The requested report is not available in the local mock report store.</p>
+            <p className="mt-1 text-sm text-body dark:text-bodydark">The requested report is not available in Supabase.</p>
           </div>
         </div>
       )

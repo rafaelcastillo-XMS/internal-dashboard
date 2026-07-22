@@ -282,6 +282,54 @@ function normalizePerformanceSummary(summary?: GoogleAdsPerformanceSummary) {
   }
 }
 
+async function fetchSyncedGoogleAdsSummary(
+  accountId: string,
+  dateRange: { start: string; end: string },
+): Promise<GoogleAdsPerformanceSummary | undefined> {
+  const { data, error } = await supabase
+    .from('sem_ads_daily')
+    .select('spend, clicks, impressions')
+    .eq('account_id', accountId)
+    .gte('date', dateRange.start)
+    .lte('date', dateRange.end)
+
+  if (error) return undefined
+  const rows = data ?? []
+  if (!rows.length) return undefined
+
+  const summary = rows.reduce((total, row) => ({
+    impressions: total.impressions + safeNumber(row.impressions),
+    clicks: total.clicks + safeNumber(row.clicks),
+    cost: total.cost + safeNumber(row.spend),
+    avg_cpc: 0,
+  }), { impressions: 0, clicks: 0, cost: 0, avg_cpc: 0 })
+  summary.avg_cpc = summary.clicks > 0 ? summary.cost / summary.clicks : 0
+  return summary
+}
+
+async function fetchGoogleAdsKpiPerformance(
+  accountId: string,
+  dateRange: { start: string; end: string },
+): Promise<GoogleAdsPerformanceResponse> {
+  let apiResponse: GoogleAdsPerformanceResponse | undefined
+  let apiError: unknown
+
+  try {
+    apiResponse = await fetchGoogleAdsPerformance(accountId, dateRange)
+    const summary = normalizePerformanceSummary(apiResponse.summary)
+    if (Object.values(summary).some((value) => value > 0)) return apiResponse
+  } catch (error) {
+    apiError = error
+  }
+
+  const syncedSummary = await fetchSyncedGoogleAdsSummary(accountId, dateRange)
+  if (syncedSummary && Object.values(normalizePerformanceSummary(syncedSummary)).some((value) => value > 0)) {
+    return { summary: syncedSummary }
+  }
+  if (apiResponse) return apiResponse
+  throw apiError instanceof Error ? apiError : new Error('Unable to load Google Ads KPI data.')
+}
+
 async function fetchGoogleAdsPerformance(
   accountId: string,
   dateRange: { start: string; end: string },
@@ -296,6 +344,64 @@ async function fetchGoogleAdsPerformance(
 
   if (!response.ok || json.error) throw new Error(json.error ?? `Google Ads API HTTP ${response.status}`)
   return json
+}
+
+function sameReportDataSource(left?: ReportDataSource, right?: ReportDataSource) {
+  return Boolean(
+    left
+    && right
+    && left.clientId === right.clientId
+    && (!right.accountId || left.accountId === right.accountId)
+    && left.dateRange?.start === right.dateRange?.start
+    && left.dateRange?.end === right.dateRange?.end,
+  )
+}
+
+function numericDisplayValue(value: string | undefined) {
+  const parsed = Number(String(value ?? '').replace(/[^\d.-]/g, ''))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function slideHasUsableConnectedData(slide: Slide) {
+  if (slide.content.dataSource?.connectionStatus !== 'connected') return false
+
+  switch (slide.type) {
+    case 'google_ads_kpis':
+      return (slide.content.kpis ?? []).some((kpi) => numericDisplayValue(kpi.value) > 0)
+    case 'keywords':
+    case 'search_terms':
+      return (slide.content.tables ?? []).some((table) => table.rows.length > 0)
+    case 'ads':
+      return (slide.content.ads ?? []).some((ad) => Boolean(ad.headline || ad.longHeadline))
+    case 'devices_day_hour':
+      return (slide.content.charts ?? []).some((chart) => (
+        chart.series.some((point) => point.value > 0)
+        || (chart.deviceData ?? []).some((row) => row.cost > 0 || row.clicks > 0 || row.conversions > 0)
+        || (chart.heatmapData?.values ?? []).some((row) => row.some((value) => value > 0))
+      ))
+    case 'lsa_key_results':
+      return Object.values(slide.content.lsaKeyResults ?? {}).some((value) => value > 0)
+    default:
+      return false
+  }
+}
+
+function preserveLastValidGoogleAdsData(previousReport: Report, nextReport: Report): Report {
+  const previousById = new Map(previousReport.slides.map((slide) => [slide.id, slide]))
+
+  return {
+    ...nextReport,
+    slides: nextReport.slides.map((nextSlide) => {
+      const previousSlide = previousById.get(nextSlide.id)
+      const nextStatus = nextSlide.content.dataSource?.connectionStatus
+      const shouldPreserve = previousSlide
+        && (nextStatus === 'error' || nextStatus === 'empty')
+        && slideHasUsableConnectedData(previousSlide)
+        && sameReportDataSource(previousSlide.content.dataSource, nextSlide.content.dataSource)
+
+      return shouldPreserve ? { ...previousSlide, order: nextSlide.order } : nextSlide
+    }),
+  }
 }
 
 async function fetchGoogleAdsAds(
@@ -360,6 +466,54 @@ async function fetchLsaPerformance(
   const json = await response.json() as LsaPerformanceResponse
   if (!response.ok || json.error) throw new Error(json.error ?? `Google Ads API HTTP ${response.status}`)
   return json
+}
+
+async function fetchSyncedLsaPerformance(
+  accountId: string,
+  dateRange: { start: string; end: string },
+): Promise<LsaPerformanceResponse | undefined> {
+  const { data, error } = await supabase
+    .from('sem_guarantee_daily')
+    .select('spend, leads, ad_impressions')
+    .eq('account_id', accountId)
+    .gte('date', dateRange.start)
+    .lte('date', dateRange.end)
+
+  if (error || !data?.length) return undefined
+  return data.reduce((total, row) => ({
+    totalSpend: safeNumber(total.totalSpend) + safeNumber(row.spend),
+    chargedLeads: safeNumber(total.chargedLeads) + safeNumber(row.leads),
+    adImpressions: safeNumber(total.adImpressions) + safeNumber(row.ad_impressions),
+    topImpressionRate: 0,
+    absoluteTopImpressionRate: 0,
+  }), {
+    totalSpend: 0,
+    chargedLeads: 0,
+    adImpressions: 0,
+    topImpressionRate: 0,
+    absoluteTopImpressionRate: 0,
+  })
+}
+
+async function fetchLsaPerformanceWithSyncedFallback(
+  accountId: string,
+  dateRange: { start: string; end: string },
+) {
+  let apiResponse: LsaPerformanceResponse | undefined
+  let apiError: unknown
+  try {
+    apiResponse = await fetchLsaPerformance(accountId, dateRange)
+    if (Object.values(apiResponse).some((value) => typeof value === 'number' && value > 0)) return apiResponse
+  } catch (error) {
+    apiError = error
+  }
+
+  const syncedResponse = await fetchSyncedLsaPerformance(accountId, dateRange)
+  if (syncedResponse && Object.values(syncedResponse).some((value) => typeof value === 'number' && value > 0)) {
+    return syncedResponse
+  }
+  if (apiResponse) return apiResponse
+  throw apiError instanceof Error ? apiError : new Error('Unable to load Local Services Ads data.')
 }
 
 function createGoogleAdsKpiDataSource(
@@ -471,8 +625,8 @@ export async function getGoogleAdsKpiReportData(
   try {
     accountId = await resolveGoogleAdsAccountId(clientId)
     const [currentResponse, previousResponse] = await Promise.all([
-      fetchGoogleAdsPerformance(accountId, dateRange),
-      fetchGoogleAdsPerformance(accountId, previousDateRange).catch(() => ({ summary: undefined })),
+      fetchGoogleAdsKpiPerformance(accountId, dateRange),
+      fetchGoogleAdsKpiPerformance(accountId, previousDateRange).catch(() => ({ summary: undefined })),
     ])
     const currentSummary = normalizePerformanceSummary(currentResponse.summary)
     const previousSummary = normalizePerformanceSummary(previousResponse.summary)
@@ -1037,7 +1191,7 @@ async function getLsaKeyResultsReportData(clientId: string, month: string, year:
   let accountId = ''
   try {
     accountId = await resolveGoogleAdsAccountId(clientId)
-    const response = await fetchLsaPerformance(accountId, dateRange)
+    const response = await fetchLsaPerformanceWithSyncedFallback(accountId, dateRange)
     const results = {
       totalSpend: safeNumber(response.totalSpend),
       chargedLeads: safeNumber(response.chargedLeads),
@@ -1245,7 +1399,6 @@ export function reportNeedsGoogleAdsAdHydration(report: Report): boolean {
   }
   if (source.clientId !== report.clientId || !source.accountId) return true
   if (source.connectionStatus === 'connected' && !adSlide?.content.ads?.length) return true
-  if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
   return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
 }
 
@@ -1287,7 +1440,6 @@ export function reportNeedsGoogleAdsKeywordHydration(report: Report): boolean {
   if (!source.accountId) return true
   if (source.source === 'supabase_sem_keywords' && source.rangeKey !== 'last_30' && source.rangeKey !== 'last_90' && source.rangeKey !== 'last_7') return true
   if (!table?.rows?.length && source.connectionStatus === 'connected') return true
-  if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
   return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
 }
 
@@ -1321,7 +1473,6 @@ export function reportNeedsGoogleAdsBreakdownHydration(report: Report): boolean 
   if (!source.accountId) return true
   if (!charts.length && source.connectionStatus === 'connected') return true
   if (!charts.some((chart) => chart.deviceData) || !charts.some((chart) => chart.heatmapData)) return true
-  if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
   return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
 }
 
@@ -1336,7 +1487,6 @@ export function reportNeedsGoogleAdsSearchTermHydration(report: Report): boolean
     return Date.now() - lastAttempt > 5 * 60 * 1000
   }
   if (source.clientId !== report.clientId || !source.accountId) return true
-  if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
   return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
 }
 
@@ -1351,7 +1501,6 @@ export function reportNeedsLsaKeyResultsHydration(report: Report): boolean {
     return Date.now() - lastAttempt > 5 * 60 * 1000
   }
   if (source.clientId !== report.clientId || !source.accountId || !slide?.content.lsaKeyResults) return true
-  if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
   return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
 }
 
@@ -1388,13 +1537,28 @@ export async function hydrateReportWithRealGoogleAdsBreakdowns(report: Report): 
   }
 }
 
-export async function hydrateReportWithRealGoogleAdsData(report: Report): Promise<Report> {
-  const withKpis = await hydrateReportWithRealGoogleAdsKpis(normalizeReport(report))
-  const withAds = await hydrateReportWithRealGoogleAdsAds(withKpis)
-  const withKeywords = await hydrateReportWithRealGoogleAdsKeywords(withAds)
-  const withSearchTerms = await hydrateReportWithRealGoogleAdsSearchTerms(withKeywords)
-  const withBreakdowns = await hydrateReportWithRealGoogleAdsBreakdowns(withSearchTerms)
-  return hydrateReportWithRealLsaKeyResults(withBreakdowns)
+export async function hydrateReportWithRealGoogleAdsData(
+  report: Report,
+  options: { force?: boolean } = {},
+): Promise<Report> {
+  const originalReport = normalizeReport(report)
+  const force = options.force === true
+  const needsKpis = force || reportNeedsGoogleAdsKpiHydration(originalReport)
+  const needsAds = force || reportNeedsGoogleAdsAdHydration(originalReport)
+  const needsKeywords = force || reportNeedsGoogleAdsKeywordHydration(originalReport)
+  const needsSearchTerms = force || reportNeedsGoogleAdsSearchTermHydration(originalReport)
+  const needsBreakdowns = force || reportNeedsGoogleAdsBreakdownHydration(originalReport)
+  const needsLsa = force || reportNeedsLsaKeyResultsHydration(originalReport)
+
+  let hydratedReport = originalReport
+  if (needsKpis) hydratedReport = await hydrateReportWithRealGoogleAdsKpis(hydratedReport)
+  if (needsAds) hydratedReport = await hydrateReportWithRealGoogleAdsAds(hydratedReport)
+  if (needsKeywords) hydratedReport = await hydrateReportWithRealGoogleAdsKeywords(hydratedReport)
+  if (needsSearchTerms) hydratedReport = await hydrateReportWithRealGoogleAdsSearchTerms(hydratedReport)
+  if (needsBreakdowns) hydratedReport = await hydrateReportWithRealGoogleAdsBreakdowns(hydratedReport)
+  if (needsLsa) hydratedReport = await hydrateReportWithRealLsaKeyResults(hydratedReport)
+
+  return preserveLastValidGoogleAdsData(originalReport, hydratedReport)
 }
 
 // MOCK DATA LAYER: this is intentionally separate from Google Ads so the LSA API

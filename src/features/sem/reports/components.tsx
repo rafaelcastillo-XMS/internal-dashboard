@@ -12,13 +12,13 @@ import {
   Bold,
   Clock3,
   Download,
-  Eye,
   ImagePlus,
   Italic,
   Layers3,
   Monitor,
   MoreVertical,
   Plus,
+  RefreshCw,
   Save,
   Smartphone,
   Tablet,
@@ -138,14 +138,18 @@ export function ReportActionsBar({
   dirty,
   onBack,
   onSave,
-  onPreview,
+  saving,
+  onRefresh,
+  refreshing,
   onExportPdf,
 }: {
   report: Report
   dirty: boolean
   onBack: () => void
   onSave: () => void
-  onPreview: () => void
+  saving: boolean
+  onRefresh: () => void
+  refreshing: boolean
   onExportPdf: () => void
 }) {
   return (
@@ -172,13 +176,17 @@ export function ReportActionsBar({
               Unsaved changes
             </span>
           )}
-          <button onClick={onSave} className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-800 px-3 text-sm font-semibold text-white transition hover:bg-slate-900">
+          <button onClick={onSave} disabled={saving} className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-800 px-3 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-wait disabled:opacity-60">
             <Save className="h-4 w-4" />
-            Save
+            {saving ? 'Saving…' : 'Save'}
           </button>
-          <button onClick={onPreview} className="inline-flex h-9 items-center gap-2 rounded-md border border-stroke bg-white px-3 text-sm font-semibold text-black transition hover:border-slate-400 hover:bg-slate-100 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] dark:hover:bg-slate-800">
-            <Eye className="h-4 w-4" />
-            Preview
+          <button
+            onClick={onRefresh}
+            disabled={refreshing}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-stroke bg-white px-3 text-sm font-semibold text-black transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] dark:hover:bg-slate-800"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing…' : 'Refresh Data'}
           </button>
           <button onClick={onExportPdf} className="inline-flex h-9 items-center gap-2 rounded-md border border-stroke bg-white px-3 text-sm font-semibold text-black transition hover:border-slate-400 hover:bg-slate-100 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] dark:hover:bg-slate-800">
             <Download className="h-4 w-4" />
