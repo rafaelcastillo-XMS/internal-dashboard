@@ -143,9 +143,65 @@ async function fetchPerformance(token: string, params: URLSearchParams) {
     LIMIT 100
   `
 
-  const [campaignData, keywordData] = await Promise.all([
+  // Responsive search ads are ranked by impressions so Monthly Reports always
+  // features the ad Google showed most often for this account and period.
+  const adQuery = `
+    SELECT
+      ad_group_ad.ad.id,
+      ad_group_ad.ad.type,
+      ad_group_ad.status,
+      ad_group_ad.ad.final_urls,
+      ad_group_ad.ad.responsive_search_ad.headlines,
+      ad_group_ad.ad.responsive_search_ad.descriptions,
+      campaign.name,
+      ad_group.name,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.ctr,
+      metrics.conversions,
+      metrics.cost_per_conversion
+    FROM ad_group_ad
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+      AND campaign.status != 'REMOVED'
+      AND ad_group.status != 'REMOVED'
+      AND ad_group_ad.status != 'REMOVED'
+      AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
+      AND metrics.impressions > 0
+    ORDER BY metrics.impressions DESC
+    LIMIT 20
+  `
+
+  const pmaxGroupQuery = `
+    SELECT
+      asset_group.id,
+      asset_group.name,
+      asset_group.status,
+      asset_group.final_urls,
+      asset_group.path1,
+      asset_group.path2,
+      campaign.name,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.ctr,
+      metrics.conversions,
+      metrics.cost_per_conversion
+    FROM asset_group
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
+      AND campaign.status != 'REMOVED'
+      AND asset_group.status != 'REMOVED'
+      AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+      AND metrics.impressions > 0
+    ORDER BY metrics.impressions DESC
+    LIMIT 20
+  `
+
+  const [campaignData, keywordData, adData, pmaxGroupData] = await Promise.all([
     adsSearch(token, accountId, campaignQuery).catch(() => ({ results: [] })),
     adsSearch(token, accountId, keywordQuery).catch(() => ({ results: [] })),
+    adsSearch(token, accountId, adQuery).catch(() => ({ results: [] })),
+    adsSearch(token, accountId, pmaxGroupQuery).catch(() => ({ results: [] })),
   ])
 
   // deno-lint-ignore no-explicit-any
@@ -184,6 +240,74 @@ async function fetchPerformance(token: string, params: URLSearchParams) {
     }
   })
 
+  // deno-lint-ignore no-explicit-any
+  const ads = (adData.results ?? []).map((row: any) => {
+    const ad = row.adGroupAd?.ad ?? {}
+    const rsa = ad.responsiveSearchAd ?? {}
+    const metrics = row.metrics ?? {}
+    return {
+      id: String(ad.id ?? ""),
+      type: ad.type ?? "RESPONSIVE_SEARCH_AD",
+      status: row.adGroupAd?.status ?? "UNKNOWN",
+      campaign_name: row.campaign?.name ?? "",
+      ad_group_name: row.adGroup?.name ?? "",
+      headlines: (rsa.headlines ?? []).map((asset: { text?: string }) => asset.text ?? "").filter(Boolean),
+      descriptions: (rsa.descriptions ?? []).map((asset: { text?: string }) => asset.text ?? "").filter(Boolean),
+      final_urls: ad.finalUrls ?? [],
+      impressions: Math.round(Number(metrics.impressions ?? 0)),
+      clicks: Math.round(Number(metrics.clicks ?? 0)),
+      cost: safeFloat(metrics.costMicros, MICROS),
+      ctr: safeFloat(Number(metrics.ctr ?? 0) * 100),
+      conversions: safeFloat(metrics.conversions),
+      cost_per_conversion: safeFloat(metrics.costPerConversion, MICROS),
+    }
+  })
+
+  const topPmaxGroup = (pmaxGroupData.results ?? [])[0]
+  let pmaxAds: Array<Record<string, unknown>> = []
+  if (topPmaxGroup?.assetGroup?.id) {
+    const assetGroupId = String(topPmaxGroup.assetGroup.id).replace(/\D/g, "")
+    const pmaxAssetQuery = `
+      SELECT
+        asset_group_asset.field_type,
+        asset.name,
+        asset.text_asset.text,
+        asset.image_asset.full_size.url,
+        asset.call_to_action_asset.call_to_action
+      FROM asset_group_asset
+      WHERE asset_group.id = ${assetGroupId}
+        AND asset_group_asset.status != 'REMOVED'
+    `
+    const assetData = await adsSearch(token, accountId, pmaxAssetQuery).catch(() => ({ results: [] }))
+    // deno-lint-ignore no-explicit-any
+    const assets = (assetData.results ?? []).map((row: any) => ({
+      field_type: row.assetGroupAsset?.fieldType ?? "UNKNOWN",
+      name: row.asset?.name ?? "",
+      text: row.asset?.textAsset?.text ?? "",
+      image_url: row.asset?.imageAsset?.fullSize?.url ?? "",
+      call_to_action: row.asset?.callToActionAsset?.callToAction ?? "",
+    }))
+    const group = topPmaxGroup.assetGroup
+    const metrics = topPmaxGroup.metrics ?? {}
+    pmaxAds = [{
+      id: String(group.id ?? ""),
+      type: "PERFORMANCE_MAX",
+      status: group.status ?? "UNKNOWN",
+      campaign_name: topPmaxGroup.campaign?.name ?? "",
+      asset_group_name: group.name ?? "",
+      final_urls: group.finalUrls ?? [],
+      path1: group.path1 ?? "",
+      path2: group.path2 ?? "",
+      assets,
+      impressions: Math.round(Number(metrics.impressions ?? 0)),
+      clicks: Math.round(Number(metrics.clicks ?? 0)),
+      cost: safeFloat(metrics.costMicros, MICROS),
+      ctr: safeFloat(Number(metrics.ctr ?? 0) * 100),
+      conversions: safeFloat(metrics.conversions),
+      cost_per_conversion: safeFloat(metrics.costPerConversion, MICROS),
+    }]
+  }
+
   const totalImpressions = campaigns.reduce((s, c) => s + c.impressions, 0)
   const totalClicks = campaigns.reduce((s, c) => s + c.clicks, 0)
   const totalCost = Math.round(campaigns.reduce((s, c) => s + c.cost, 0) * 100) / 100
@@ -204,6 +328,8 @@ async function fetchPerformance(token: string, params: URLSearchParams) {
     },
     campaigns,
     keywords,
+    ads,
+    pmax_ads: pmaxAds,
     dateRange: { start: startDate, end: endDate },
   }
 }

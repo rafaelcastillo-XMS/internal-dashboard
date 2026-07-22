@@ -1,6 +1,6 @@
 import { edgeFetch } from '@/lib/edgeFetch'
 import { supabase } from '@/lib/supabase'
-import type { ChartBlockData, KpiMetric, Report, ReportDataSource, ReportTableColumn, ReportTableData, Slide } from './types'
+import type { AdPerformanceCard, ChartBlockData, KpiMetric, Report, ReportDataSource, ReportTableColumn, ReportTableData, Slide } from './types'
 import { normalizeReport } from './reportSlides'
 
 export type ReportDataConnectionStatus = 'mock_not_connected' | 'connected' | 'empty' | 'error'
@@ -83,7 +83,49 @@ interface GoogleAdsPerformanceSummary {
 interface GoogleAdsPerformanceResponse {
   summary?: GoogleAdsPerformanceSummary
   keywords?: GoogleAdsKeywordApiRow[]
+  ads?: GoogleAdsAdApiRow[]
+  pmax_ads?: GoogleAdsPmaxApiRow[]
   error?: string
+}
+
+interface GoogleAdsAdApiRow {
+  id?: string
+  type?: string
+  status?: string
+  campaign_name?: string
+  ad_group_name?: string
+  headlines?: string[]
+  descriptions?: string[]
+  final_urls?: string[]
+  impressions?: number
+  clicks?: number
+  cost?: number
+  ctr?: number
+  conversions?: number
+  cost_per_conversion?: number
+}
+
+interface GoogleAdsPmaxAssetApiRow {
+  field_type?: string
+  name?: string
+  text?: string
+  image_url?: string
+  call_to_action?: string
+}
+
+interface GoogleAdsPmaxApiRow {
+  id?: string
+  type?: string
+  status?: string
+  campaign_name?: string
+  asset_group_name?: string
+  final_urls?: string[]
+  path1?: string
+  path2?: string
+  assets?: GoogleAdsPmaxAssetApiRow[]
+  impressions?: number
+  clicks?: number
+  ctr?: number
 }
 
 interface GoogleAdsSearchTermApiRow {
@@ -139,6 +181,11 @@ export interface GoogleAdsKpiReportData {
 export interface GoogleAdsKeywordReportData {
   table: ReportTableData
   analysis: string
+  dataSource: ReportDataSource
+}
+
+export interface GoogleAdsAdReportData {
+  ads: AdPerformanceCard[]
   dataSource: ReportDataSource
 }
 
@@ -249,6 +296,28 @@ async function fetchGoogleAdsPerformance(
 
   if (!response.ok || json.error) throw new Error(json.error ?? `Google Ads API HTTP ${response.status}`)
   return json
+}
+
+async function fetchGoogleAdsAds(
+  accountId: string,
+  dateRange: { start: string; end: string },
+): Promise<GoogleAdsPerformanceResponse> {
+  const params = new URLSearchParams({
+    customerId: accountId,
+    start: dateRange.start,
+    end: dateRange.end,
+  })
+
+  try {
+    const response = await fetch(`/api/sem/performance?${params}`)
+    const json = await response.json() as GoogleAdsPerformanceResponse
+    if (response.ok && !json.error) return json
+  } catch {
+    // The local SEM endpoint is available in the dashboard development server.
+    // Published environments fall back to the Supabase Edge Function below.
+  }
+
+  return fetchGoogleAdsPerformance(accountId, dateRange)
 }
 
 async function fetchGoogleAdsBreakdowns(
@@ -435,6 +504,168 @@ export async function getGoogleAdsKpiReportData(
         { impressions: 0, clicks: 0, cost: 0, avg_cpc: 0 },
       ),
       summary: `Unable to load real Google Ads KPI data for ${dateRange.start} through ${dateRange.end}: ${message}`,
+    }
+  }
+}
+
+function adUrlParts(rawUrl?: string) {
+  try {
+    const parsed = new URL(rawUrl ?? '')
+    return {
+      displayUrl: parsed.hostname.replace(/^www\./, ''),
+      pathLabels: parsed.pathname.split('/').filter(Boolean).slice(0, 2).map((part) => (
+        part.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+      )),
+    }
+  } catch {
+    return { displayUrl: rawUrl ?? '', pathLabels: [] }
+  }
+}
+
+function buildFeaturedAd(row: GoogleAdsAdApiRow, clientName: string): AdPerformanceCard {
+  const impressions = safeNumber(row.impressions)
+  const clicks = safeNumber(row.clicks)
+  const { displayUrl, pathLabels } = adUrlParts(row.final_urls?.[0])
+  return {
+    id: row.id || 'featured-search-ad',
+    type: 'Search Ad',
+    headline: row.headlines?.find(Boolean) ?? 'Search ad headline',
+    description: row.descriptions?.find(Boolean) ?? '',
+    status: row.status === 'ENABLED' ? 'Most shown ad' : (row.status ?? 'Most shown ad'),
+    businessName: clientName,
+    displayUrl,
+    pathLabels,
+    metrics: [
+      { id: 'impressions', label: 'Impressions', value: formatNumber(impressions) },
+      { id: 'clicks', label: 'Clicks', value: formatNumber(clicks) },
+      { id: 'ctr', label: 'CTR', value: `${safeNumber(row.ctr).toLocaleString('en-US', { maximumFractionDigits: 2 })}%` },
+    ],
+  }
+}
+
+function assetTexts(assets: GoogleAdsPmaxAssetApiRow[], fieldType: string) {
+  return assets
+    .filter((asset) => asset.field_type === fieldType && asset.text)
+    .map((asset) => String(asset.text))
+}
+
+function assetImage(assets: GoogleAdsPmaxAssetApiRow[], fieldTypes: string[]) {
+  for (const fieldType of fieldTypes) {
+    const match = assets.find((asset) => asset.field_type === fieldType && asset.image_url)
+    if (match?.image_url) return match.image_url
+  }
+  return ''
+}
+
+function readableCallToAction(value: string) {
+  return value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function buildFeaturedPmaxAd(row: GoogleAdsPmaxApiRow, clientName: string, clientLogo: string): AdPerformanceCard {
+  const assets = row.assets ?? []
+  const headlines = assetTexts(assets, 'HEADLINE')
+  const longHeadlines = assetTexts(assets, 'LONG_HEADLINE')
+  const descriptions = assetTexts(assets, 'DESCRIPTION')
+  const { displayUrl, pathLabels } = adUrlParts(row.final_urls?.[0])
+  const apiCtas = assets
+    .map((asset) => asset.call_to_action ?? '')
+    .filter((value) => value && value !== 'UNSPECIFIED')
+    .map(readableCallToAction)
+  const headlineCtas = headlines.filter((headline) => /\b(get|free|contact|learn|explore|book|call|shop|view|see)\b/i.test(headline))
+  const ctaLabels = Array.from(new Set([...apiCtas, ...headlineCtas, ...pathLabels])).slice(0, 3)
+
+  return {
+    id: row.id || 'featured-pmax-ad',
+    type: 'Performance Max',
+    headline: headlines[0] ?? row.asset_group_name ?? 'Performance Max',
+    longHeadline: longHeadlines[0] ?? (headlines.slice(0, 2).join(' — ') || row.asset_group_name),
+    description: descriptions[0] ?? '',
+    status: row.status === 'ENABLED' ? 'Most shown PMax ad' : (row.status ?? 'Most shown PMax ad'),
+    businessName: clientName,
+    displayUrl,
+    pathLabels,
+    logoSrc: clientLogo,
+    imageSrc: assetImage(assets, ['MARKETING_IMAGE', 'SQUARE_MARKETING_IMAGE', 'PORTRAIT_MARKETING_IMAGE', 'AD_IMAGE']),
+    ctaLabels: ctaLabels.length ? ctaLabels : ['Learn More'],
+    metrics: [
+      { id: 'impressions', label: 'Impressions', value: formatNumber(safeNumber(row.impressions)) },
+      { id: 'clicks', label: 'Clicks', value: formatNumber(safeNumber(row.clicks)) },
+      { id: 'ctr', label: 'CTR', value: `${safeNumber(row.ctr).toLocaleString('en-US', { maximumFractionDigits: 2 })}%` },
+    ],
+  }
+}
+
+function emptyAdTemplate(type: AdPerformanceCard['type']): AdPerformanceCard {
+  return {
+    id: type === 'Search Ad' ? 'empty-search-ad' : 'empty-pmax-ad',
+    type,
+    headline: '',
+    longHeadline: '',
+    description: '',
+    status: '',
+    businessName: '',
+    displayUrl: '',
+    pathLabels: [],
+    logoSrc: '',
+    imageSrc: '',
+    ctaLabels: [],
+    metrics: [],
+  }
+}
+
+export async function getGoogleAdsAdReportData(
+  clientId: string,
+  clientName: string,
+  clientLogo: string,
+  month: string,
+  year: number,
+): Promise<GoogleAdsAdReportData> {
+  const dateRange = getMonthlyReportDateRange(month, year)
+  let accountId = ''
+
+  try {
+    accountId = await resolveGoogleAdsAccountId(clientId)
+    const response = await fetchGoogleAdsAds(accountId, dateRange)
+    const rows = Array.isArray(response.ads) ? response.ads : []
+    const topAd = rows.slice().sort((a, b) => safeNumber(b.impressions) - safeNumber(a.impressions))[0]
+    const pmaxRows = Array.isArray(response.pmax_ads) ? response.pmax_ads : []
+    const topPmaxAd = pmaxRows.slice().sort((a, b) => safeNumber(b.impressions) - safeNumber(a.impressions))[0]
+    const hasAds = Boolean(topAd || topPmaxAd)
+    const dataSource: ReportDataSource = {
+      source: 'google_ads_api',
+      connectionStatus: hasAds ? 'connected' : 'empty',
+      clientId,
+      accountId,
+      rangeKey: 'monthly_google_ads_ads_v3',
+      integrationTarget: 'Supabase Edge Function /sem/performance -> Google Ads ad_group_ad + asset_group',
+      dateRange,
+      updatedAt: new Date().toISOString(),
+      message: hasAds
+        ? `Loaded the most-shown Search and Performance Max ads from Google Ads account ${accountId}.`
+        : `Google Ads returned no Search or Performance Max ads with impressions for account ${accountId} in this month.`,
+    }
+    return {
+      ads: [
+        topAd ? buildFeaturedAd(topAd, clientName) : emptyAdTemplate('Search Ad'),
+        topPmaxAd ? buildFeaturedPmaxAd(topPmaxAd, clientName, clientLogo) : emptyAdTemplate('Performance Max'),
+      ],
+      dataSource,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to load Google Ads ad data.'
+    return {
+      ads: [emptyAdTemplate('Search Ad'), emptyAdTemplate('Performance Max')],
+      dataSource: {
+        source: 'google_ads_api',
+        connectionStatus: 'error',
+        clientId,
+        accountId: accountId || undefined,
+        rangeKey: 'monthly_google_ads_ads_v3',
+        integrationTarget: 'Supabase Edge Function /sem/performance -> Google Ads ad_group_ad + asset_group',
+        dateRange,
+        updatedAt: new Date().toISOString(),
+        message,
+      },
     }
   }
 }
@@ -923,6 +1154,32 @@ function replaceGoogleAdsKpiSlide(slide: Slide, kpiData: GoogleAdsKpiReportData)
   }
 }
 
+function replaceGoogleAdsAdSlide(slide: Slide, adData: GoogleAdsAdReportData): Slide {
+  const searchAd = adData.ads.find((ad) => ad.type === 'Search Ad')
+  const pmaxAd = adData.ads.find((ad) => ad.type === 'Performance Max')
+  const searchImpressions = searchAd?.metrics.find((metric) => metric.id === 'impressions')?.value
+  const pmaxImpressions = pmaxAd?.metrics.find((metric) => metric.id === 'impressions')?.value
+  const analysis = [
+    searchAd?.headline ? `Most-shown Search ad: “${searchAd.headline}”${searchImpressions ? ` — ${searchImpressions} impressions` : ''}.` : '',
+    pmaxAd && (pmaxAd.longHeadline || pmaxAd.headline) ? `Most-shown Performance Max ad: “${pmaxAd.longHeadline || pmaxAd.headline}”${pmaxImpressions ? ` — ${pmaxImpressions} impressions` : ''}.` : '',
+  ].filter(Boolean).join(' ')
+
+  return {
+    ...slide,
+    notes: adData.dataSource.message ?? slide.notes,
+    content: {
+      ...slide.content,
+      dataSource: adData.dataSource,
+      ads: adData.ads,
+      textBlocks: [{
+        id: 'ad-performance-analysis',
+        label: 'Ad Performance Analysis',
+        value: analysis,
+      }],
+    },
+  }
+}
+
 function replaceLsaKeyResultsSlide(
   slide: Slide,
   data: Awaited<ReturnType<typeof getLsaKeyResultsReportData>>,
@@ -971,6 +1228,40 @@ export async function hydrateReportWithRealGoogleAdsKpis(report: Report): Promis
     ...normalizedReport,
     slides: normalizedReport.slides.map((slide) => (
       slide.type === 'google_ads_kpis' ? replaceGoogleAdsKpiSlide(slide, kpiData) : slide
+    )),
+  }
+}
+
+export function reportNeedsGoogleAdsAdHydration(report: Report): boolean {
+  const normalizedReport = normalizeReport(report)
+  const adSlide = normalizedReport.slides.find((slide) => slide.type === 'ads')
+  const expectedRange = getMonthlyReportDateRange(report.month, report.year)
+  const source = adSlide?.content.dataSource
+
+  if (!source || source.source !== 'google_ads_api' || source.rangeKey !== 'monthly_google_ads_ads_v3') return true
+  if (source.connectionStatus === 'error') {
+    const lastAttempt = source.updatedAt ? new Date(source.updatedAt).getTime() : 0
+    return Date.now() - lastAttempt > 5 * 60 * 1000
+  }
+  if (source.clientId !== report.clientId || !source.accountId) return true
+  if (source.connectionStatus === 'connected' && !adSlide?.content.ads?.length) return true
+  if (source.updatedAt && Date.now() - new Date(source.updatedAt).getTime() > 20 * 60 * 1000) return true
+  return source.dateRange?.start !== expectedRange.start || source.dateRange?.end !== expectedRange.end
+}
+
+export async function hydrateReportWithRealGoogleAdsAds(report: Report): Promise<Report> {
+  const normalizedReport = normalizeReport(report)
+  const adData = await getGoogleAdsAdReportData(
+    normalizedReport.clientId,
+    normalizedReport.clientName,
+    normalizedReport.clientLogo,
+    normalizedReport.month,
+    normalizedReport.year,
+  )
+  return {
+    ...normalizedReport,
+    slides: normalizedReport.slides.map((slide) => (
+      slide.type === 'ads' ? replaceGoogleAdsAdSlide(slide, adData) : slide
     )),
   }
 }
@@ -1099,7 +1390,8 @@ export async function hydrateReportWithRealGoogleAdsBreakdowns(report: Report): 
 
 export async function hydrateReportWithRealGoogleAdsData(report: Report): Promise<Report> {
   const withKpis = await hydrateReportWithRealGoogleAdsKpis(normalizeReport(report))
-  const withKeywords = await hydrateReportWithRealGoogleAdsKeywords(withKpis)
+  const withAds = await hydrateReportWithRealGoogleAdsAds(withKpis)
+  const withKeywords = await hydrateReportWithRealGoogleAdsKeywords(withAds)
   const withSearchTerms = await hydrateReportWithRealGoogleAdsSearchTerms(withKeywords)
   const withBreakdowns = await hydrateReportWithRealGoogleAdsBreakdowns(withSearchTerms)
   return hydrateReportWithRealLsaKeyResults(withBreakdowns)

@@ -12,6 +12,7 @@ import { readStoredReports, upsertStoredReport, writeStoredReports } from '@/fea
 import { exportReportToPdf } from '@/features/sem/reports/exportReportPdf'
 import {
   hydrateReportWithRealGoogleAdsData,
+  reportNeedsGoogleAdsAdHydration,
   reportNeedsGoogleAdsBreakdownHydration,
   reportNeedsGoogleAdsKeywordHydration,
   reportNeedsGoogleAdsKpiHydration,
@@ -22,9 +23,11 @@ import {
   ChartBlock,
   KpiCard,
   LsaKeyResultsPanel,
+  PmaxAdPreviewCard,
   ReportActionsBar,
   ReportSidebar,
   ReportSlide,
+  SearchAdPreviewCard,
 } from '@/features/sem/reports/components'
 import type { Report, ReportStatus, Slide } from '@/features/sem/reports/types'
 import { fetchClientProfile } from '@/features/clients/profiles'
@@ -361,23 +364,14 @@ function PreviewModal({ report, onClose }: { report: Report; onClose: () => void
                     </div>
                   ))}
                   {slide.content.ads?.length ? (
-                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                      {slide.content.ads.slice(0, 2).map((ad) => (
-                        <div key={ad.id} className="overflow-hidden rounded-lg border border-[#D8E4F2] bg-white">
-                          <div className="aspect-[4/3] bg-[#F7FBFF]">
-                            {ad.imageSrc ? (
-                              <img src={ad.imageSrc} alt={ad.headline || ad.type} className="h-full w-full object-contain" />
-                            ) : (
-                              <div className="flex h-full items-center justify-center px-4 text-center text-sm font-semibold text-slate-500">
-                                No ad image attached
-                              </div>
-                            )}
-                          </div>
-                          <div className="p-4">
-                            <p className="whitespace-pre-wrap text-sm leading-6 text-[#062A63]">{ad.description}</p>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                      {(['Search Ad', 'Performance Max'] as const).map((type) => {
+                        const ad = slide.content.ads?.find((item) => item.type === type)
+                        if (!ad) return <div key={type} />
+                        return type === 'Search Ad'
+                          ? <SearchAdPreviewCard key={ad.id} ad={ad} />
+                          : <PmaxAdPreviewCard key={ad.id} ad={ad} />
+                      })}
                     </div>
                   ) : null}
                   {slide.content.highlights?.length ? (
@@ -465,11 +459,12 @@ function ReportEditorView({
 
   useEffect(() => {
     const needsKpis = reportNeedsGoogleAdsKpiHydration(sourceReport)
+    const needsAds = reportNeedsGoogleAdsAdHydration(sourceReport)
     const needsKeywords = reportNeedsGoogleAdsKeywordHydration(sourceReport)
     const needsBreakdowns = reportNeedsGoogleAdsBreakdownHydration(sourceReport)
     const needsSearchTerms = reportNeedsGoogleAdsSearchTermHydration(sourceReport)
     const needsLsa = reportNeedsLsaKeyResultsHydration(sourceReport)
-    if (!needsKpis && !needsKeywords && !needsBreakdowns && !needsSearchTerms && !needsLsa) return
+    if (!needsKpis && !needsAds && !needsKeywords && !needsBreakdowns && !needsSearchTerms && !needsLsa) return
     let cancelled = false
 
     setGoogleAdsDataLoading(true)

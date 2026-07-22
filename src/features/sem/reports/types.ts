@@ -110,6 +110,12 @@ export interface AdPerformanceCard {
   headline: string
   description: string
   status: string
+  businessName?: string
+  displayUrl?: string
+  pathLabels?: string[]
+  logoSrc?: string
+  longHeadline?: string
+  ctaLabels?: string[]
   imageSrc?: string
   metrics: KpiMetric[]
 }

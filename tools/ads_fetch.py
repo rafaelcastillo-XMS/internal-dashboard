@@ -167,6 +167,136 @@ def fetch_keywords(ga_service, customer_id: str, start: str, end: str) -> list:
     return rows
 
 
+def fetch_ads(ga_service, customer_id: str, start: str, end: str) -> list:
+    _validate_inputs(customer_id, start, end)
+    query = f"""
+        SELECT
+          ad_group_ad.ad.id,
+          ad_group_ad.ad.type,
+          ad_group_ad.status,
+          ad_group_ad.ad.final_urls,
+          ad_group_ad.ad.responsive_search_ad.headlines,
+          ad_group_ad.ad.responsive_search_ad.descriptions,
+          campaign.name,
+          ad_group.name,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.ctr,
+          metrics.conversions,
+          metrics.cost_per_conversion
+        FROM ad_group_ad
+        WHERE segments.date BETWEEN '{start}' AND '{end}'
+          AND campaign.status != 'REMOVED'
+          AND ad_group.status != 'REMOVED'
+          AND ad_group_ad.status != 'REMOVED'
+          AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
+          AND metrics.impressions > 0
+        ORDER BY metrics.impressions DESC
+        LIMIT 20
+    """
+    rows = []
+    try:
+        for row in ga_service.search(customer_id=customer_id, query=query):
+            ad = row.ad_group_ad.ad
+            metrics = row.metrics
+            rows.append({
+                'id': str(ad.id),
+                'type': ad.type_.name,
+                'status': row.ad_group_ad.status.name,
+                'campaign_name': row.campaign.name,
+                'ad_group_name': row.ad_group.name,
+                'headlines': [asset.text for asset in ad.responsive_search_ad.headlines],
+                'descriptions': [asset.text for asset in ad.responsive_search_ad.descriptions],
+                'final_urls': list(ad.final_urls),
+                'impressions': int(metrics.impressions),
+                'clicks': int(metrics.clicks),
+                'cost': safe_float(metrics.cost_micros, MICROS),
+                'ctr': safe_float(metrics.ctr * 100),
+                'conversions': safe_float(metrics.conversions),
+                'cost_per_conversion': safe_float(metrics.cost_per_conversion, MICROS),
+            })
+    except Exception as e:
+        print(f'[ads_fetch] ads error: {e}', file=sys.stderr)
+    return rows
+
+
+def fetch_pmax_ads(ga_service, customer_id: str, start: str, end: str) -> list:
+    _validate_inputs(customer_id, start, end)
+    group_query = f"""
+        SELECT
+          asset_group.id,
+          asset_group.name,
+          asset_group.status,
+          asset_group.final_urls,
+          asset_group.path1,
+          asset_group.path2,
+          campaign.name,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.ctr,
+          metrics.conversions,
+          metrics.cost_per_conversion
+        FROM asset_group
+        WHERE segments.date BETWEEN '{start}' AND '{end}'
+          AND campaign.status != 'REMOVED'
+          AND asset_group.status != 'REMOVED'
+          AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+          AND metrics.impressions > 0
+        ORDER BY metrics.impressions DESC
+        LIMIT 1
+    """
+    try:
+        groups = list(ga_service.search(customer_id=customer_id, query=group_query))
+        if not groups:
+            return []
+        row = groups[0]
+        group = row.asset_group
+        asset_query = f"""
+            SELECT
+              asset_group_asset.field_type,
+              asset.name,
+              asset.text_asset.text,
+              asset.image_asset.full_size.url,
+              asset.call_to_action_asset.call_to_action
+            FROM asset_group_asset
+            WHERE asset_group.id = {int(group.id)}
+              AND asset_group_asset.status != 'REMOVED'
+        """
+        assets = []
+        for asset_row in ga_service.search(customer_id=customer_id, query=asset_query):
+            asset = asset_row.asset
+            assets.append({
+                'field_type': asset_row.asset_group_asset.field_type.name,
+                'name': asset.name,
+                'text': asset.text_asset.text,
+                'image_url': asset.image_asset.full_size.url,
+                'call_to_action': asset.call_to_action_asset.call_to_action.name,
+            })
+        metrics = row.metrics
+        return [{
+            'id': str(group.id),
+            'type': 'PERFORMANCE_MAX',
+            'status': group.status.name,
+            'campaign_name': row.campaign.name,
+            'asset_group_name': group.name,
+            'final_urls': list(group.final_urls),
+            'path1': group.path1,
+            'path2': group.path2,
+            'assets': assets,
+            'impressions': int(metrics.impressions),
+            'clicks': int(metrics.clicks),
+            'cost': safe_float(metrics.cost_micros, MICROS),
+            'ctr': safe_float(metrics.ctr * 100),
+            'conversions': safe_float(metrics.conversions),
+            'cost_per_conversion': safe_float(metrics.cost_per_conversion, MICROS),
+        }]
+    except Exception as e:
+        print(f'[ads_fetch] pmax ads error: {e}', file=sys.stderr)
+        return []
+
+
 def build_summary(campaigns: list) -> dict:
     impressions  = sum(c['impressions']  for c in campaigns)
     clicks       = sum(c['clicks']       for c in campaigns)
@@ -206,12 +336,16 @@ def main():
 
     campaigns = fetch_campaigns(ga_service, customer_id, args.start, args.end)
     keywords  = fetch_keywords(ga_service,  customer_id, args.start, args.end)
+    ads       = fetch_ads(ga_service, customer_id, args.start, args.end)
+    pmax_ads  = fetch_pmax_ads(ga_service, customer_id, args.start, args.end)
     summary   = build_summary(campaigns)
 
     print(json.dumps({
         'summary':   summary,
         'campaigns': campaigns,
         'keywords':  keywords,
+        'ads':       ads,
+        'pmax_ads':  pmax_ads,
         'dateRange': {'start': args.start, 'end': args.end},
     }))
 

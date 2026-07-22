@@ -711,66 +711,116 @@ function readImageFile(file: File): Promise<string> {
   })
 }
 
-function AdCard({
+export function SearchAdPreviewCard({
   ad,
   onChange,
 }: {
   ad: AdPerformanceCard
-  onChange: (patch: Partial<AdPerformanceCard>) => void
+  onChange?: (patch: Partial<AdPerformanceCard>) => void
 }) {
-  const inputId = `ad-image-${ad.id}`
-
-  const handleImageChange = (file?: File) => {
-    if (!file) return
-    readImageFile(file).then((imageSrc) => {
-      if (imageSrc) onChange({ imageSrc })
-    })
-  }
+  const path = (ad.pathLabels ?? []).join(' › ')
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[#D8E4F2] bg-white shadow-[0_10px_24px_rgba(0,59,143,0.06)]">
-      <div className="relative aspect-[4/3] bg-[#F7FBFF]">
-        {ad.imageSrc ? (
-          <img src={ad.imageSrc} alt={ad.headline || ad.type} className="h-full w-full object-contain" />
-        ) : (
-          <label htmlFor={inputId} className="flex h-full cursor-pointer flex-col items-center justify-center gap-3 px-6 text-center text-[#0057C2] transition hover:bg-[#EAF6FF]">
-            <span className="flex h-12 w-12 items-center justify-center rounded-md border border-[#B9D8F4] bg-white">
-              <ImagePlus className="h-6 w-6" />
-            </span>
-            <span className="text-sm font-bold">Add ad image</span>
-          </label>
-        )}
-        <input
-          id={inputId}
-          type="file"
-          accept="image/*"
-          onChange={(event) => handleImageChange(event.target.files?.[0])}
-          className="sr-only"
-        />
-        {ad.imageSrc && (
-          <div className="absolute right-3 top-3 flex gap-2">
-            <label htmlFor={inputId} className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-xs font-bold text-[#0057C2] shadow">
-              Replace
-            </label>
-            <button
-              type="button"
-              onClick={() => onChange({ imageSrc: '' })}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white text-slate-500 shadow transition hover:text-danger"
-              aria-label="Remove ad image"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+    <div className="mx-auto flex h-full min-h-[350px] w-full max-w-[760px] flex-col px-6">
+      <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[#1a73e8]">
+        <span className="h-2.5 w-2.5 rounded-full bg-[#188038]" />
+        <span>{ad.businessName}</span>
+        {path ? <><span className="text-slate-400">›</span><span>{path}</span></> : null}
       </div>
-      <div className="border-t border-[#D8E4F2] px-3 py-2">
+
+      <div className="relative flex flex-1 flex-col rounded-t-[38px] rounded-b-none border-[5px] border-[#dadce0] bg-white px-5 pb-5 pt-8 shadow-[0_14px_35px_rgba(60,64,67,0.12)]">
+        <span className="absolute left-1/2 top-2 h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-[#dadce0] bg-white" />
+        <div className="flex flex-1 flex-col rounded border border-[#dadce0] bg-[#f8f9fa] px-3 py-2">
+          <div className="mb-2 flex items-center gap-1.5 border-b border-[#e2e5e9] pb-2 text-xs text-[#188038]">
+            <span className="rounded-sm border border-[#188038] px-1 font-semibold leading-4">Ad</span>
+            <span className="truncate">{ad.displayUrl}</span>
+            {path ? <span className="truncate">› {path}</span> : null}
+          </div>
+          <textarea
+            value={ad.headline}
+            onChange={(event) => onChange?.({ headline: event.target.value })}
+            rows={2}
+            className="block w-full resize-none overflow-hidden bg-transparent text-[23px] font-normal leading-[1.2] text-[#1a0dab] outline-none"
+            aria-label="Ad headline"
+          />
+          <textarea
+            value={ad.description}
+            onChange={(event) => onChange?.({ description: event.target.value })}
+            rows={3}
+            className="mt-2 block w-full resize-none overflow-hidden border-t border-[#e2e5e9] bg-transparent pt-2 text-base leading-6 text-[#5f6368] outline-none"
+            aria-label="Ad description"
+          />
+          {(ad.pathLabels ?? []).length ? (
+            <div className="mt-1 grid gap-1 text-sm text-[#1a0dab]">
+              {(ad.pathLabels ?? []).map((label) => <span key={label}>{label}</span>)}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function PmaxAdPreviewCard({
+  ad,
+  onChange,
+}: {
+  ad: AdPerformanceCard
+  onChange?: (patch: Partial<AdPerformanceCard>) => void
+}) {
+  const initials = (ad.businessName || '')
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join('')
+    .toUpperCase()
+
+  return (
+    <div className="flex h-full min-h-[350px] flex-col rounded-lg border border-[#5f6368] bg-white p-5 shadow-[0_10px_24px_rgba(60,64,67,0.08)]">
+      <div className="flex items-center gap-3">
+        {ad.logoSrc ? (
+          <img crossOrigin="anonymous" src={ad.logoSrc} alt="" className="h-11 w-11 rounded-full border border-[#dadce0] object-contain" />
+        ) : (
+          <span className="flex h-11 w-11 items-center justify-center rounded-full border border-[#dadce0] bg-[#f8f9fa] text-xs font-bold text-[#5f6368]">{initials}</span>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-base font-medium text-[#202124]">{ad.businessName}</p>
+          <p className="truncate text-sm text-[#5f6368]">{ad.displayUrl}</p>
+        </div>
+      </div>
+
+      <textarea
+        value={ad.longHeadline || ad.headline}
+        onChange={(event) => onChange?.({ longHeadline: event.target.value })}
+        rows={2}
+        className="mt-4 block w-full resize-none overflow-hidden bg-transparent text-[25px] leading-[1.2] text-[#0b57d0] outline-none"
+        aria-label="Performance Max headline"
+      />
+
+      <div className="mt-3 flex min-h-0 flex-1 gap-4">
         <textarea
           value={ad.description}
-          onChange={(event) => onChange({ description: event.target.value })}
-          rows={2}
-          className="block w-full resize-none bg-transparent text-xs leading-5 text-[#062A63] outline-none placeholder:text-slate-400"
-          placeholder="Write ad notes here..."
+          onChange={(event) => onChange?.({ description: event.target.value })}
+          rows={5}
+          className="block min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-base leading-6 text-[#5f6368] outline-none"
+          aria-label="Performance Max description"
         />
+        {ad.imageSrc ? (
+          <img
+            crossOrigin="anonymous"
+            src={ad.imageSrc}
+            alt="Performance Max creative"
+            className="h-32 w-32 shrink-0 rounded-lg object-cover"
+          />
+        ) : (
+          <div className="h-32 w-32 shrink-0 rounded-lg bg-[#f1f3f4]" />
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {(ad.ctaLabels ?? []).slice(0, 3).map((label) => (
+          <span key={label} className="rounded-full border border-[#dadce0] px-4 py-2 text-sm font-medium text-[#0b57d0]">{label}</span>
+        ))}
       </div>
     </div>
   )
@@ -835,6 +885,8 @@ export function ReportSlide({
   const googleAdsKpis = googleAdsKpiOrder
     .map((id) => (slide.content.kpis ?? []).find((metric) => metric.id === id))
     .filter((metric): metric is KpiMetric => Boolean(metric))
+  const searchAd = slide.content.ads?.find((ad) => ad.type === 'Search Ad')
+  const pmaxAd = slide.content.ads?.find((ad) => ad.type === 'Performance Max')
 
   if (slide.type === 'cover') {
     return (
@@ -1066,14 +1118,19 @@ export function ReportSlide({
         ) : null}
 
         {slide.content.ads?.length ? (
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {slide.content.ads.slice(0, 2).map((ad) => (
-              <AdCard
-                key={ad.id}
-                ad={ad}
-                onChange={(patch) => updateAd(ad.id, patch)}
+          <div className="grid grid-cols-2 gap-4">
+            {searchAd ? (
+              <SearchAdPreviewCard
+                ad={searchAd}
+                onChange={(patch) => updateAd(searchAd.id, patch)}
               />
-            ))}
+            ) : <div />}
+            {pmaxAd ? (
+              <PmaxAdPreviewCard
+                ad={pmaxAd}
+                onChange={(patch) => updateAd(pmaxAd.id, patch)}
+              />
+            ) : null}
           </div>
         ) : null}
 
@@ -1124,7 +1181,7 @@ export function ReportSlide({
           </div>
         ) : null}
 
-        {slide.type !== 'ads' && slide.content.textBlocks?.map((block) => (
+        {slide.content.textBlocks?.map((block) => (
           slide.type === 'keywords' || slide.type === 'ads' || slide.type === 'search_terms' ? (
             <GoogleAdsSummaryBlock key={block.id} block={block} onChange={(value) => updateTextBlock('textBlocks', block.id, value)} />
           ) : (
