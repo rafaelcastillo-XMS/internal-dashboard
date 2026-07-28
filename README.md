@@ -1,24 +1,68 @@
 # Dashboard XMS360
 
-Dashboard XMS360 is an internal frontend used by XMS teams to manage daily operations in one place.
+Internal operations dashboard for XMS teams. It centralizes clients, tasks,
+calendar activity, reporting, integrations, and workspace information in one
+authenticated application.
 
-It brings together client visibility, task tracking, calendar activity, and team profile information inside a single dashboard experience. The application is designed for internal use only and supports the workflow of the XMS team rather than external customers.
+## Main modules
 
-## What this project includes
+- Supabase authentication, user profiles, and client records
+- Monday.com task views and team assignments
+- Google Calendar activity
+- SEM dashboards, campaigns, keywords, search terms, LSA data, and editable
+  monthly reports stored in Supabase
+- SEO dashboards, Ahrefs/PageSpeed data, GBP reporting, on-page audits, and
+  quarterly PDF exports
+- Social dashboards for Facebook, Instagram, and YouTube
+- Client integrations for Notion, NotebookLM, and Google services
+- Internal AI assistance powered by Anthropic
 
-- Secure login with Supabase authentication
-- A main dashboard with operational summaries
-- Client pages for quick internal reference
-- Task management views for team follow-up
-- Calendar views connected to internal scheduling flows
-- Profile and workspace UI for internal users
+## Local development
 
-## Purpose
+Requirements:
 
-This project helps XMS centralize operational information in a simple web interface so the team can review priorities, follow client activity, and stay aligned across tasks and schedules.
+- Node.js 20
+- npm
+- Python 3 when running the Google Ads, Analytics, Search Console, or PDF tools
 
-## Notes
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
 
-- This repository is private and intended for internal XMS use
-- Some sections currently use local data while other parts already connect to Supabase services
-- The application is built as an internal product foundation and can continue evolving with new modules over time
+The Vite development server exposes the frontend and local API middleware. Fill
+only the variables required for the integrations you intend to use; never commit
+the resulting `.env`, OAuth tokens, or service-account files.
+
+## Quality checks
+
+```bash
+npm test
+npm run lint
+npm run build
+```
+
+The test suite covers server integrations, client profiles, and SEM report data,
+slides, and persistence.
+
+## Production
+
+Production runs the compiled Vite app behind the Express server:
+
+```bash
+cp .env.production.example .env.production
+docker compose up --build
+```
+
+Google OAuth credential and token files are mounted by `docker-compose.yml` and
+must exist on the host. Supabase Edge Functions and migrations live under
+`supabase/`; deploy them through the project's normal Supabase workflow.
+
+## Repository notes
+
+- This repository is private and intended for internal XMS use.
+- Generated builds, local reports, PDF QA renders, secrets, and OAuth tokens are
+  intentionally excluded from version control.
+- Some integrations need separate provider credentials or access grants before
+  their screens can return live data.

@@ -25,4 +25,13 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ['supabase/functions/**/*.ts'],
+    rules: {
+      // Supabase Edge Functions are executed and linted by Deno. These files
+      // use explicit boundary types for third-party API payloads and already
+      // carry targeted deno-lint suppressions where needed.
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
 )

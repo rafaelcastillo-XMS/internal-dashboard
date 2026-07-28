@@ -33,12 +33,14 @@ token.json
 .env
 .env.*
 !.env.example
+!.env.production.example
 .agent/
 .claude/
 
 # Local reports and screenshots
 opentestai-report*
 opentestai-screenshot*
+tmp/
 
 # Supabase local state
 supabase/.temp/
