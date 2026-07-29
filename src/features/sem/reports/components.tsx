@@ -349,7 +349,7 @@ function GoogleAdsKpiCard({
   const style = googleAdsKpiStyles[metric.id] ?? googleAdsKpiStyles.impressions
 
   return (
-    <div className={`min-h-[128px] p-4 shadow-[0_12px_30px_rgba(0,59,143,0.12)] ${style.card}`}>
+    <div className={`flex h-full min-h-[128px] flex-col p-4 shadow-[0_12px_30px_rgba(0,59,143,0.12)] ${style.card}`}>
       <input
         value={metric.label}
         onChange={(event) => onChange({ label: event.target.value })}
@@ -1481,6 +1481,15 @@ export function ReportSlide({
             <AutoResizeSlideTitle value={slide.title} onChange={(title) => onChange({ ...slide, title })} />
           </div>
           <LsaKeyResultsPanel slide={slide} />
+          {slide.content.textBlocks?.map((block) => (
+            <div key={block.id} className="mt-4">
+              <EditableTextBlock
+                block={block}
+                minRows={2}
+                onChange={(value) => updateTextBlock('textBlocks', block.id, value)}
+              />
+            </div>
+          ))}
         </div>
       </section>
     )

@@ -926,13 +926,21 @@ function keywordStatus(row: GoogleAdsKeywordApiRow) {
   return 'Monitor'
 }
 
+export function sortRowsByClicksDescending<T extends { clicks?: number }>(rows: T[]) {
+  return rows
+    .slice()
+    .sort((a, b) => safeNumber(b.clicks) - safeNumber(a.clicks))
+}
+
 function buildKeywordTable(rows: GoogleAdsKeywordApiRow[], dataSource: ReportDataSource): ReportTableData {
+  const rowsByClicks = sortRowsByClicksDescending(rows)
+
   return {
     id: 'keywords-table',
     title: 'Keyword Performance - Google Ads API',
     dataSource,
     columns: GOOGLE_ADS_KEYWORD_COLUMNS,
-    rows: rows.slice(0, 7).map((row) => ({
+    rows: rowsByClicks.slice(0, 7).map((row) => ({
       keyword: row.text ?? '',
       matchType: row.match_type ? row.match_type.charAt(0) + row.match_type.slice(1).toLowerCase() : 'Unknown',
       impressions: formatNumber(Number(row.impressions ?? 0)),
@@ -995,7 +1003,7 @@ async function fetchSupabaseKeywordRows(accountId: string): Promise<{
       .select('keyword_text,match_type,quality_score,impressions,clicks,cost,ctr,avg_cpc,conversions')
       .eq('account_id', accountId)
       .eq('date_range', rangeKey)
-      .order('cost', { ascending: false })
+      .order('clicks', { ascending: false })
       .limit(100)
 
     if (error) throw new Error(`Unable to load SEM keyword table data: ${error.message}`)
@@ -1032,7 +1040,7 @@ export async function getGoogleAdsKeywordReportData(
       return {
         dataSource,
         table: buildKeywordTable(semKeywordData.rows, dataSource),
-        analysis: `Real SEM keyword data loaded from the selected account (${accountId}) using the ${semKeywordData.rangeKey.replace(/_/g, ' ')} range from the Keywords tab. Rows are sorted by spend and limited to the top 7 keywords.`,
+        analysis: `Real SEM keyword data loaded from the selected account (${accountId}) using the ${semKeywordData.rangeKey.replace(/_/g, ' ')} range from the Keywords tab. Rows are sorted by clicks from highest to lowest and limited to the top 7 keywords.`,
       }
     }
 
@@ -1055,7 +1063,7 @@ export async function getGoogleAdsKeywordReportData(
       dataSource,
       table: buildKeywordTable(keywords, dataSource),
       analysis: keywords.length > 0
-        ? `Real Google Ads keyword data loaded for ${dateRange.start} through ${dateRange.end}. Rows are sorted by spend from the account keyword_view query.`
+        ? `Real Google Ads keyword data loaded for ${dateRange.start} through ${dateRange.end}. Rows are sorted by clicks from highest to lowest.`
         : `No real Google Ads keyword data returned for ${dateRange.start} through ${dateRange.end}. Confirm the account had keyword activity and the Google Ads integration can access this customer.`,
     }
   } catch (error) {
@@ -1228,9 +1236,7 @@ async function getGoogleAdsSearchTermReportData(clientId: string, month: string,
   try {
     accountId = await resolveGoogleAdsAccountId(clientId)
     const response = await fetchGoogleAdsSearchTerms(accountId, dateRange)
-    const rows = (response.searchTerms ?? [])
-      .slice()
-      .sort((a, b) => safeNumber(b.cost) - safeNumber(a.cost))
+    const rows = sortRowsByClicksDescending(response.searchTerms ?? [])
       .slice(0, 9)
     const dataSource: ReportDataSource = {
       source: 'google_ads_api',
@@ -1256,7 +1262,7 @@ async function getGoogleAdsSearchTermReportData(clientId: string, month: string,
         action: searchTermAction(row),
       })),
       analysis: rows.length
-        ? `Top ${rows.length} search terms loaded from Google Ads for ${dateRange.start} through ${dateRange.end}, ordered by spend.`
+        ? `Top ${rows.length} search terms loaded from Google Ads for ${dateRange.start} through ${dateRange.end}, ordered by clicks from highest to lowest.`
         : `No search-term activity was returned for ${dateRange.start} through ${dateRange.end}.`,
     }
   } catch (error) {

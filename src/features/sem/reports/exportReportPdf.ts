@@ -83,6 +83,55 @@ function hidePdfOnlyControls(container: HTMLElement) {
   container.querySelectorAll<HTMLElement>('[data-pdf-hide="true"]').forEach((element) => element.remove())
 }
 
+function imageCanBeSafelyRasterized(image: HTMLImageElement) {
+  try {
+    const url = new URL(image.currentSrc || image.src, window.location.href)
+    return url.protocol === 'data:' || url.protocol === 'blob:' || url.origin === window.location.origin
+  } catch {
+    return false
+  }
+}
+
+function rasterizeImagesAtTheirRenderedAspectRatio(container: HTMLElement) {
+  const images = Array.from(container.querySelectorAll<HTMLImageElement>('img'))
+
+  images.forEach((image) => {
+    if (!imageCanBeSafelyRasterized(image) || !image.naturalWidth || !image.naturalHeight) return
+
+    const bounds = image.getBoundingClientRect()
+    if (!bounds.width || !bounds.height) return
+
+    const scale = 2
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bounds.width * scale))
+    canvas.height = Math.max(1, Math.round(bounds.height * scale))
+    canvas.style.width = `${bounds.width}px`
+    canvas.style.height = `${bounds.height}px`
+
+    const computed = window.getComputedStyle(image)
+    canvas.className = image.className
+    canvas.style.borderRadius = computed.borderRadius
+    canvas.style.background = computed.background
+
+    const context = canvas.getContext('2d')
+    if (!context) return
+
+    const sourceRatio = image.naturalWidth / image.naturalHeight
+    const targetRatio = bounds.width / bounds.height
+    const shouldCover = computed.objectFit === 'cover'
+    const drawWidth = (shouldCover ? sourceRatio > targetRatio : sourceRatio < targetRatio)
+      ? bounds.height * sourceRatio
+      : bounds.width
+    const drawHeight = drawWidth / sourceRatio
+    const x = (bounds.width - drawWidth) / 2
+    const y = (bounds.height - drawHeight) / 2
+
+    context.scale(scale, scale)
+    context.drawImage(image, x, y, drawWidth, drawHeight)
+    image.replaceWith(canvas)
+  })
+}
+
 export async function exportReportToPdf(report: Report) {
   const slides = report.slides.slice().sort((a, b) => a.order - b.order)
   const host = createExportHost()
@@ -113,6 +162,7 @@ export async function exportReportToPdf(report: Report) {
     await waitForRenderedAssets(host)
     hidePdfOnlyControls(host)
     replaceEditableControlsWithStaticText(host)
+    rasterizeImagesAtTheirRenderedAspectRatio(host)
     const slideNodes = Array.from(host.querySelectorAll<HTMLElement>('[data-pdf-slide]'))
     const pdf = new jsPDF({
       orientation: 'landscape',

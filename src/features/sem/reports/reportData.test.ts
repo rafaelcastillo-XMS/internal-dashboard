@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createLsaCreditedLeadsTable } from './reportData'
+import { createLsaCreditedLeadsTable, sortRowsByClicksDescending } from './reportData'
 import type { ReportDataSource } from './types'
 
 describe('createLsaCreditedLeadsTable', () => {
@@ -40,5 +40,18 @@ describe('createLsaCreditedLeadsTable', () => {
       chargeStatus: 'Credited',
       leadReceived: '4/9/26 8:09 AM',
     }])
+  })
+})
+
+describe('sortRowsByClicksDescending', () => {
+  it('orders report rows from the most clicks to the least without mutating the source', () => {
+    const rows = [
+      { label: 'Low', clicks: 3 },
+      { label: 'High', clicks: 57 },
+      { label: 'Medium', clicks: 19 },
+    ]
+
+    expect(sortRowsByClicksDescending(rows).map((row) => row.label)).toEqual(['High', 'Medium', 'Low'])
+    expect(rows.map((row) => row.label)).toEqual(['Low', 'High', 'Medium'])
   })
 })
