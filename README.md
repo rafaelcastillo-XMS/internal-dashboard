@@ -13,7 +13,9 @@ authenticated application.
   monthly reports stored in Supabase
 - SEO dashboards, Ahrefs/PageSpeed data, GBP reporting, on-page audits, and
   quarterly PDF exports
-- Social dashboards for Facebook, Instagram, and YouTube
+- Social dashboards for Facebook, Instagram, and YouTube. The Facebook screen
+  reads live page and post data from the Meta Graph API; reach, impressions and
+  engagement counts stay locked until the Meta app clears App Review
 - Client integrations for Notion, NotebookLM, and Google services
 - Internal AI assistance powered by Anthropic
 

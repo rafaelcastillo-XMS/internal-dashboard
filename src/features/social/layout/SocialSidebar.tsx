@@ -7,6 +7,10 @@ import { useSidebar } from '@/context/useSidebar'
 import { ClientSelector } from '@/features/shared/components/ClientSelector'
 import { type SocialPlatform } from '../hooks/useSocialDashboardState'
 
+const SOCIAL_CLIENTS = [
+  { id: 'xms-ai', name: 'XMS Ai', initials: 'XA', color: 'bg-[#8B5CF6]' },
+]
+
 const CONNECTED: Record<SocialPlatform, boolean> = {
   instagram: true,
   facebook:  true,
@@ -145,7 +149,8 @@ export function SocialSidebar() {
           <div className="border-b border-[var(--sidebar-border)] px-3 py-3">
             <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-section-label)]">Active Account</p>
             <ClientSelector
-              activeName="Holts"
+              clients={SOCIAL_CLIENTS}
+              activeName="XMS Ai"
               subtitle="Social Intelligence"
               onSelect={() => {}}
             />

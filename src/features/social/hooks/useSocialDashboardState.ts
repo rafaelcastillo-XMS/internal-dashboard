@@ -35,7 +35,7 @@ export function formatDateLabel(startDate: string, endDate: string) {
 export const SOCIAL_API = '/api/social'
 
 export const ACCOUNT_OPTIONS = [
-  { value: 'xms-demo', label: 'XMS Demo Account' },
+  { value: 'xms-ai', label: 'XMS Ai' },
 ]
 
 const SELECTED_KEY = 'xms_social_selected'

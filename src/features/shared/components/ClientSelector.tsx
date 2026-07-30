@@ -6,13 +6,16 @@ const CLIENTS = [
   { id: 'holts', name: 'Holts', initials: 'HO', color: 'bg-amber-700' },
 ]
 
+export interface ClientOption { id: string; name: string; initials: string; color: string }
+
 interface ClientSelectorProps {
   activeName: string
   subtitle: string
   onSelect: (name: string) => void
+  clients?: ClientOption[]
 }
 
-export function ClientSelector({ activeName, subtitle, onSelect }: ClientSelectorProps) {
+export function ClientSelector({ activeName, subtitle, onSelect, clients = CLIENTS }: ClientSelectorProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -31,7 +34,7 @@ export function ClientSelector({ activeName, subtitle, onSelect }: ClientSelecto
     }
   }, [open])
 
-  const filtered = CLIENTS.filter(c =>
+  const filtered = clients.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -44,7 +47,7 @@ export function ClientSelector({ activeName, subtitle, onSelect }: ClientSelecto
       >
         <div className="flex items-center gap-2.5">
           {(() => {
-            const client = CLIENTS.find(c => c.name === activeName)
+            const client = clients.find(c => c.name === activeName)
             return (
               <div className={`w-8 h-8 rounded-full ${client?.color ?? 'bg-[#1A72D9]'} flex items-center justify-center text-white text-[10px] font-bold shrink-0 ring-2 ring-current/20`}>
                 {client ? client.initials : activeName ? activeName.substring(0, 2).toUpperCase() : <Building2 className="w-3.5 h-3.5" />}

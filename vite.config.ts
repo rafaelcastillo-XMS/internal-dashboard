@@ -11,6 +11,7 @@ import type { IncomingMessage, ServerResponse } from "http"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
+import { MetaApiError, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { handleNotionClientSyncRequest } from "./server/notionSync.js"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
@@ -925,6 +926,43 @@ function semDevPlugin() {
   }
 }
 
+function socialDevPlugin() {
+  return {
+    name: "social-api",
+    configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/api/social/facebook") || req.method !== "GET") {
+          next()
+          return
+        }
+
+        const { searchParams } = new URL(req.url, "http://localhost")
+        const since = searchParams.get("since") ?? ""
+        const until = searchParams.get("until") ?? ""
+        if ((since && !isValidDate(since)) || (until && !isValidDate(until))) {
+          sendJson(res, 400, { error: "since and until must be YYYY-MM-DD" })
+          return
+        }
+
+        try {
+          const snapshot = await getFacebookPageSnapshot({
+            accessToken: process.env.META_ACCESS_TOKEN ?? "",
+            pageId:      process.env.META_PAGE_ID      ?? "",
+            since,
+            until,
+          })
+          sendJson(res, 200, snapshot)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Meta Graph API error"
+          const status  = error instanceof MetaApiError ? error.upstreamStatus : 500
+          console.error("[social-api/facebook]", status, message)
+          sendJson(res, status >= 400 && status < 600 ? status : 502, { error: message })
+        }
+      })
+    },
+  }
+}
+
 function pdfExportDevPlugin() {
   return {
     name: "pdf-export-api",
@@ -1513,7 +1551,7 @@ Use the dashboard context below to give specific, data-driven answers. Never inv
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), notionDevPlugin(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), pdfExportDevPlugin(), companySkillsPlugin(), mondayPlugin(), aiPlugin()],
+  plugins: [react(), notionDevPlugin(), notebooklmDevPlugin(), googleAuthPlugin(), seoDevPlugin(), semDevPlugin(), socialDevPlugin(), pdfExportDevPlugin(), companySkillsPlugin(), mondayPlugin(), aiPlugin()],
   server: {},
   build: {
     rollupOptions: {

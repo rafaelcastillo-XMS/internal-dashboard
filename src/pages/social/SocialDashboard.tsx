@@ -297,7 +297,7 @@ export function SocialDashboard() {
 
         {/* ── AI Insights ── */}
         <SocialAIInsights
-          accountName="Holts"
+          accountName="XMS Ai"
           accountId={state.selectedAccountId}
           platforms={state.selectedPlatforms}
           metrics={metrics}

@@ -9,6 +9,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
+import { MetaApiError, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
 import { handleNotionClientSyncRequest } from "./server/notionSync.js"
 
@@ -589,6 +590,24 @@ app.get('/api/seo/ahrefs-snapshot', async (req, res) => {
     const message = error instanceof Error ? error.message : 'Ahrefs request failed'
     const status = error instanceof AhrefsApiError ? error.upstreamStatus : 500
     console.error('[seo/ahrefs]', status, message)
+    res.status(status >= 400 && status < 600 ? status : 502).json({ error: message })
+  }
+})
+
+// ── Social: Facebook Page snapshot (Meta Graph API) ──────────────────────────
+app.get('/api/social/facebook', async (req, res) => {
+  try {
+    const snapshot = await getFacebookPageSnapshot({
+      accessToken: process.env.META_ACCESS_TOKEN ?? '',
+      pageId:      process.env.META_PAGE_ID      ?? '',
+      since: typeof req.query.since === 'string' ? req.query.since : '',
+      until: typeof req.query.until === 'string' ? req.query.until : '',
+    })
+    res.json(snapshot)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Meta Graph API error'
+    const status = error instanceof MetaApiError ? error.upstreamStatus : 500
+    console.error('[social/facebook]', status, message)
     res.status(status >= 400 && status < 600 ? status : 502).json({ error: message })
   }
 })
