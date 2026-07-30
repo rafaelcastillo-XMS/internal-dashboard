@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { ExternalLink, Info } from 'lucide-react'
+import { InfoTip } from '@/features/social/components/InfoTip'
 import { PlatformIcon } from '@/features/social/components/PlatformIcon'
 import { useFacebookData, type Campaign, type FbPost } from '@/features/social/hooks/useFacebookData'
-import { DATE_PRESETS, PLATFORMS, type SocialPlatform } from '@/features/social/hooks/useSocialDashboardState'
+import { DATE_PRESETS, PLATFORMS, getDateRange, type SocialPlatform } from '@/features/social/hooks/useSocialDashboardState'
 
 const CONNECTED: SocialPlatform[] = ['facebook']
 const FB = '#1877F2'
@@ -123,9 +124,20 @@ function CampaignTable({ campaigns, currency, loading }: { campaigns: Campaign[]
             <table className="w-full text-sm">
                 <thead>
                     <tr className="border-b border-stroke dark:border-strokedark">
-                        {['Campaign', 'Status', 'Spend', 'Impressions', 'Clicks', 'CTR', 'CPC'].map(h => (
-                            <th key={h} className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">
-                                {h}
+                        {[
+                            { label: 'Campaign' },
+                            { label: 'Status', tip: 'ACTIVE campaigns are running now. PAUSED ones keep their historical numbers.' },
+                            { label: 'Spend', tip: 'Amount charged in the selected range.' },
+                            { label: 'Impressions', tip: 'Times the ads were shown, including repeat views to the same person.' },
+                            { label: 'Clicks', tip: 'All clicks on the ads, including likes and shares — not only link clicks.' },
+                            { label: 'CTR', tip: 'Click-through rate: clicks divided by impressions.' },
+                            { label: 'CPC', tip: 'Average cost per click: spend divided by clicks.' },
+                        ].map(h => (
+                            <th key={h.label} className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">
+                                <span className="inline-flex items-center gap-1.5">
+                                    {h.label}
+                                    {h.tip && <InfoTip text={h.tip} />}
+                                </span>
                             </th>
                         ))}
                     </tr>
@@ -167,13 +179,16 @@ function FacebookTab({ days }: { days: number }) {
 
             <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
                 {[
-                    { label: 'Followers', value: page?.followers ?? 0 },
-                    { label: 'Page fans', value: page?.fans ?? 0 },
-                    { label: 'Talking about', value: page?.talkingAbout ?? 0 },
-                    { label: 'Posts', value: posts.length },
+                    { label: 'Followers', value: page?.followers ?? 0, tip: 'People following the Page right now. Not affected by the time range.' },
+                    { label: 'Page fans', value: page?.fans ?? 0, tip: 'People who liked the Page. Usually close to followers, but a like and a follow are separate actions.' },
+                    { label: 'Talking about', value: page?.talkingAbout ?? 0, tip: 'People who interacted with the Page in the last 7 days — Meta computes this window, so it ignores the selector above.' },
+                    { label: 'Posts', value: posts.length, tip: `Posts published by the Page in the selected ${days}-day range.` },
                 ].map(stat => (
                     <div key={stat.label} className="rounded-xl border border-stroke bg-white px-5 py-4 dark:border-strokedark dark:bg-boxdark">
-                        <p className="text-xs text-body dark:text-bodydark">{stat.label}</p>
+                        <p className="flex items-center gap-1.5 text-xs text-body dark:text-bodydark">
+                            {stat.label}
+                            <InfoTip text={stat.tip} />
+                        </p>
                         <p className="mt-1 text-2xl font-bold tabular-nums text-black dark:text-[#E2E5E9]">{fmt(stat.value)}</p>
                     </div>
                 ))}
@@ -182,12 +197,29 @@ function FacebookTab({ days }: { days: number }) {
             <WeeklyPlan />
 
             <Card>
-                <CardHeader title="Posts & reels" subtitle={`Published in the last ${days} days`} />
+                <CardHeader
+                    title="Posts & reels"
+                    subtitle={`Published in the last ${days} days`}
+                    aside={
+                        <span className="shrink-0 rounded-full bg-stroke/50 px-2.5 py-1 text-[11px] font-semibold text-body dark:bg-strokedark dark:text-bodydark">
+                            {posts.length} {posts.length === 1 ? 'post' : 'posts'}
+                        </span>
+                    }
+                />
                 <PostGrid posts={posts} loading={loading} />
             </Card>
 
             <Card>
-                <CardHeader title="Campaigns" subtitle="Meta Ads performance" />
+                <CardHeader
+                    title="Campaigns"
+                    subtitle="Meta Ads campaigns promoting this Page, highest spend first"
+                    aside={
+                        <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-stroke/50 px-2.5 py-1 text-[11px] font-semibold text-body dark:bg-strokedark dark:text-bodydark">
+                            {campaigns.length} {campaigns.length === 1 ? 'campaign' : 'campaigns'}
+                            <InfoTip text="The ad account is shared across clients, so only campaigns whose ads promote this Page are listed." />
+                        </span>
+                    }
+                />
                 <CampaignTable campaigns={campaigns} currency={currency} loading={loading} />
             </Card>
         </div>
@@ -209,26 +241,55 @@ function NotConnected({ label }: { label: string }) {
 
 export function SocialPlatforms() {
     const [active, setActive] = useState<SocialPlatform>('facebook')
-    const [preset, setPreset] = useState(1)
+    const [preset, setPreset] = useState(0)
     const days = DATE_PRESETS[preset].days
+
+    const { startDate, endDate } = getDateRange(days)
+    const fmtDay = (iso: string) =>
+        new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const rangeLabel = `${fmtDay(startDate)} – ${fmtDay(endDate)}`
 
     return (
         <div className="mx-auto max-w-screen-2xl p-6">
 
-            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-5">
                 <div>
                     <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Platforms</h1>
                     <p className="text-sm text-body dark:text-bodydark">Per-network performance</p>
                 </div>
-                <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white p-1 shadow-card dark:border-strokedark dark:bg-boxdark">
-                    {DATE_PRESETS.map((p, idx) => (
-                        <button key={p.days} onClick={() => setPreset(idx)}
-                            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${preset === idx
-                                ? 'bg-[#8B5CF6] text-white shadow-sm'
-                                : 'text-body hover:text-black dark:text-bodydark dark:hover:text-white'}`}>
-                            {p.label}
-                        </button>
-                    ))}
+
+                <div>
+                    <div className="mb-1.5 flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-body dark:text-bodydark">
+                            Time range
+                        </span>
+                        <InfoTip text="Applies to posts and campaign metrics on this page. Follower counts are always current." />
+                    </div>
+                    <div
+                        role="group"
+                        aria-label="Time range"
+                        className="flex items-center gap-1.5 rounded-xl border-2 border-stroke bg-white p-1.5 shadow-default dark:border-strokedark dark:bg-boxdark"
+                    >
+                        {DATE_PRESETS.map((p, idx) => {
+                            const isActive = preset === idx
+                            return (
+                                <button
+                                    key={p.days}
+                                    onClick={() => setPreset(idx)}
+                                    aria-pressed={isActive}
+                                    title={`Show the last ${p.days} days`}
+                                    className={`rounded-lg px-5 py-2 text-sm font-bold transition-all ${isActive
+                                        ? 'bg-[#8B5CF6] text-white shadow-md ring-2 ring-[#8B5CF6]/30'
+                                        : 'text-body hover:bg-[#8B5CF6]/10 hover:text-[#8B5CF6] dark:text-bodydark'}`}
+                                >
+                                    {p.label}
+                                </button>
+                            )
+                        })}
+                    </div>
+                    <p className="mt-1.5 text-right text-[11px] font-medium tabular-nums text-body dark:text-bodydark">
+                        {rangeLabel}
+                    </p>
                 </div>
             </div>
 
@@ -242,6 +303,9 @@ export function SocialPlatforms() {
                             key={platform.id}
                             onClick={() => setActive(platform.id)}
                             aria-pressed={isActive}
+                            title={connected
+                                ? `${platform.label} — connected, showing live data`
+                                : `${platform.label} — not connected, no data available`}
                             className={`flex items-center gap-2.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all
                                 ${isActive
                                     ? 'border-transparent text-white shadow-sm'
