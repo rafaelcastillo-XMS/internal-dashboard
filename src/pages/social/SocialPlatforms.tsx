@@ -1,9 +1,11 @@
-import { useState } from 'react'
-import { ExternalLink, Info } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { CheckCircle2, Circle, ExternalLink, Pencil } from 'lucide-react'
 import { InfoTip } from '@/features/social/components/InfoTip'
 import { PlatformIcon } from '@/features/social/components/PlatformIcon'
 import { useFacebookData, type Campaign, type FbPost } from '@/features/social/hooks/useFacebookData'
 import { DATE_PRESETS, PLATFORMS, getDateRange, type SocialPlatform } from '@/features/social/hooks/useSocialDashboardState'
+import { completedCount, goalProgress, startOfWeek, type GoalMetric, type WeeklyGoal } from '@/features/social/lib/weeklyGoals'
+import { fetchWeeklyGoals, saveWeeklyGoal } from '@/features/social/lib/weeklyGoalsTable'
 
 const CONNECTED: SocialPlatform[] = ['facebook']
 const FB = '#1877F2'
@@ -34,36 +36,116 @@ function CardHeader({ title, subtitle, aside }: { title: string; subtitle?: stri
     )
 }
 
-// Meta Business Suite renders a weekly plan, but exposes no Graph API endpoint
-// for it. The card keeps the shape and reports zeros rather than inventing
-// tasks; wire it up if Meta ever ships an endpoint.
-function WeeklyPlan() {
-    const completed = 0
-    const total = 0
-    const pct = total > 0 ? (completed / total) * 100 : 0
+// Meta Business Suite shows a weekly plan but exposes no Graph API endpoint for
+// it, so the targets are ours (stored in Supabase) while the progress is
+// measured against the posts the Graph API does return.
+function WeeklyPlan({ posts, clientId }: { posts: FbPost[]; clientId: string }) {
+    const [goals, setGoals] = useState<WeeklyGoal[]>([])
+    const [loading, setLoading] = useState(true)
+    const [editing, setEditing] = useState(false)
+    const [error, setError] = useState('')
+
+    useEffect(() => {
+        let cancelled = false
+        fetchWeeklyGoals(clientId)
+            .then(rows => { if (!cancelled) setGoals(rows) })
+            .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load goals') })
+            .finally(() => { if (!cancelled) setLoading(false) })
+        return () => { cancelled = true }
+    }, [clientId])
+
+    const now = new Date()
+    const progress = goalProgress(goals, posts, now)
+    const tracked = progress.filter(g => g.target > 0)
+    const completed = completedCount(progress)
+    const pct = tracked.length > 0 ? (completed / tracked.length) * 100 : 0
+
+    const weekLabel = startOfWeek(now).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+    async function updateTarget(metric: GoalMetric, target: number) {
+        setGoals(prev => prev.map(g => (g.metric === metric ? { ...g, target } : g)))
+        try {
+            await saveWeeklyGoal(clientId, metric, target)
+            setError('')
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to save goal')
+        }
+    }
 
     return (
         <Card>
             <CardHeader
                 title="Weekly plan"
-                subtitle="Set your business up for success by completing recommended tasks."
+                subtitle={`Your publishing goals for the week of ${weekLabel}`}
                 aside={
-                    <span className="flex items-center gap-1.5 rounded-full bg-stroke/50 px-2.5 py-1 text-[11px] font-medium text-body dark:bg-strokedark dark:text-bodydark">
-                        <Info className="h-3 w-3" /> No Meta API
-                    </span>
+                    <button
+                        onClick={() => setEditing(v => !v)}
+                        title={editing ? 'Close the target editor' : 'Change this week\'s targets'}
+                        className="flex shrink-0 items-center gap-1.5 rounded-lg border border-stroke px-2.5 py-1.5 text-[11px] font-semibold text-body transition-colors hover:border-[#8B5CF6] hover:text-[#8B5CF6] dark:border-strokedark dark:text-bodydark"
+                    >
+                        <Pencil className="h-3 w-3" />
+                        {editing ? 'Done' : 'Edit goals'}
+                    </button>
                 }
             />
             <div className="p-6">
-                <p className="text-sm font-semibold text-black dark:text-[#E2E5E9]">
-                    {completed} of {total} tasks completed
-                </p>
-                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-stroke dark:bg-strokedark">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: '#10B981' }} />
+                {error && <p className="mb-3 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+
+                <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-black dark:text-[#E2E5E9]">
+                        {loading ? 'Loading goals…' : `${completed} of ${tracked.length} goals completed`}
+                    </p>
+                    <InfoTip text="Meta does not expose its own weekly plan through the API. These targets are yours; progress is counted from posts published since Monday." />
                 </div>
-                <p className="mt-4 text-xs text-body dark:text-bodydark">
-                    Meta Business Suite does not expose the weekly plan through the Graph API, so tasks
-                    cannot be synced. Track them in Business Suite.
-                </p>
+
+                <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-stroke dark:bg-strokedark">
+                    <div className="h-full rounded-full transition-all duration-500"
+                         style={{ width: `${pct}%`, backgroundColor: pct === 100 ? '#10B981' : '#8B5CF6' }} />
+                </div>
+
+                <ul className="mt-5 divide-y divide-stroke dark:divide-strokedark">
+                    {progress.map(goal => (
+                        <li key={goal.metric} className="flex items-center gap-3 py-3">
+                            {goal.done
+                                ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                                : <Circle className="h-4 w-4 shrink-0 text-body opacity-40 dark:text-bodydark" />}
+
+                            <span className={`flex-1 text-sm ${goal.done
+                                ? 'font-medium text-black dark:text-[#E2E5E9]'
+                                : 'text-body dark:text-bodydark'}`}>
+                                {goal.label}
+                                {goal.target === 0 && !editing && (
+                                    <span className="ml-2 text-[11px] opacity-60">not tracked</span>
+                                )}
+                            </span>
+
+                            {editing ? (
+                                <label className="flex items-center gap-2 text-[11px] text-body dark:text-bodydark">
+                                    Target
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={goal.target}
+                                        onChange={e => updateTarget(goal.metric, Math.max(0, Number(e.target.value) || 0))}
+                                        className="w-16 rounded-lg border border-stroke bg-white px-2 py-1 text-right text-sm
+                                                   tabular-nums text-black focus:border-[#8B5CF6] focus:outline-none
+                                                   dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
+                                    />
+                                </label>
+                            ) : (
+                                <span className="shrink-0 text-sm font-semibold tabular-nums text-black dark:text-[#E2E5E9]">
+                                    {goal.actual} / {goal.target}
+                                </span>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+
+                {editing && (
+                    <p className="mt-3 text-[11px] text-body dark:text-bodydark">
+                        Set a target to 0 to stop tracking that goal. Changes save as you type.
+                    </p>
+                )}
             </div>
         </Card>
     )
@@ -194,7 +276,7 @@ function FacebookTab({ days }: { days: number }) {
                 ))}
             </div>
 
-            <WeeklyPlan />
+            <WeeklyPlan posts={posts} clientId="xms-ai" />
 
             <Card>
                 <CardHeader
