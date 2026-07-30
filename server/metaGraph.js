@@ -89,24 +89,58 @@ export async function getAdCampaigns({ accessToken, pageId, since, until, fetchI
   const account = accounts.data?.[0]
   if (!account) return { account: null, campaigns: [] }
 
-  const timeRange = since && until ? JSON.stringify({ since, until }) : ''
-  const insightFields = 'spend,impressions,clicks,ctr,cpc,reach'
-  const params = {
-    fields: `name,status,objective,insights.fields(${insightFields})${timeRange ? `.time_range(${timeRange})` : ''}`,
-    limit: '50',
-    access_token: accessToken,
+  // Two phases on purpose. The account holds a few hundred campaigns across
+  // every client, but only this Page's belong here — asking for insights while
+  // paginating would fetch them for all of them and roughly doubles the time.
+  // Filter first, then pull insights for the handful that survive.
+  const fields = [
+    'name',
+    'status',
+    'objective',
+    // The promoted page identifies whose campaign this is, and it lives on the
+    // ad set rather than the campaign.
+    'adsets.limit(10){promoted_object}',
+  ].join(',')
+
+  const raw = []
+  let path = `${account.id}/campaigns`
+  let params = { fields, limit: '100', access_token: accessToken }
+
+  // The account holds several hundred campaigns and the Graph API caps a page
+  // at 100, so walk the cursor. MAX_PAGES bounds a runaway loop; hitting it
+  // logs rather than silently truncating.
+  const MAX_PAGES = 10
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const batch = await graphGet(path, params, fetchImpl)
+    raw.push(...(batch.data ?? []))
+
+    const next = batch.paging?.next
+    if (!next) break
+    if (page === MAX_PAGES - 1) {
+      console.warn(`[metaGraph] campaign pagination stopped at ${MAX_PAGES} pages; some campaigns were not read.`)
+      break
+    }
+    const nextUrl = new URL(next)
+    path = nextUrl.pathname.replace(/^\/v[\d.]+\//, '')
+    params = Object.fromEntries(nextUrl.searchParams)
   }
 
-  const campaigns = await graphGet(`${account.id}/campaigns`, params, fetchImpl)
+  const promotesPage = campaign =>
+    (campaign.adsets?.data ?? []).some(adset => adset.promoted_object?.page_id === pageId)
 
-  // Accounts accumulate dormant campaigns, so surface the ones that actually
-  // spent in the window first.
-  const sortBySpend = (a, b) => b.spend - a.spend
+  const timeRange = since && until ? JSON.stringify({ since, until }) : ''
+  const mine = raw.filter(promotesPage)
+
+  const withStats = await Promise.all(mine.map(async campaign => {
+    const insightParams = { fields: 'spend,impressions,clicks,ctr,cpc,reach', access_token: accessToken }
+    if (timeRange) insightParams.time_range = timeRange
+    const insights = await graphGet(`${campaign.id}/insights`, insightParams, fetchImpl)
+    return { campaign, stats: insights.data?.[0] ?? {} }
+  }))
 
   return {
     account: { id: account.id, name: account.name ?? '', currency: account.currency ?? '' },
-    campaigns: (campaigns.data ?? []).map(campaign => {
-      const stats = campaign.insights?.data?.[0] ?? {}
+    campaigns: withStats.map(({ campaign, stats }) => {
       return {
         id: campaign.id,
         name: campaign.name ?? '',
@@ -119,7 +153,8 @@ export async function getAdCampaigns({ accessToken, pageId, since, until, fetchI
         ctr: Number(stats.ctr ?? 0),
         cpc: Number(stats.cpc ?? 0),
       }
-    }).sort(sortBySpend),
+      // Dormant campaigns pile up, so lead with the ones that actually spent.
+    }).sort((a, b) => b.spend - a.spend),
   }
 }
 
