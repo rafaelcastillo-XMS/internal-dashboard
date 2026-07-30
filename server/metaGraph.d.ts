@@ -32,9 +32,34 @@ export interface FacebookPageSnapshot {
   fetchedAt: string
 }
 
+export interface AdCampaign {
+  id: string
+  name: string
+  status: string
+  objective: string
+  spend: number
+  impressions: number
+  clicks: number
+  reach: number
+  ctr: number
+  cpc: number
+}
+
+export interface AdCampaignsResult {
+  account: { id: string; name: string; currency: string } | null
+  campaigns: AdCampaign[]
+}
+
 export class MetaApiError extends Error {
   upstreamStatus: number
 }
+
+export function getAdCampaigns(options: {
+  accessToken: string
+  since?: string
+  until?: string
+  fetchImpl?: typeof fetch
+}): Promise<AdCampaignsResult>
 
 export function getFacebookPageSnapshot(options: {
   accessToken: string

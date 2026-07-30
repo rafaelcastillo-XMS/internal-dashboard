@@ -11,7 +11,7 @@ import type { IncomingMessage, ServerResponse } from "http"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
-import { MetaApiError, getFacebookPageSnapshot } from "./server/metaGraph.js"
+import { MetaApiError, getAdCampaigns, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { handleNotionClientSyncRequest } from "./server/notionSync.js"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
@@ -931,16 +931,37 @@ function socialDevPlugin() {
     name: "social-api",
     configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
       server.middlewares.use(async (req, res, next) => {
-        if (!req.url?.startsWith("/api/social/facebook") || req.method !== "GET") {
+        if (!req.url?.startsWith("/api/social/") || req.method !== "GET") {
           next()
           return
         }
 
-        const { searchParams } = new URL(req.url, "http://localhost")
+        const { pathname, searchParams } = new URL(req.url, "http://localhost")
         const since = searchParams.get("since") ?? ""
         const until = searchParams.get("until") ?? ""
         if ((since && !isValidDate(since)) || (until && !isValidDate(until))) {
           sendJson(res, 400, { error: "since and until must be YYYY-MM-DD" })
+          return
+        }
+
+        if (pathname === "/api/social/campaigns") {
+          try {
+            sendJson(res, 200, await getAdCampaigns({
+              accessToken: process.env.META_ACCESS_TOKEN ?? "",
+              since,
+              until,
+            }))
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Meta Ads API error"
+            const status  = error instanceof MetaApiError ? error.upstreamStatus : 500
+            console.error("[social-api/campaigns]", status, message)
+            sendJson(res, status >= 400 && status < 600 ? status : 502, { error: message })
+          }
+          return
+        }
+
+        if (pathname !== "/api/social/facebook") {
+          next()
           return
         }
 

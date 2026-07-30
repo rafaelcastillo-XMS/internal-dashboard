@@ -52,9 +52,9 @@ const DesignDashboard = lazy(() => import("./pages/design/DesignDashboard").then
 // Social Media Intelligence
 const SocialLayout = lazy(() => import("./features/social/layout/SocialLayout").then(module => ({ default: module.SocialLayout })))
 const SocialDashboard = lazy(() => import("./pages/social/SocialDashboard").then(module => ({ default: module.SocialDashboard })))
-const InstagramDashboard = lazy(() => import("./pages/social/instagram/InstagramDashboard").then(module => ({ default: module.InstagramDashboard })))
-const YouTubeDashboard = lazy(() => import("./pages/social/youtube/YouTubeDashboard").then(module => ({ default: module.YouTubeDashboard })))
-const FacebookDashboard = lazy(() => import("./pages/social/facebook/FacebookDashboard").then(module => ({ default: module.FacebookDashboard })))
+const SocialPlatforms = lazy(() => import("./pages/social/SocialPlatforms").then(module => ({ default: module.SocialPlatforms })))
+const SocialCalendar = lazy(() => import("./pages/social/SocialCalendar").then(module => ({ default: module.SocialCalendar })))
+const SocialReports = lazy(() => import("./pages/social/SocialReports").then(module => ({ default: module.SocialReports })))
 
 function AppLayout() {
     return (
@@ -150,9 +150,9 @@ function App() {
                             </Route>
                             <Route element={<SocialProtectedLayout session={session} />}>
                                 <Route path="/social" element={<SocialDashboard />} />
-                                <Route path="/social/instagram" element={<InstagramDashboard />} />
-                                <Route path="/social/youtube" element={<YouTubeDashboard />} />
-                                <Route path="/social/facebook" element={<FacebookDashboard />} />
+                                <Route path="/social/platforms" element={<SocialPlatforms />} />
+                                <Route path="/social/calendar" element={<SocialCalendar />} />
+                                <Route path="/social/reports" element={<SocialReports />} />
                             </Route>
                             <Route element={<DesignProtectedLayout session={session} />}>
                                 <Route path="/design" element={<DesignDashboard />} />

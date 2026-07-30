@@ -67,6 +67,46 @@ function mediaType(post) {
   return 'Post'
 }
 
+// Ad campaigns need ads_read plus an ad account assigned to the System User in
+// Business Settings. With no account assigned the Graph API returns an empty
+// list rather than an error, so callers get zero campaigns, not a failure.
+export async function getAdCampaigns({ accessToken, since, until, fetchImpl = fetch }) {
+  if (!accessToken) throw new MetaApiError('META_ACCESS_TOKEN is not configured.', 503)
+
+  const accounts = await graphGet('me/adaccounts', { fields: 'id,name,currency', access_token: accessToken }, fetchImpl)
+  const account = accounts.data?.[0]
+  if (!account) return { account: null, campaigns: [] }
+
+  const timeRange = since && until ? JSON.stringify({ since, until }) : ''
+  const insightFields = 'spend,impressions,clicks,ctr,cpc,reach'
+  const params = {
+    fields: `name,status,objective,insights.fields(${insightFields})${timeRange ? `.time_range(${timeRange})` : ''}`,
+    limit: '50',
+    access_token: accessToken,
+  }
+
+  const campaigns = await graphGet(`${account.id}/campaigns`, params, fetchImpl)
+
+  return {
+    account: { id: account.id, name: account.name ?? '', currency: account.currency ?? '' },
+    campaigns: (campaigns.data ?? []).map(campaign => {
+      const stats = campaign.insights?.data?.[0] ?? {}
+      return {
+        id: campaign.id,
+        name: campaign.name ?? '',
+        status: campaign.status ?? '',
+        objective: campaign.objective ?? '',
+        spend: Number(stats.spend ?? 0),
+        impressions: Number(stats.impressions ?? 0),
+        clicks: Number(stats.clicks ?? 0),
+        reach: Number(stats.reach ?? 0),
+        ctr: Number(stats.ctr ?? 0),
+        cpc: Number(stats.cpc ?? 0),
+      }
+    }),
+  }
+}
+
 export async function getFacebookPageSnapshot({ accessToken, pageId, since, until, limit = 25, fetchImpl = fetch }) {
   if (!accessToken) throw new MetaApiError('META_ACCESS_TOKEN is not configured.', 503)
   if (!pageId) throw new MetaApiError('META_PAGE_ID is not configured.', 503)

@@ -9,7 +9,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
-import { MetaApiError, getFacebookPageSnapshot } from "./server/metaGraph.js"
+import { MetaApiError, getAdCampaigns, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
 import { handleNotionClientSyncRequest } from "./server/notionSync.js"
 
@@ -608,6 +608,23 @@ app.get('/api/social/facebook', async (req, res) => {
     const message = error instanceof Error ? error.message : 'Meta Graph API error'
     const status = error instanceof MetaApiError ? error.upstreamStatus : 500
     console.error('[social/facebook]', status, message)
+    res.status(status >= 400 && status < 600 ? status : 502).json({ error: message })
+  }
+})
+
+// ── Social: Meta ad campaigns ────────────────────────────────────────────────
+app.get('/api/social/campaigns', async (req, res) => {
+  try {
+    const result = await getAdCampaigns({
+      accessToken: process.env.META_ACCESS_TOKEN ?? '',
+      since: typeof req.query.since === 'string' ? req.query.since : '',
+      until: typeof req.query.until === 'string' ? req.query.until : '',
+    })
+    res.json(result)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Meta Ads API error'
+    const status = error instanceof MetaApiError ? error.upstreamStatus : 500
+    console.error('[social/campaigns]', status, message)
     res.status(status >= 400 && status < 600 ? status : 502).json({ error: message })
   }
 })
