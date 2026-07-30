@@ -53,7 +53,7 @@ const DesignDashboard = lazy(() => import("./pages/design/DesignDashboard").then
 const SocialLayout = lazy(() => import("./features/social/layout/SocialLayout").then(module => ({ default: module.SocialLayout })))
 const SocialDashboard = lazy(() => import("./pages/social/SocialDashboard").then(module => ({ default: module.SocialDashboard })))
 const SocialPlatforms = lazy(() => import("./pages/social/SocialPlatforms").then(module => ({ default: module.SocialPlatforms })))
-const SocialCalendar = lazy(() => import("./pages/social/SocialCalendar").then(module => ({ default: module.SocialCalendar })))
+const SocialPlanning = lazy(() => import("./pages/social/SocialPlanning").then(module => ({ default: module.SocialPlanning })))
 const SocialReports = lazy(() => import("./pages/social/SocialReports").then(module => ({ default: module.SocialReports })))
 
 function AppLayout() {
@@ -151,7 +151,7 @@ function App() {
                             <Route element={<SocialProtectedLayout session={session} />}>
                                 <Route path="/social" element={<SocialDashboard />} />
                                 <Route path="/social/platforms" element={<SocialPlatforms />} />
-                                <Route path="/social/calendar" element={<SocialCalendar />} />
+                                <Route path="/social/planning" element={<SocialPlanning />} />
                                 <Route path="/social/reports" element={<SocialReports />} />
                             </Route>
                             <Route element={<DesignProtectedLayout session={session} />}>

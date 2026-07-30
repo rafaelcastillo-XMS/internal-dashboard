@@ -56,6 +56,7 @@ export class MetaApiError extends Error {
 
 export function getAdCampaigns(options: {
   accessToken: string
+  pageId: string
   since?: string
   until?: string
   fetchImpl?: typeof fetch

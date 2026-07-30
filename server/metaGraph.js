@@ -67,13 +67,25 @@ function mediaType(post) {
   return 'Post'
 }
 
-// Ad campaigns need ads_read plus an ad account assigned to the System User in
-// Business Settings. With no account assigned the Graph API returns an empty
-// list rather than an error, so callers get zero campaigns, not a failure.
-export async function getAdCampaigns({ accessToken, since, until, fetchImpl = fetch }) {
+// Ad accounts are resolved through the Page's business rather than
+// /me/adaccounts: that edge only lists accounts explicitly assigned to the
+// System User, and returns empty for accounts the business owns but has not
+// assigned. Reading through the business needs business_management + ads_read,
+// both of which the System User token already carries.
+export async function getAdCampaigns({ accessToken, pageId, since, until, fetchImpl = fetch }) {
   if (!accessToken) throw new MetaApiError('META_ACCESS_TOKEN is not configured.', 503)
+  if (!pageId) throw new MetaApiError('META_PAGE_ID is not configured.', 503)
 
-  const accounts = await graphGet('me/adaccounts', { fields: 'id,name,currency', access_token: accessToken }, fetchImpl)
+  const pageToken = await getPageToken(pageId, accessToken, fetchImpl)
+  const pageInfo = await graphGet(pageId, { fields: 'business', access_token: pageToken }, fetchImpl)
+  const businessId = pageInfo.business?.id
+  if (!businessId) return { account: null, campaigns: [] }
+
+  const accounts = await graphGet(
+    `${businessId}/owned_ad_accounts`,
+    { fields: 'id,name,currency', access_token: accessToken },
+    fetchImpl,
+  )
   const account = accounts.data?.[0]
   if (!account) return { account: null, campaigns: [] }
 
@@ -86,6 +98,10 @@ export async function getAdCampaigns({ accessToken, since, until, fetchImpl = fe
   }
 
   const campaigns = await graphGet(`${account.id}/campaigns`, params, fetchImpl)
+
+  // Accounts accumulate dormant campaigns, so surface the ones that actually
+  // spent in the window first.
+  const sortBySpend = (a, b) => b.spend - a.spend
 
   return {
     account: { id: account.id, name: account.name ?? '', currency: account.currency ?? '' },
@@ -103,7 +119,7 @@ export async function getAdCampaigns({ accessToken, since, until, fetchImpl = fe
         ctr: Number(stats.ctr ?? 0),
         cpc: Number(stats.cpc ?? 0),
       }
-    }),
+    }).sort(sortBySpend),
   }
 }
 

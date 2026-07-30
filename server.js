@@ -617,6 +617,7 @@ app.get('/api/social/campaigns', async (req, res) => {
   try {
     const result = await getAdCampaigns({
       accessToken: process.env.META_ACCESS_TOKEN ?? '',
+      pageId:      process.env.META_PAGE_ID      ?? '',
       since: typeof req.query.since === 'string' ? req.query.since : '',
       until: typeof req.query.until === 'string' ? req.query.until : '',
     })

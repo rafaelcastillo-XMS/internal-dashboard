@@ -13,7 +13,7 @@ const SOCIAL_CLIENTS = [
 const SECTION_NAV = [
   { label: 'Overview',  href: '/social',           icon: LayoutDashboard },
   { label: 'Platforms', href: '/social/platforms', icon: LayoutGrid },
-  { label: 'Calendar',  href: '/social/calendar',  icon: CalendarDays },
+  { label: 'Planning',  href: '/social/planning', icon: CalendarDays },
   { label: 'Reports',   href: '/social/reports',   icon: FileText },
 ]
 

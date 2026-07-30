@@ -948,6 +948,7 @@ function socialDevPlugin() {
           try {
             sendJson(res, 200, await getAdCampaigns({
               accessToken: process.env.META_ACCESS_TOKEN ?? "",
+              pageId:      process.env.META_PAGE_ID      ?? "",
               since,
               until,
             }))

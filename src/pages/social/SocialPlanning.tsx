@@ -9,7 +9,7 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 // Empty month grid. No content source is wired yet, so every day renders blank
 // rather than borrowing events from the Google Calendar module.
-export function SocialCalendar() {
+export function SocialPlanning() {
     const today = new Date()
     const [month, setMonth] = useState(today.getMonth())
     const [year, setYear] = useState(today.getFullYear())
@@ -37,8 +37,8 @@ export function SocialCalendar() {
 
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Calendar</h1>
-                    <p className="text-sm text-body dark:text-bodydark">Content planning</p>
+                    <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Planning</h1>
+                    <p className="text-sm text-body dark:text-bodydark">Content calendar</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <button onClick={() => shift(-1)}

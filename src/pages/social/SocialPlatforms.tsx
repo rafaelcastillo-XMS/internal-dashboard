@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ExternalLink, Info } from 'lucide-react'
+import { PlatformIcon } from '@/features/social/components/PlatformIcon'
 import { useFacebookData, type Campaign, type FbPost } from '@/features/social/hooks/useFacebookData'
 import { DATE_PRESETS, PLATFORMS, type SocialPlatform } from '@/features/social/hooks/useSocialDashboardState'
 
@@ -231,22 +232,30 @@ export function SocialPlatforms() {
                 </div>
             </div>
 
-            {/* ── Platform tabs ── */}
-            <div className="mb-6 flex flex-wrap items-center gap-1 border-b border-stroke dark:border-strokedark">
+            {/* ── Platform buttons ── */}
+            <div className="mb-6 flex flex-wrap items-center gap-2.5">
                 {PLATFORMS.map(platform => {
                     const isActive = active === platform.id
+                    const connected = CONNECTED.includes(platform.id)
                     return (
-                        <button key={platform.id} onClick={() => setActive(platform.id)}
-                            className={`flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors ${isActive
-                                ? 'border-[#8B5CF6] text-[#8B5CF6]'
-                                : 'border-transparent text-body hover:text-black dark:text-bodydark dark:hover:text-white'}`}>
-                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: platform.color }} />
+                        <button
+                            key={platform.id}
+                            onClick={() => setActive(platform.id)}
+                            aria-pressed={isActive}
+                            className={`flex items-center gap-2.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all
+                                ${isActive
+                                    ? 'border-transparent text-white shadow-sm'
+                                    : 'border-stroke bg-white text-body hover:border-current hover:text-black dark:border-strokedark dark:bg-boxdark dark:text-bodydark dark:hover:text-white'}
+                                ${connected ? '' : 'opacity-60'}`}
+                            style={isActive ? { backgroundColor: platform.color } : undefined}
+                        >
+                            <span style={isActive ? undefined : { color: platform.color }}>
+                                <PlatformIcon id={platform.id} />
+                            </span>
                             {platform.label}
-                            {!CONNECTED.includes(platform.id) && (
-                                <span className="rounded-full bg-stroke/50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-body dark:bg-strokedark dark:text-bodydark">
-                                    off
-                                </span>
-                            )}
+                            <span className={`h-1.5 w-1.5 rounded-full ${connected
+                                ? 'bg-emerald-400'
+                                : isActive ? 'bg-white/40' : 'bg-slate-300 dark:bg-slate-600'}`} />
                         </button>
                     )
                 })}
