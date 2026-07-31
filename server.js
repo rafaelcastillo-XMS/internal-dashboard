@@ -16,6 +16,7 @@ import { handleNotionClientSyncRequest } from "./server/notionSync.js"
 const execFileAsync = promisify(execFile)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const SEO_AUDIT_PROMPT_PATH = path.join(__dirname, 'prompts', 'seo-audit-history.md')
 const app = express()
 app.use(express.json())
 const PORT = process.env.PORT ?? 3000
@@ -184,11 +185,19 @@ app.get("/api/monday/tasks", async (req, res) => {
       return res.json(cached.payload)
     }
 
+    // Monday returns items in board order unless an explicit order is given.
+    // Request the latest page first so newer assignments are not hidden beyond
+    // the page limit before we apply the per-user filter below.
     const itemsData = await mondayGraphQL(mondayToken, `
       query GetBoardItems {
-        boards(limit: 50, state: active) {
+        boards(limit: 100, state: active) {
           id name
-          items_page(limit: 50) {
+          items_page(
+            limit: 100
+            query_params: {
+              order_by: [{ column_id: "__last_updated__", direction: desc }]
+            }
+          ) {
             items {
               id name state updated_at
               column_values {
@@ -224,9 +233,8 @@ app.get("/api/monday/tasks", async (req, res) => {
       )
 
     rawItems.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-    const top20 = rawItems.slice(0, 20)
 
-    const tasks = top20.map(item => {
+    const tasks = rawItems.map(item => {
       const byId = id => item.column_values.find(c => c.id === id)
       const byType = type => item.column_values.find(c => c.type === type)
       const statusCol = byId("status") ?? byType("status")
@@ -243,7 +251,18 @@ app.get("/api/monday/tasks", async (req, res) => {
         dueDate: dueDateCol?.date ?? dueDateCol?.text ?? null,
         updatedAt: item.updated_at,
       }
-    })
+    }).filter(task => {
+      const normalized = task.status
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase()
+      return ![
+        "done", "complete", "completed", "hecho", "hecha",
+        "completado", "completada", "finalizado", "finalizada",
+        "terminado", "terminada", "listo", "lista",
+      ].includes(normalized)
+    }).slice(0, 20)
 
     const payload = {
       user: { id: user.id, name: user.name, email: user.email, avatar: user.photo_thumb_small },
@@ -531,7 +550,7 @@ app.post('/api/seo/onpage-audit', async (req, res) => {
   if (!webhookUrl) {
     return res.status(503).json({ error: 'N8N_ONPAGE_AUDIT_WEBHOOK is not configured' })
   }
-  const { landingPageUrl, screamingFrogSheetUrl } = req.body ?? {}
+  const { landingPageUrl, screamingFrogSheetUrl, client } = req.body ?? {}
   if (!landingPageUrl || !screamingFrogSheetUrl) {
     return res.status(400).json({ error: 'landingPageUrl and screamingFrogSheetUrl are required' })
   }
@@ -542,12 +561,17 @@ app.post('/api/seo/onpage-audit', async (req, res) => {
   if (parsedSheet.protocol   !== 'https:') return res.status(400).json({ error: 'screamingFrogSheetUrl must use https' })
 
   try {
+    // Read on every run so manual prompt edits take effect without rebuilding.
+    const scoringPrompt = fs.readFileSync(SEO_AUDIT_PROMPT_PATH, 'utf8').trim()
     const n8nRes = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         'Landing Page Url': landingPageUrl,
         'Screaming Frog Google Sheet URL': screamingFrogSheetUrl,
+        'Client Name': typeof client === 'string' ? client.trim() : '',
+        'XMS Website Health Score Prompt': scoringPrompt,
+        'Scoring Prompt File': 'prompts/seo-audit-history.md',
       }),
     })
     if (!n8nRes.ok) return res.status(502).json({ error: `N8N webhook returned ${n8nRes.status}` })

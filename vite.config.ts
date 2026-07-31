@@ -19,6 +19,7 @@ const localEnvPath = path.resolve(__dirname, ".env.local")
 if (fs.existsSync(localEnvPath)) loadDotenv({ path: localEnvPath, override: true })
 
 const execFileAsync = promisify(execFile)
+const SEO_AUDIT_PROMPT_PATH = path.resolve(__dirname, "prompts", "seo-audit-history.md")
 
 const DASHBOARD_SUPABASE_URL = "https://sjpvyxdyleebhqlmqscy.supabase.co"
 const DASHBOARD_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcHZ5eGR5bGVlYmhxbG1xc2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzgxODksImV4cCI6MjA4ODc1NDE4OX0.ZvzbBm-L8Jt3FzhmmX3qd7_inwrupjQrfh9JWIlX1ng"
@@ -770,7 +771,7 @@ function seoDevPlugin() {
             return
           }
           const body = await readJsonBody(req)
-          const { landingPageUrl, screamingFrogSheetUrl } = body as { landingPageUrl?: string; screamingFrogSheetUrl?: string }
+          const { landingPageUrl, screamingFrogSheetUrl, client } = body as { landingPageUrl?: string; screamingFrogSheetUrl?: string; client?: string }
           if (!landingPageUrl || !screamingFrogSheetUrl) {
             sendJson(res, 400, { error: "landingPageUrl and screamingFrogSheetUrl are required" })
             return
@@ -786,12 +787,17 @@ function seoDevPlugin() {
             return
           }
           try {
+            // Read on every run so manual prompt edits take effect without rebuilding.
+            const scoringPrompt = fs.readFileSync(SEO_AUDIT_PROMPT_PATH, "utf8").trim()
             const n8nRes = await fetch(webhookUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 "Landing Page Url": landingPageUrl,
                 "Screaming Frog Google Sheet URL": screamingFrogSheetUrl,
+                "Client Name": client?.trim() ?? "",
+                "XMS Website Health Score Prompt": scoringPrompt,
+                "Scoring Prompt File": "prompts/seo-audit-history.md",
               }),
             })
             if (!n8nRes.ok) {
@@ -1143,14 +1149,21 @@ function mondayPlugin() {
               return
             }
 
-            // 2. Fetch recent items from task boards (skip subitems boards).
-            //    Small per-board limit — we only need the 20 most recent overall.
+            // 2. Fetch the most recently updated items from task boards (skip
+            //    subitems boards). items_page's default order follows the board,
+            //    so sorting only after the fetch can leave newer tasks outside
+            //    the returned page and make the dashboard look frozen.
             const itemsData = await mondayGraphQL(`
               query GetBoardItems {
                 boards(limit: 100, state: active) {
                   id
                   name
-                  items_page(limit: 20) {
+                  items_page(
+                    limit: 100
+                    query_params: {
+                      order_by: [{ column_id: "__last_updated__", direction: desc }]
+                    }
+                  ) {
                     items {
                       id
                       name
@@ -1206,9 +1219,8 @@ function mondayPlugin() {
 
             // Sort by most recently updated, keep top 20
             rawItems.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-            const top20 = rawItems.slice(0, 20)
 
-            const tasks = top20.map(item => {
+            const tasks = rawItems.map(item => {
               const byId = (id: string) => item.column_values.find(c => c.id === id)
               const byType = (type: string) => item.column_values.find(c => c.type === type)
 
@@ -1227,7 +1239,18 @@ function mondayPlugin() {
                 dueDate: (dueDateCol as { date?: string })?.date ?? dueDateCol?.text ?? null,
                 updatedAt: item.updated_at,
               }
-            })
+            }).filter(task => {
+              const normalized = task.status
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .trim()
+                .toLowerCase()
+              return ![
+                "done", "complete", "completed", "hecho", "hecha",
+                "completado", "completada", "finalizado", "finalizada",
+                "terminado", "terminada", "listo", "lista",
+              ].includes(normalized)
+            }).slice(0, 20)
 
             const payload = { user: { id: user.id, name: user.name, email: user.email, avatar: user.photo_thumb_small }, tasks }
             mondayTaskCache.set(user.id, { at: Date.now(), payload })

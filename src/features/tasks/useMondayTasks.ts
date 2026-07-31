@@ -29,10 +29,10 @@ export interface MondayTasksResult {
   refetch: () => void
 }
 
-const CACHE_KEY = 'monday_tasks_v1'
-const REVALIDATE_MS = 2 * 60 * 1000 // refetch if cache is older than 2 min
+const CACHE_KEY = 'monday_tasks_v3'
 
 interface Cache {
+  email: string
   user: MondayUser | null
   tasks: MondayTask[]
   cachedAt: number
@@ -70,10 +70,9 @@ export function priorityColor(label: string | null): string {
 }
 
 export function useMondayTasks(): MondayTasksResult {
-  const cached = readCache()
-  const [user, setUser]       = useState<MondayUser | null>(cached?.user ?? null)
-  const [tasks, setTasks]     = useState<MondayTask[]>(cached?.tasks ?? [])
-  const [loading, setLoading] = useState(!cached)
+  const [user, setUser]       = useState<MondayUser | null>(null)
+  const [tasks, setTasks]     = useState<MondayTask[]>([])
+  const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [tick, setTick]       = useState(0)
@@ -81,20 +80,29 @@ export function useMondayTasks(): MondayTasksResult {
   const refetch = useCallback(() => setTick(t => t + 1), [])
 
   useEffect(() => {
-    const cache = readCache()
-    const fresh = cache && Date.now() - cache.cachedAt < REVALIDATE_MS && tick === 0
-    if (fresh) return // cache is recent enough, skip fetch
-
     let cancelled = false
 
     async function load() {
-      if (tick > 0) localStorage.removeItem(CACHE_KEY)
-      if (cache) setSyncing(true); else setLoading(true)
       setError(null)
 
       try {
         const { data: { session } } = await supabase.auth.getSession()
         const email = session?.user?.email ?? ""
+        const cache = readCache()
+        const matchingCache = cache?.email === email ? cache : null
+
+        // Show cached data immediately for this account, but always revalidate
+        // against Monday so a recent local cache can never freeze the screen.
+        if (!cancelled && matchingCache && tick === 0) {
+          setUser(matchingCache.user)
+          setTasks(matchingCache.tasks)
+          setLoading(false)
+          setSyncing(true)
+        } else if (!cancelled) {
+          setLoading(true)
+        }
+
+        if (tick > 0) localStorage.removeItem(CACHE_KEY)
 
         // When the user explicitly hits Refresh (tick > 0), bust the server cache too
         const url = tick > 0
@@ -113,7 +121,7 @@ export function useMondayTasks(): MondayTasksResult {
         if (!cancelled) {
           setUser(body.user)
           setTasks(body.tasks)
-          writeCache({ user: body.user, tasks: body.tasks, cachedAt: Date.now() })
+          writeCache({ email, user: body.user, tasks: body.tasks, cachedAt: Date.now() })
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unknown error")

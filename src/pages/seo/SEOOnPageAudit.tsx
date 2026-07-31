@@ -292,6 +292,7 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          client: selectedClient,
           landingPageUrl: selectedLandingPageUrl,
           screamingFrogSheetUrl: screamingFrogSheetUrl.trim(),
         }),

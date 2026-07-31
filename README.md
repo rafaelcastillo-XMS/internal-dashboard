@@ -19,6 +19,12 @@ authenticated application.
 - Client integrations for Notion, NotebookLM, and Google services
 - Internal AI assistance powered by Anthropic
 
+## SEO audit scoring prompt
+
+The scoring instructions sent to the SEO audit workflow live in
+`prompts/seo-audit-history.md`. The server reads this file on every new audit,
+so manual edits apply to the next run without rebuilding the dashboard.
+
 ## Local development
 
 Requirements:
