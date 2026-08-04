@@ -454,7 +454,7 @@ export function ClientIntegrations() {
                 <div className="rounded-[28px] border border-slate-200/70 bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.14),_transparent_32%),linear-gradient(135deg,_rgba(255,255,255,0.97),_rgba(241,245,249,0.92))] p-6 shadow-sm dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),_transparent_30%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(15,23,42,0.92))]">
                     <div className="flex items-center gap-4">
                         <button
-                            onClick={() => navigate(`/clients/${client.id}`)}
+                            onClick={() => navigate("/clients")}
                             className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white/80 text-slate-600 transition hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300 dark:hover:text-white"
                             aria-label={`Back to ${client.name}`}
                         >
@@ -569,9 +569,6 @@ export function ClientIntegrations() {
                                             : notionLastSyncedAt ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`} />
                                     </div>
 
-                                    <p className="mt-5 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                                        Import this client&apos;s logo and Google Ads monthly budget into Supabase.
-                                    </p>
                                     <button
                                         type="button"
                                         onClick={handleSyncNotion}
@@ -747,6 +744,7 @@ export function ClientIntegrations() {
                                     </p>
                                 </div>
 
+                                {false && (<>
                                 {/* ── Google Business Profile card ── */}
                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
                                     <div className="flex items-start justify-between gap-3">
@@ -773,7 +771,7 @@ export function ClientIntegrations() {
                                     {gbpStatus?.email && (
                                         <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900">
                                             <span className="text-xs text-slate-400">Authorized as</span>
-                                            <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200">{gbpStatus.email}</span>
+                                            <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200">{gbpStatus?.email}</span>
                                         </div>
                                     )}
 
@@ -796,7 +794,7 @@ export function ClientIntegrations() {
                                                 >
                                                     <option value="">{loadingGbp ? "Loading GBP locations..." : "Select GBP location"}</option>
                                                     {gbpMapping.gbp_location_id && !gbpLocations.some(location => location.locationName === gbpMapping.gbp_location_id) && (
-                                                        <option value={gbpMapping.gbp_location_id}>{gbpMapping.gbp_location_name || gbpMapping.gbp_location_id}</option>
+                                                        <option value={gbpMapping.gbp_location_id ?? ""}>{gbpMapping.gbp_location_name || gbpMapping.gbp_location_id}</option>
                                                     )}
                                                     {gbpLocations.map(location => (
                                                         <option key={`${location.accountName}:${location.locationName}`} value={location.locationName}>
@@ -832,6 +830,7 @@ export function ClientIntegrations() {
 
                                     {gbpError && <p className="mt-3 text-xs text-amber-600 dark:text-amber-300">{gbpError}</p>}
                                 </div>
+                                </>)}
 
                                 {/* ── Google Ads card (account link + report budgets) ── */}
                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
@@ -980,49 +979,15 @@ export function ClientIntegrations() {
 
                         {activeTab === "Data" && (
                             <div className="max-w-3xl space-y-6">
-                                <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60">
-                                    <div className="h-24 w-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                <div className="relative h-44 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60">
+                                    <div className="h-full w-full overflow-hidden">
                                         {logoPreview ? (
-                                            <img src={logoPreview} alt={`${client.name} logo preview`} className="h-full w-full object-cover" />
+                                            <img src={logoPreview} alt={`${client.name} Notion cover`} className="h-full w-full object-cover" />
                                         ) : (
                                             <div className={`flex h-full w-full items-center justify-center ${client.color} text-2xl font-bold text-white`}>
                                                 {client.initials}
                                             </div>
                                         )}
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-semibold text-slate-900 dark:text-[#E2E5E9]">Client Logo</p>
-                                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Upload a logo file and save it to Supabase Storage.</p>
-                                    </div>
-                                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
-                                        <Camera className="h-5 w-5" />
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Logo File</label>
-                                    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60 md:flex-row md:items-center md:justify-between">
-                                        <div>
-                                            <p className="text-sm font-medium text-slate-900 dark:text-[#E2E5E9]">
-                                                {logoFile ? logoFile.name : profile?.logo_storage_path ? "Current logo stored in Supabase Storage" : "No file selected yet"}
-                                            </p>
-                                            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                                                PNG, JPG, SVG or WEBP work well for client logos.
-                                            </p>
-                                        </div>
-                                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700">
-                                            <Upload className="h-4 w-4" />
-                                            {logoFile ? "Replace file" : "Choose file"}
-                                            <input
-                                                type="file"
-                                                accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                                                className="sr-only"
-                                                onChange={event => {
-                                                    const file = event.target.files?.[0] ?? null
-                                                    setLogoFile(file)
-                                                }}
-                                            />
-                                        </label>
                                     </div>
                                 </div>
 

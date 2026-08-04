@@ -15,6 +15,7 @@ import type { Client } from "@/data/dummy"
 import { notebookConfigFromRecord, type NotebookIntegrationConfig } from "@/features/clients/integrations"
 import { queryNotebooklm } from "@/features/clients/notebooklm"
 import { useClientRecord } from "@/features/clients/useClientRecord"
+import type { NotionRelatedData } from "@/features/clients/notionRelated"
 
 type Message = {
     id: string
@@ -215,7 +216,7 @@ function ChatArea({ client, notebook, logoUrl }: { client: Client; notebook: Not
     )
 }
 
-function SidebarInfo({ client, logoUrl }: { client: Client; logoUrl: string }) {
+function SidebarInfo({ client, logoUrl, notionRelated }: { client: Client; logoUrl: string; notionRelated: NotionRelatedData | null }) {
     return (
         <div className="w-[320px] bg-[var(--bg-surface)] h-full shrink-0 overflow-hidden hidden lg:flex flex-col">
             <div className="p-6 flex flex-col items-center border-b border-slate-200/70 dark:border-white/10">
@@ -255,6 +256,21 @@ function SidebarInfo({ client, logoUrl }: { client: Client; logoUrl: string }) {
                             <InfoItem icon={Globe} label="Website" value={client.website} isLink />
                         </div>
                     </section>
+
+                    {notionRelated && (
+                        <>
+                            <Separator className="bg-[var(--border)]" />
+                            <section>
+                                <h4 className="text-[10px] font-bold text-[var(--sidebar-section-label)] uppercase tracking-widest mb-4">Notion Related Data</h4>
+                                <div className="grid gap-3">
+                                    {(["sem", "seo", "design", "social"] as const).map(category => {
+                                        const count = notionRelated.sources.filter(source => source.category === category).reduce((total, source) => total + source.records.length, 0)
+                                        return <div key={category} className="flex items-center justify-between text-sm"><span className="capitalize text-[var(--text-secondary)]">{category}</span><span className="font-semibold text-[var(--text-primary)]">{count} registros</span></div>
+                                    })}
+                                </div>
+                            </section>
+                        </>
+                    )}
                 </div>
             </ScrollArea>
         </div>
@@ -292,7 +308,7 @@ function InfoItem({ icon: Icon, label, value, isLink, linkUrl, badge }: { icon: 
 
 export function Clients() {
     const { clientId } = useParams<{ clientId: string }>()
-    const { client, profile, record } = useClientRecord(clientId)
+    const { client, profile, record, notionRelated } = useClientRecord(clientId)
     const notebook = notebookConfigFromRecord(record)
     const logoUrl = profile?.logo_url ?? ""
 
@@ -301,7 +317,7 @@ export function Clients() {
             <div className="mx-auto max-w-screen-2xl p-6 h-full">
                 <div className="flex h-full w-full overflow-hidden rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
                     <ChatArea client={client} notebook={notebook} logoUrl={logoUrl} />
-                    <SidebarInfo client={client} logoUrl={logoUrl} />
+                    <SidebarInfo client={client} logoUrl={logoUrl} notionRelated={notionRelated} />
                 </div>
             </div>
         </div>

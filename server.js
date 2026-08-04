@@ -11,7 +11,7 @@ import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 import { MetaApiError, getAdCampaigns, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
-import { handleNotionClientSyncRequest } from "./server/notionSync.js"
+import { handleNotionClientSyncRequest, queryRelatedNotionData, queryNotionClientCovers, syncClientFromNotion } from "./server/notionSync.js"
 
 const execFileAsync = promisify(execFile)
 
@@ -73,6 +73,70 @@ app.post("/api/notion/clients/:clientId/sync", async (req, res) => {
     supabaseUrl: SUPABASE_URL,
     supabaseAnonKey: SUPABASE_ANON_KEY,
   })
+})
+
+app.get("/api/notion/clients/:clientId/related", async (req, res) => {
+  try {
+    const auth = req.headers.authorization ?? ""
+    if (!/^Bearer\s+\S+/i.test(auth)) return res.status(401).json({ error: "A valid dashboard session is required." })
+    const clientId = req.params.clientId
+    const clientResponse = await fetch(`${SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=id,name`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: auth },
+    })
+    const clients = await clientResponse.json()
+    if (!clientResponse.ok || !clients[0]) return res.status(clientResponse.ok ? 404 : 502).json({ error: "Client not found." })
+    const result = await queryRelatedNotionData({
+      clientId,
+      clientName: clients[0].name,
+      notionApiKey: process.env.NOTION_API_KEY ?? "",
+      notionDataSourceId: process.env.NOTION_DATA_SOURCE_ID ?? "",
+    })
+    res.setHeader("Cache-Control", "no-store")
+    return res.json(result)
+  } catch (error) {
+    const statusCode = error?.statusCode ?? 500
+    const message = error instanceof Error ? error.message : "Unable to load related Notion data."
+    console.error("[notion-related]", message)
+    return res.status(statusCode).json({ error: message })
+  }
+})
+
+app.get("/api/notion/clients/covers", async (req, res) => {
+  try {
+    const auth = req.headers.authorization ?? ""
+    if (!/^Bearer\s+\S+/i.test(auth)) return res.status(401).json({ error: "A valid dashboard session is required." })
+    const clientsResponse = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=id,name`, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: auth } })
+    const clients = await clientsResponse.json()
+    if (!clientsResponse.ok) return res.status(502).json({ error: "Unable to load dashboard clients." })
+    const covers = await queryNotionClientCovers({ clients, notionApiKey: process.env.NOTION_API_KEY ?? "", notionDataSourceId: process.env.NOTION_DATA_SOURCE_ID ?? "" })
+    res.setHeader("Cache-Control", "no-store")
+    return res.json({ covers })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to load Notion covers."
+    console.error("[notion-covers]", message)
+    return res.status(error?.statusCode ?? 500).json({ error: message })
+  }
+})
+
+app.post("/api/notion/clients/sync-all", async (req, res) => {
+  try {
+    const auth = req.headers.authorization ?? ""
+    if (!/^Bearer\s+\S+/i.test(auth)) return res.status(401).json({ error: "A valid dashboard session is required." })
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=id`, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: auth } })
+    const clients = await response.json()
+    if (!response.ok) return res.status(502).json({ error: "Unable to load dashboard clients." })
+    const results = []
+    for (const client of clients) {
+      try {
+        results.push(await syncClientFromNotion({ clientId: client.id, authorization: auth, notionApiKey: process.env.NOTION_API_KEY ?? "", notionDataSourceId: process.env.NOTION_DATA_SOURCE_ID ?? "", supabaseUrl: SUPABASE_URL, supabaseAnonKey: SUPABASE_ANON_KEY }))
+      } catch (error) {
+        results.push({ clientId: client.id, error: error instanceof Error ? error.message : "Synchronization failed." })
+      }
+    }
+    return res.json({ success: true, results })
+  } catch (error) {
+    return res.status(500).json({ error: error instanceof Error ? error.message : "Unable to synchronize clients." })
+  }
 })
 
 // ─── GET /api/sem/search-terms?accountId=...&startDate=...&endDate=... ────────

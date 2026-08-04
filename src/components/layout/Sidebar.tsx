@@ -4,14 +4,13 @@ import { NavLink } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import {
     Home, Users, CheckSquare, Calendar,
-    ChevronDown, Search as SearchIcon,
+    Search as SearchIcon,
     BarChart2, Share2, Palette, FileText,
-    Bug, X
+    User, Bug, X
 } from "lucide-react"
 import { XMSLogo } from "@/components/ui/XMSLogo"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useSidebar } from "@/context/useSidebar"
-import { getClients } from "@/features/clients/repository"
-import { fetchClientProfiles } from "@/features/clients/profiles"
 import { supabase } from "@/lib/supabase"
 
 const activeClass = "bg-[#1F2937] text-white border border-transparent shadow-sm"
@@ -67,26 +66,27 @@ function SectionLabel({ label, collapsed }: { label: string; collapsed: boolean 
 }
 
 export function Sidebar() {
-    const [clientsOpen, setClientsOpen] = useState(false)
     const [bugOpen, setBugOpen] = useState(false)
+    const [profileOpen, setProfileOpen] = useState(false)
+    const [userName, setUserName] = useState("Rafael A.")
+    const [userAvatar, setUserAvatar] = useState("")
+    const [userInitials, setUserInitials] = useState("RA")
     const [bugText, setBugText] = useState("")
     const [bugSent, setBugSent] = useState(false)
-    const [clientLogos, setClientLogos] = useState<Record<string, string>>({})
     const bugTextareaRef = useRef<HTMLTextAreaElement>(null)
     const { collapsed, isMobileOpen, closeMobile } = useSidebar()
-    const clients = getClients()
 
     useEffect(() => {
-        let active = true
-        fetchClientProfiles()
-            .then(profiles => {
-                if (!active) return
-                setClientLogos(Object.fromEntries(
-                    profiles.filter(profile => profile.logo_url).map(profile => [profile.client_id, profile.logo_url as string]),
-                ))
-            })
-            .catch(() => { /* Keep the existing initials fallback. */ })
-        return () => { active = false }
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            const meta = session?.user.user_metadata
+            const fullName = meta?.full_name ?? meta?.name ?? ""
+            if (fullName) {
+                const parts = fullName.split(" ")
+                setUserName(parts[0] + (parts[1] ? ` ${parts[1][0]}.` : ""))
+                setUserInitials((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? ""))
+            }
+            setUserAvatar(meta?.picture ?? meta?.avatar_url ?? "")
+        })
     }, [])
 
     useEffect(() => {
@@ -194,85 +194,13 @@ export function Sidebar() {
                         {collapsed && <Tooltip label="Guidelines" />}
                     </div>
 
-                    {/* Clients */}
-                    {collapsed ? (
-                        <div className="relative group">
-                            <NavLink to="/clients/coca-cola" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
-                                <Users className="w-4 h-4 shrink-0" />
-                            </NavLink>
-                            <Tooltip label="Clients" />
-                        </div>
-                    ) : (
-                        <div>
-                            <button
-                                onClick={() => setClientsOpen(o => !o)}
-                                className={`relative group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-semibold w-full ${inactiveClass} justify-between`}
-                            >
-                                <span className="flex items-center gap-3">
-                                    <Users className="w-4 h-4 shrink-0" />
-                                    Clients
-                                </span>
-                                <motion.span animate={{ rotate: clientsOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                                    <ChevronDown className="w-3.5 h-3.5" />
-                                </motion.span>
-                            </button>
-
-                            <AnimatePresence initial={false}>
-                                {clientsOpen && (
-                                    <motion.div
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: "auto", opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        transition={{ duration: 0.22, ease: "easeInOut" }}
-                                        className="overflow-hidden"
-                                    >
-                                        <ul className="ml-4 mt-1 space-y-0.5 border-l border-[var(--border)] pl-3 pb-1">
-                                            <li>
-                                                <NavLink
-                                                    to="/clients"
-                                                    end
-                                                    onClick={closeMobile}
-                                                    className={({ isActive }) =>
-                                                        `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-semibold transition-all ${isActive
-                                                            ? "bg-[#1F2937] text-white"
-                                                            : "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-item-hover)]"
-                                                        }`
-                                                    }
-                                                >
-                                                    <div className="w-6 h-6 rounded-md bg-black/10 dark:bg-white/10 flex items-center justify-center shrink-0">
-                                                        <Users className="w-3.5 h-3.5" />
-                                                    </div>
-                                                    <span className="truncate">All Clients</span>
-                                                </NavLink>
-                                            </li>
-                                            {clients.map(client => (
-                                                <li key={client.id}>
-                                                    <NavLink
-                                                        to={`/clients/${client.id}`}
-                                                        onClick={closeMobile}
-                                                        className={({ isActive }) =>
-                                                            `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all ${isActive
-                                                                ? "bg-[#1F2937] text-white"
-                                                                : "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-item-hover)]"
-                                                            }`
-                                                        }
-                                                    >
-                                                        <div className={`flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md text-[9px] font-bold text-white ${clientLogos[client.id] ? "border border-slate-200 bg-white" : client.color}`}>
-                                                            {clientLogos[client.id] ? (
-                                                                <img src={clientLogos[client.id]} alt={`${client.name} logo`} className="h-full w-full object-contain p-0.5" />
-                                                            ) : client.initials}
-                                                        </div>
-                                                        <span className="truncate">{client.name}</span>
-                                                        <span className={`ml-auto w-1.5 h-1.5 rounded-full shrink-0 ${client.status === "active" ? "bg-green-500" : "bg-slate-400"}`} />
-                                                    </NavLink>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    )}
+                    <div className="relative group">
+                        <NavLink to="/clients" end onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                            <Users className="w-4 h-4 shrink-0" />
+                            {!collapsed && <span>Clients</span>}
+                        </NavLink>
+                        {collapsed && <Tooltip label="Clients" />}
+                    </div>
 
                     <SectionLabel label="Apps" collapsed={collapsed} />
 
@@ -315,17 +243,21 @@ export function Sidebar() {
 
                 </nav>
 
-                {/* Bottom: Report a Bug */}
+                {/* Bottom actions */}
                 <div className={`${collapsed ? "px-0 py-3" : "px-3 pb-4 pt-3"} border-t border-[var(--sidebar-border)] space-y-0.5`}>
                     <div className="relative group">
-                        <button
-                            onClick={() => setBugOpen(true)}
-                            className={`${navItemClass} ${inactiveClass} w-full`}
-                        >
-                            <Bug className="w-4 h-4 shrink-0" />
-                            {!collapsed && "Report a Bug"}
+                        <button onClick={() => setProfileOpen(open => !open)} className={`${navItemClass} ${inactiveClass} w-full ${collapsed ? "justify-center" : ""}`}>
+                            <Avatar className="h-7 w-7 shrink-0">
+                                <AvatarImage src={userAvatar} referrerPolicy="no-referrer" />
+                                <AvatarFallback className="bg-blue-600 text-[10px] font-semibold text-white">{userInitials}</AvatarFallback>
+                            </Avatar>
+                            {!collapsed && <span className="truncate text-sm font-semibold">{userName}</span>}
                         </button>
-                        {collapsed && <Tooltip label="Report a Bug" />}
+                        {collapsed && <Tooltip label="Profile" />}
+                        {profileOpen && <div className="absolute bottom-full left-0 mb-2 w-48 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-1 shadow-xl z-50">
+                            <button onClick={() => { setProfileOpen(false); window.location.href = "/profile" }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--hover-bg)]">Profile</button>
+                            <button onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login" }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--error)] hover:bg-[var(--error-bg)]">Log out</button>
+                        </div>}
                     </div>
                 </div>
             </aside>

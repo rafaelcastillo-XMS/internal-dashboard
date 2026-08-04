@@ -58,12 +58,28 @@ describe("Notion client mapping", () => {
     })
   })
 
+  it("extracts a Notion page cover", () => {
+    const result = extractNotionClientData({
+      object: "page",
+      id: "notion-cover",
+      properties: { Name: title("Cover Client") },
+      cover: { type: "external", external: { url: "https://cdn.example.com/cover.png" } },
+    })
+
+    expect(result.cover).toEqual({ url: "https://cdn.example.com/cover.png", name: "page-cover" })
+  })
+
   it("matches by stable dashboard ID before falling back to normalized name", () => {
     const pages = [
       page("wrong", { Name: title("AquaSeekers"), "Dashboard Client ID": richText("another-client") }),
       page("right", { Name: title("Different display name"), "Dashboard Client ID": richText("aquaseekers") }),
     ]
     expect(findNotionClientPage(pages, { id: "aquaseekers", name: "AquaSeekers" })?.id).toBe("right")
+  })
+
+  it("matches a dashboard name with a legal suffix in Notion", () => {
+    const pages = [page("aqua", { Name: title("AquaSeekers LLC") })]
+    expect(findNotionClientPage(pages, { id: "aquaseekers", name: "AquaSeekers" })?.id).toBe("aqua")
   })
 
   it("does not match by name when the Notion row belongs to another dashboard client ID", () => {

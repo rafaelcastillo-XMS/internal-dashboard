@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Sparkles, Moon, Sun, ChevronDown, X, LogOut, User, ArrowUp, PanelLeft, MoreVertical } from "lucide-react"
+import { Sparkles, Moon, Sun, Bell, ChevronDown, X, LogOut, User, ArrowUp, PanelLeft, MoreVertical } from "lucide-react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useTheme } from "@/context/useTheme"
@@ -174,20 +174,7 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                             )}
                         </button>
 
-                        {/* My Profile button */}
-                        <div className="relative group">
-                            <button
-                                onClick={() => navigate("/profile")}
-                                aria-label="My Profile"
-                                className="p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                            >
-                                <User className="w-5 h-5" />
-                            </button>
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2.5 py-1 bg-[var(--text-primary)] text-[var(--bg-surface)] text-[11px] font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-lg z-50">
-                                My Profile
-                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[var(--text-primary)] rotate-45" />
-                            </div>
-                        </div>
+                        <button aria-label="Notifications" className="p-2 rounded-full hover:bg-[var(--hover-bg)] text-[var(--text-muted)] transition-colors"><Bell className="w-5 h-5" /></button>
                     </div>
 
                     {/* Mobile More Options Menu */}
@@ -232,57 +219,6 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                         </AnimatePresence>
                     </div>
 
-                    {/* User profile button with dropdown */}
-                    <div className="relative ml-1" ref={dropdownRef}>
-                        <button
-                            onClick={() => setDropdownOpen(o => !o)}
-                            className="flex h-10 items-center gap-2.5 rounded-full pl-2 pr-3 transition-colors hover:bg-[var(--hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        >
-                            <Avatar className="w-8 h-8 ring-2 ring-transparent hover:ring-blue-200 dark:hover:ring-blue-800 transition-all">
-                                <AvatarImage src={userAvatar} referrerPolicy="no-referrer" />
-                                <AvatarFallback className="bg-blue-600 text-white text-xs font-semibold">{userInitials}</AvatarFallback>
-                            </Avatar>
-                            <div className="hidden md:flex flex-col items-start leading-tight">
-                                <span className="text-sm font-semibold text-[var(--text-primary)]">{userName}</span>
-                                <span className="text-[10px] text-[var(--text-muted)]">Marketing Strategist</span>
-                            </div>
-                            <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] hidden md:block" />
-                        </button>
-
-                        <AnimatePresence>
-                            {dropdownOpen && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                                    transition={{ duration: 0.15 }}
-                                    role="menu"
-                                    aria-label="User menu"
-                                    className="absolute right-0 top-full mt-2 w-48 bg-[var(--bg-raised)] rounded-xl shadow-xl border border-[var(--border)] overflow-hidden z-50"
-                                >
-                                    <button
-                                        role="menuitem"
-                                        onClick={() => { navigate("/profile"); setDropdownOpen(false) }}
-                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] transition-colors text-left"
-                                    >
-                                        <User className="w-4 h-4 text-[var(--text-muted)]" aria-hidden="true" /> Edit Profile
-                                    </button>
-                                    <div className="border-t border-[var(--border)]" />
-                                    <button
-                                        role="menuitem"
-                                        onClick={async () => {
-                                            setDropdownOpen(false)
-                                            await supabase.auth.signOut()
-                                            navigate("/login")
-                                        }}
-                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[var(--error)] hover:bg-[var(--error-bg)] transition-colors text-left"
-                                    >
-                                        <LogOut className="w-4 h-4" aria-hidden="true" /> Sign Out
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
                 </div>
             </header >
 

@@ -16,6 +16,12 @@ export const NOTION_CLIENT_PROPERTIES = Object.freeze({
   monthlySemBudget: ["Monthly SEM Budget", "SEM Monthly Budget", "Monthly Budget", "SEM Budget"],
   phone: ["Phone", "Telephone", "Phone Number"],
   status: ["Status", "Client Status"],
+  primaryContact: ["Primary Contact", "POC - Owner Name"],
+  industry: ["Industry"],
+  location: ["Location"],
+  email: ["Email"],
+  website: ["Website"],
+  levelOfService: ["Client Tier", "Level of Service"],
 })
 
 export class NotionSyncError extends Error {
@@ -38,6 +44,12 @@ export function normalizeClientIdentity(value) {
   return normalizeKey(value).replace(/[^a-z0-9]/g, "")
 }
 
+function clientNamesEquivalent(left, right) {
+  const a = normalizeClientIdentity(left)
+  const b = normalizeClientIdentity(right)
+  return Boolean(a && b && (a === b || a.startsWith(b) || b.startsWith(a)))
+}
+
 function richTextValue(items) {
   if (!Array.isArray(items)) return ""
   return items.map(item => item?.plain_text ?? item?.text?.content ?? "").join("").trim()
@@ -52,6 +64,7 @@ function propertyText(property) {
   if (property.type === "phone_number") return String(property.phone_number ?? "").trim()
   if (property.type === "select") return String(property.select?.name ?? "").trim()
   if (property.type === "status") return String(property.status?.name ?? "").trim()
+  if (property.type === "multi_select") return (property.multi_select ?? []).map(item => item?.name ?? "").filter(Boolean).join(", ")
   if (property.type === "number" && property.number != null) return String(property.number)
   if (property.type === "formula") {
     const formula = property.formula
@@ -127,6 +140,11 @@ function logoFromPageIcon(page) {
   return url ? { url, name: "page-icon" } : null
 }
 
+function imageFromPageCover(page) {
+  const url = fileUrl(page?.cover)
+  return url ? { url, name: "page-cover" } : null
+}
+
 export function extractNotionClientData(page) {
   const properties = page?.properties ?? {}
   const nameProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.name) ?? titleProperty(properties)
@@ -135,15 +153,28 @@ export function extractNotionClientData(page) {
   const budgetProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.monthlySemBudget)
   const phoneProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.phone)
   const statusProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.status)
+  const primaryContactProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.primaryContact)
+  const industryProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.industry)
+  const locationProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.location)
+  const emailProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.email)
+  const websiteProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.website)
+  const levelOfServiceProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.levelOfService)
 
   return {
     pageId: String(page?.id ?? ""),
     dashboardClientId: propertyText(idProperty),
     name: propertyText(nameProperty),
     logo: logoFromProperty(logoProperty) ?? logoFromPageIcon(page),
+    cover: imageFromPageCover(page),
     monthlySemBudget: parseBudget(budgetProperty),
     phone: propertyText(phoneProperty),
     status: propertyText(statusProperty),
+    primaryContact: propertyText(primaryContactProperty),
+    industry: propertyText(industryProperty),
+    location: propertyText(locationProperty),
+    email: propertyText(emailProperty),
+    website: propertyText(websiteProperty),
+    levelOfService: propertyText(levelOfServiceProperty),
   }
 }
 
@@ -170,7 +201,7 @@ export function findNotionClientPage(pages, client, existingNotionPageId = "") {
   ].filter(Boolean))
   const nameMatches = activePages.filter(page => {
     const data = extractNotionClientData(page)
-    return !data.dashboardClientId && expectedIdentities.has(normalizeClientIdentity(data.name))
+    return !data.dashboardClientId && [...expectedIdentities].some(identity => clientNamesEquivalent(identity, data.name))
   })
   if (nameMatches.length === 1) return nameMatches[0]
   if (nameMatches.length > 1) {
@@ -249,6 +280,92 @@ export class NotionApiClient {
 
     return pages
   }
+
+  async queryPages(filter) {
+    const pages = []
+    let startCursor
+    do {
+      const response = await this.fetchImpl(`${NOTION_API_BASE}/data_sources/${encodeURIComponent(this.dataSourceId)}/query`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+          "Notion-Version": NOTION_API_VERSION,
+        },
+        body: JSON.stringify({ page_size: 100, result_type: "page", ...(filter ? { filter } : {}), ...(startCursor ? { start_cursor: startCursor } : {}) }),
+        signal: AbortSignal.timeout(NOTION_REQUEST_TIMEOUT_MS),
+      })
+      if (!response.ok) throw new NotionSyncError(`Notion returned HTTP ${response.status}.`, 502)
+      const payload = await response.json()
+      if (!Array.isArray(payload?.results)) throw new NotionSyncError("Notion returned an incomplete data-source response.", 502)
+      pages.push(...payload.results)
+      startCursor = payload.has_more && payload.next_cursor ? payload.next_cursor : undefined
+    } while (startCursor)
+    return pages
+  }
+}
+
+const RELATED_NOTION_SOURCES = [
+  ["sem", ["DB_GOOGLE ADS", "DB_GOOGLE LSA", "DB_COMPETITORS SEM"]],
+  ["seo", ["DB_ON PAGE SEO", "DB_Techinical & Indexability", "DB_Keywords", "DB_Backlinks & Local Directories"]],
+  ["design", ["DB_BRANDING", "DB_COMPETITORS DESIGN"]],
+  ["social", ["DB_SOCIAL MEDIA", "DB_COMPETITORS SOCIAL MEDIA"]],
+]
+
+function plainNotionProperty(property) {
+  if (!property || typeof property !== "object") return null
+  if (property.type === "title") return richTextValue(property.title)
+  if (property.type === "rich_text") return richTextValue(property.rich_text)
+  if (property.type === "number") return property.number
+  if (property.type === "url") return property.url
+  if (property.type === "email") return property.email
+  if (property.type === "phone_number") return property.phone_number
+  if (property.type === "select" || property.type === "status") return property[property.type]?.name ?? null
+  if (property.type === "multi_select") return (property.multi_select ?? []).map(item => item.name)
+  if (property.type === "checkbox") return Boolean(property.checkbox)
+  if (property.type === "date") return property.date?.start ?? null
+  if (property.type === "files") return (property.files ?? []).map(file => ({ name: file.name ?? null, type: file.type }))
+  if (property.type === "relation") return (property.relation ?? []).map(item => item.id)
+  return null
+}
+
+export async function queryRelatedNotionData({ notionApiKey, notionDataSourceId, clientId, clientName, fetchImpl = fetch }) {
+  const notion = new NotionApiClient({ apiKey: notionApiKey, dataSourceId: notionDataSourceId, fetchImpl })
+  const clientPages = await notion.queryAllPages()
+  const page = findNotionClientPage(clientPages, { id: clientId, name: clientName })
+  if (!page) throw new NotionSyncError("No Notion DB_CLIENTS record matches this dashboard client.", 404)
+
+  const searchResponse = await fetchImpl(`${NOTION_API_BASE}/search`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${notionApiKey}`, "Content-Type": "application/json", "Notion-Version": NOTION_API_VERSION },
+    body: JSON.stringify({ page_size: 100, filter: { property: "object", value: "data_source" } }),
+    signal: AbortSignal.timeout(NOTION_REQUEST_TIMEOUT_MS),
+  })
+  if (!searchResponse.ok) throw new NotionSyncError("Unable to discover related Notion data sources.", 502)
+  const searchPayload = await searchResponse.json()
+  const sources = []
+  for (const [category, titles] of RELATED_NOTION_SOURCES) {
+    for (const title of titles) {
+      const source = (searchPayload.results ?? []).find(item => normalizeKey((item.title ?? []).map(part => part.plain_text ?? "").join("")) === normalizeKey(title))
+      if (!source || !Object.values(source.properties ?? {}).some(property => property?.type === "relation" && property.relation?.data_source_id === notionDataSourceId)) continue
+      const relatedNotion = new NotionApiClient({ apiKey: notionApiKey, dataSourceId: source.id, fetchImpl })
+      const rows = await relatedNotion.queryPages({ property: "Client", relation: { contains: page.id } })
+      sources.push({ category, source: title, sourceIdSuffix: source.id.slice(-4), records: rows.map(row => ({ id: row.id, properties: Object.fromEntries(Object.entries(row.properties ?? {}).map(([key, value]) => [key, plainNotionProperty(value)])) })) })
+    }
+  }
+  return { clientPageId: page.id, sources }
+}
+
+export async function queryNotionClientCovers({ notionApiKey, notionDataSourceId, clients, fetchImpl = fetch }) {
+  const notion = new NotionApiClient({ apiKey: notionApiKey, dataSourceId: notionDataSourceId, fetchImpl })
+  const pages = await notion.queryAllPages()
+  const byName = new Map((clients ?? []).map(client => [normalizeClientIdentity(client.name), client.id]))
+  return Object.fromEntries(pages.map(page => {
+    const data = extractNotionClientData(page)
+    const clientId = data.dashboardClientId || byName.get(normalizeClientIdentity(data.name))
+    const cover = imageFromPageCover(page)
+    return clientId && cover ? [clientId, cover.url] : null
+  }).filter(Boolean))
 }
 
 function bearerToken(authorization) {
@@ -477,9 +594,16 @@ export async function syncClientFromNotion({
 
   let logoUrl = null
   let logoStoragePath = null
-  if (notionData.logo) {
-    const logo = await downloadLogo(notionData.logo, fetchImpl)
+  const notionImage = notionData.cover ?? notionData.logo
+  if (notionImage) {
+    const logo = await downloadLogo(notionImage, fetchImpl)
     logoStoragePath = `${client.id}/notion-logo.${logo.extension}`
+    const { data: previousProfile, error: previousProfileError } = await supabase
+      .from("client_profiles")
+      .select("logo_storage_path")
+      .eq("client_id", client.id)
+      .maybeSingle()
+    databaseError(previousProfileError, "Unable to load the previous client logo")
     const { error: uploadError } = await supabase.storage
       .from("client-assets")
       .upload(logoStoragePath, logo.bytes, {
@@ -488,6 +612,10 @@ export async function syncClientFromNotion({
         upsert: true,
       })
     databaseError(uploadError, "Unable to store the Notion logo in Supabase")
+    if (previousProfile?.logo_storage_path && previousProfile.logo_storage_path !== logoStoragePath) {
+      const { error: removeError } = await supabase.storage.from("client-assets").remove([previousProfile.logo_storage_path])
+      if (removeError) databaseError(removeError, "Unable to remove the previous Notion logo")
+    }
     const publicUrl = supabase.storage.from("client-assets").getPublicUrl(logoStoragePath).data.publicUrl
     logoUrl = `${publicUrl}?v=${Date.now()}`
 
@@ -501,22 +629,16 @@ export async function syncClientFromNotion({
     databaseError(profileError, "Unable to save the client logo")
   }
 
-  let budgetAppliedToAccount = false
-  if (notionData.monthlySemBudget != null && client.sem_account_id) {
-    const { error: budgetError } = await supabase
-      .from("sem_report_budgets")
-      .upsert({
-        account_id: client.sem_account_id,
-        report_type: "ads_monthly",
-        budget: notionData.monthlySemBudget,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "account_id,report_type" })
-    databaseError(budgetError, "Unable to save the monthly SEM budget")
-    budgetAppliedToAccount = true
-  }
+  const budgetAppliedToAccount = false
 
   const profileUpdates = {}
   if (notionData.phone) profileUpdates.phone = notionData.phone
+  if (notionData.primaryContact) profileUpdates.poc_owner_name = notionData.primaryContact
+  if (notionData.industry) profileUpdates.industry = notionData.industry
+  if (notionData.location) profileUpdates.location = notionData.location
+  if (notionData.email) profileUpdates.email = notionData.email
+  if (notionData.website) profileUpdates.website = notionData.website
+  if (notionData.levelOfService) profileUpdates.level_of_service = notionData.levelOfService
   if (Object.keys(profileUpdates).length > 0) {
     const { error: profileError } = await supabase
       .from("client_profiles")
@@ -540,12 +662,16 @@ export async function syncClientFromNotion({
   const syncedAt = new Date().toISOString()
   const { error: updateError } = await supabase
     .from("clients")
-    .update({ notion_page_id: notionData.pageId, notion_last_synced_at: syncedAt })
+    .update({
+      name: notionData.name || client.name,
+      notion_page_id: notionData.pageId,
+      notion_last_synced_at: syncedAt,
+    })
     .eq("id", client.id)
   databaseError(updateError, "Unable to save the Notion synchronization status")
 
   const warnings = []
-  if (!notionData.logo) warnings.push("No logo was found in the configured Notion properties.")
+  if (!notionImage) warnings.push("No logo or cover was found in the configured Notion properties.")
   if (notionData.monthlySemBudget == null) warnings.push("No monthly SEM budget was found in Notion.")
   if (!notionData.phone) warnings.push("No phone was found in the configured Notion properties.")
   if (!notionData.status) warnings.push("No status was found in the configured Notion properties.")

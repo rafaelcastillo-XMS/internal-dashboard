@@ -4,6 +4,8 @@ import { getClients } from "@/features/clients/repository"
 import { fetchClientRecord, type ClientRecord } from "./clientsTable"
 import { fetchClientProfile, mergeClientWithProfile, type ClientProfileRow } from "./profiles"
 import { useTrackPageLoading } from "@/context/PageLoadingContext"
+import { supabase } from "@/lib/supabase"
+import { fetchRelatedNotionData, type NotionRelatedData } from "./notionRelated"
 
 const AVATAR_COLORS = [
     'bg-blue-600', 'bg-violet-600', 'bg-amber-600', 'bg-rose-600',
@@ -60,6 +62,7 @@ export function useClientRecord(clientId?: string) {
     const [profile, setProfile] = useState<ClientProfileRow | null | undefined>(undefined)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [notionRelated, setNotionRelated] = useState<NotionRelatedData | null>(null)
 
     useTrackPageLoading(loading, `client-record:${id}`)
 
@@ -75,9 +78,14 @@ export function useClientRecord(clientId?: string) {
                     fetchClientRecord(id),
                     fetchClientProfile(id),
                 ])
+                const { data: sessionData } = await supabase.auth.getSession()
+                const related = sessionData.session?.access_token
+                    ? await fetchRelatedNotionData(id, sessionData.session.access_token).catch(() => null)
+                    : null
                 if (active) {
                     setRecord(rec)
                     setProfile(prof)
+                    setNotionRelated(related)
                 }
             } catch (err) {
                 if (active) {
@@ -100,5 +108,5 @@ export function useClientRecord(clientId?: string) {
         [id, record, profile],
     )
 
-    return { client, profile, record, loading, error, setProfile, setRecord }
+    return { client, profile, record, loading, error, notionRelated, setProfile, setRecord }
 }
