@@ -517,6 +517,41 @@ Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
   }
 })
 
+// ─── POST /api/ai/optimize-prompt ────────────────────────────────────────────
+app.post("/api/ai/optimize-prompt", async (req, res) => {
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: "AI not configured" })
+  const { prompt } = req.body ?? {}
+  if (!prompt?.trim()) return res.status(400).json({ error: "prompt is required" })
+
+  try {
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      system: `You are a prompt engineering auditor. You score a user's prompt against the five pillars of an efficient prompt and rewrite it.
+
+Pillars:
+1. role — Does it define who the model is ("Act as a Senior DevOps…")?
+2. task — Is there one clear, direct instruction?
+3. context — Is the relevant data supplied, without filler?
+4. format — Is the output shape demanded (JSON, table, bullets, markdown code block)?
+5. constraints — Are length, tone, language, or allowed libraries bounded?
+
+Score each pillar 0-20. Feedback must be one short actionable sentence in English.
+The rewritten prompt must preserve the user's original intent and contain all five pillars, written in English, ready to paste.
+
+Return ONLY valid JSON, no markdown fences:
+{"pillars":[{"key":"role","score":0,"feedback":""},{"key":"task","score":0,"feedback":""},{"key":"context","score":0,"feedback":""},{"key":"format","score":0,"feedback":""},{"key":"constraints","score":0,"feedback":""}],"summary":"one sentence verdict","optimized":"the rewritten prompt"}`,
+      messages: [{ role: "user", content: `Audit and optimize this prompt:\n\n<prompt>\n${prompt}\n</prompt>` }],
+    })
+    const text = message.content.find(b => b.type === "text")?.text ?? "{}"
+    const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
+    res.json(JSON.parse(clean))
+  } catch (err) {
+    console.error("[ai-optimize-prompt]", err)
+    res.status(500).json({ error: err instanceof Error ? err.message : "AI error" })
+  }
+})
+
 // ─── SEO: On-Page Audit (n8n webhook + result store) ─────────────────────────
 const auditResultStore = new Map()
 

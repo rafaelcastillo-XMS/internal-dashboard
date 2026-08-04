@@ -1,23 +1,7 @@
-import { Fragment, useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import {
-  BookOpen,
-  Sparkles,
-  Search,
-  Copy,
-  Check,
-  Pencil,
-  Trash2,
-  X,
-  Tag,
-  ChevronDown,
-  ChevronUp,
-  RefreshCw,
-  ExternalLink,
-  Layers3,
-  ShieldCheck,
-  AlertCircle,
-} from "lucide-react"
+import { Copy, Check, Pencil, Trash2, X, Tag } from "lucide-react"
+import { PromptOptimizer } from "../components/app/PromptOptimizer"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,74 +14,7 @@ interface Prompt {
   createdAt: string
 }
 
-interface Guideline {
-  id: string
-  title: string
-  content: string
-  createdAt: string
-}
-
-type GuidelinesMap = Record<string, Guideline[]>
-
-type CompanySkillStatus = "available" | "draft" | "deprecated" | "archived"
-
-interface CompanySkill {
-  id: string
-  name: string
-  title: string
-  category: string
-  status: CompanySkillStatus
-  path: string
-  filePath: string
-  url: string
-  summary: string
-  createdAt: string | null
-  updatedAt: string | null
-  commitCount: number
-  historyComplete: boolean
-}
-
-interface CompanySkillCategory {
-  name: string
-  count: number
-  available: number
-  draft: number
-  deprecated: number
-  archived: number
-}
-
-interface CompanySkillsCatalog {
-  repository: {
-    fullName: string
-    url: string
-    defaultBranch: string
-    private: boolean
-    archived: boolean
-    updatedAt: string | null
-    fetchedAt: string
-  }
-  totals: {
-    skills: number
-    categories: number
-    available: number
-    draft: number
-    deprecated: number
-    archived: number
-  }
-  categories: CompanySkillCategory[]
-  skills: CompanySkill[]
-}
-
 // ─── Config ───────────────────────────────────────────────────────────────────
-
-const GUIDELINE_CATEGORIES = [
-  { id: "design",     label: "Design",       accent: "purple" },
-  { id: "seo",        label: "SEO",          accent: "blue"   },
-  { id: "sem",        label: "SEM",          accent: "orange" },
-  { id: "social",     label: "Social Media", accent: "pink"   },
-  { id: "operations", label: "Operations",   accent: "green"  },
-  { id: "content",    label: "Content",      accent: "amber"  },
-]
 
 const PROMPT_CATEGORIES = ["General", "SEO", "SEM", "Social Media", "Design", "Operations", "Content"]
 
@@ -147,27 +64,6 @@ const PROMPT_CAT_ACCENT: Record<string, string> = {
   "Design":      "purple",
   "Operations":  "green",
   "Content":     "amber",
-}
-
-const COMPANY_SKILLS_REPO_URL = "https://github.com/XMS-Ai/company-skills"
-
-const SKILL_STATUS_LABEL: Record<CompanySkillStatus, string> = {
-  available: "Available",
-  draft: "Draft",
-  deprecated: "Deprecated",
-  archived: "Archived",
-}
-
-const SKILL_STATUS_CLASS: Record<CompanySkillStatus, string> = {
-  available: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
-  draft: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-  deprecated: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
-  archived: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300",
-}
-
-function formatSkillDate(value: string | null) {
-  if (!value) return "—"
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
 const FEATURED_PROMPTS = [
@@ -472,46 +368,6 @@ function PromptForm({ initial, onSave, onClose }: {
   )
 }
 
-// ─── GuidelineForm ────────────────────────────────────────────────────────────
-
-function GuidelineForm({ initial, onSave, onClose }: {
-  initial?: Guideline
-  onSave: (data: Omit<Guideline, "id" | "createdAt">) => void
-  onClose: () => void
-}) {
-  const [title, setTitle]     = useState(initial?.title ?? "")
-  const [content, setContent] = useState(initial?.content ?? "")
-
-  const inputCls = "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-[#E2E5E9] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition"
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!title.trim() || !content.trim()) return
-    onSave({ title: title.trim(), content: content.trim() })
-  }
-
-  return (
-    <form onSubmit={submit} className="space-y-4">
-      <div>
-        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Title</label>
-        <input className={inputCls} placeholder="e.g. Image alt text rules" value={title} onChange={e => setTitle(e.target.value)} required />
-      </div>
-      <div>
-        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Content</label>
-        <textarea className={`${inputCls} resize-none`} rows={7} placeholder="Write the guideline content here…" value={content} onChange={e => setContent(e.target.value)} required />
-      </div>
-      <div className="flex items-center justify-end gap-2 pt-1">
-        <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
-          Cancel
-        </button>
-        <button type="submit" className="px-4 py-2 rounded-lg bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-hover)] text-white text-sm font-semibold transition-colors cursor-pointer shadow-sm">
-          {initial ? "Save changes" : "Add guideline"}
-        </button>
-      </div>
-    </form>
-  )
-}
-
 // ─── PromptCard ───────────────────────────────────────────────────────────────
 
 function PromptCard({ prompt, index, onEdit, onDelete }: {
@@ -565,310 +421,14 @@ function PromptCard({ prompt, index, onEdit, onDelete }: {
   )
 }
 
-// ─── GuidelineItem ────────────────────────────────────────────────────────────
-
-function GuidelineItem({ guideline, index, onEdit, onDelete }: {
-  guideline: Guideline
-  index: number
-  onEdit: (g: Guideline) => void
-  onDelete: (id: string) => void
-}) {
-  const [expanded, setExpanded] = useState(false)
-  const isLong = guideline.content.length > 200
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, delay: index * 0.04 }}
-      className="group rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all overflow-hidden"
-    >
-      <div className="flex items-start gap-3 p-4">
-        <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-semibold text-slate-900 dark:text-[#E2E5E9] mb-1.5">{guideline.title}</h4>
-          <p className={`text-xs text-slate-500 dark:text-slate-400 leading-relaxed whitespace-pre-wrap ${!expanded && isLong ? "line-clamp-3" : ""}`}>
-            {guideline.content}
-          </p>
-          {isLong && (
-            <button
-              onClick={() => setExpanded(e => !e)}
-              className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-[var(--brand-accent)] hover:underline transition-colors cursor-pointer"
-            >
-              {expanded ? <><ChevronUp className="h-3 w-3" />Show less</> : <><ChevronDown className="h-3 w-3" />Show more</>}
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
-          <button onClick={() => onEdit(guideline)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer">
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={() => onDelete(guideline.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-      <div className="px-4 pb-3">
-        <span className="text-[10px] text-slate-400 dark:text-slate-500">
-          Added {new Date(guideline.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-        </span>
-      </div>
-    </motion.div>
-  )
-}
-
-// ─── CompanySkillsPanel ───────────────────────────────────────────────────────
-
-function SkillStatusBadge({ status }: { status: CompanySkillStatus }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${SKILL_STATUS_CLASS[status]}`}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {SKILL_STATUS_LABEL[status]}
-    </span>
-  )
-}
-
-function CompanySkillsPanel() {
-  const [catalog, setCatalog] = useState<CompanySkillsCatalog | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | CompanySkillStatus>("all")
-
-  const loadCatalog = async (refresh = false) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/company-skills${refresh ? "?refresh=1" : ""}`)
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "Unable to load company skills")
-      setCatalog(json)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load company skills")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { loadCatalog() }, [])
-
-  const query = search.trim().toLowerCase()
-  const filteredSkills = (catalog?.skills ?? [])
-    .filter(skill => statusFilter === "all" || skill.status === statusFilter)
-    .filter(skill => {
-      if (!query) return true
-      return [
-        skill.title,
-        skill.name,
-        skill.category,
-        skill.path,
-        skill.summary,
-        skill.status,
-      ].some(value => value.toLowerCase().includes(query))
-    })
-    .sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title))
-
-  let currentCategory = ""
-
-  return (
-    <section className="mb-6">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
-              <Layers3 className="h-4 w-4" />
-            </span>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-[#E2E5E9]">Company Skills</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">XMS-Ai/company-skills inventory</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href={catalog?.repository.url ?? COMPANY_SKILLS_REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Repository
-          </a>
-          <button
-            onClick={() => loadCatalog(true)}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>{error}</p>
-        </div>
-      )}
-
-      {catalog && (
-        <>
-          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Skills</p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-[#E2E5E9]">{catalog.totals.skills}</p>
-            </div>
-            <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm dark:border-emerald-900/40 dark:bg-slate-800">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Available</p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{catalog.totals.available}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Categories</p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-[#E2E5E9]">{catalog.totals.categories}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Repo Updated</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-[#E2E5E9]">{formatSkillDate(catalog.repository.updatedAt)}</p>
-            </div>
-          </div>
-
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            {catalog.categories.map(category => (
-              <span key={category.name} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                {category.name}
-                <span className="text-slate-400">{category.count}</span>
-              </span>
-            ))}
-          </div>
-
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="relative min-w-[220px] flex-1 max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search skills..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-[var(--focus-ring)] dark:border-slate-700 dark:bg-slate-800 dark:text-[#E2E5E9]"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value as "all" | CompanySkillStatus)}
-                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-[var(--focus-ring)] dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-              >
-                <option value="all">All statuses</option>
-                {Object.entries(SKILL_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-              <span className="hidden items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 sm:inline-flex">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {catalog.repository.private ? "Private repo" : "Public repo"}
-              </span>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-400">
-                  <th className="px-4 py-3">Skill</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Created</th>
-                  <th className="px-4 py-3">Updated</th>
-                  <th className="px-4 py-3">Commits</th>
-                  <th className="px-4 py-3">Path</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                {filteredSkills.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                      No skills match the current filters.
-                    </td>
-                  </tr>
-                ) : filteredSkills.map(skill => {
-                  const showCategory = skill.category !== currentCategory
-                  currentCategory = skill.category
-                  return (
-                    <Fragment key={skill.id}>
-                      {showCategory && (
-                        <tr className="bg-slate-50/80 dark:bg-slate-900/40">
-                          <td colSpan={6} className="px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            {skill.category}
-                          </td>
-                        </tr>
-                      )}
-                      <tr className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/40">
-                        <td className="px-4 py-3">
-                          <div className="max-w-[340px]">
-                            <a href={skill.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-slate-900 hover:text-[var(--brand-accent)] dark:text-[#E2E5E9]">
-                              {skill.title}
-                              <ExternalLink className="h-3 w-3 opacity-50" />
-                            </a>
-                            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{skill.summary}</p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3"><SkillStatusBadge status={skill.status} /></td>
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">{formatSkillDate(skill.createdAt)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">{formatSkillDate(skill.updatedAt)}</td>
-                        <td className="px-4 py-3 tabular-nums text-slate-500 dark:text-slate-400">{skill.commitCount || "—"}</td>
-                        <td className="px-4 py-3">
-                          <code className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{skill.path}</code>
-                        </td>
-                      </tr>
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
-            Last sync: {formatSkillDate(catalog.repository.fetchedAt)} · Branch: {catalog.repository.defaultBranch}
-          </p>
-        </>
-      )}
-
-      {loading && !catalog && (
-        <div className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-          <span className="inline-flex items-center gap-2">
-            <RefreshCw className="h-4 w-4 animate-spin text-[var(--brand-accent)]" />
-            Loading company skills...
-          </span>
-        </div>
-      )}
-    </section>
-  )
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function Guidelines() {
-  const [activeMain, setActiveMain] = useState<"prompts" | "guidelines">("prompts")
-  const [activeGuideCat, setActiveGuideCat] = useState(GUIDELINE_CATEGORIES[0].id)
-
-  const [prompts, setPrompts]         = useState<Prompt[]>(() => load("xms_prompts", []))
-  const [promptSearch, setPromptSearch] = useState("")
-  const [promptCatFilter, setPromptCatFilter] = useState("All")
+  const [prompts, setPrompts]                 = useState<Prompt[]>(() => load("xms_prompts", []))
   const [showPromptModal, setShowPromptModal] = useState(false)
   const [editingPrompt, setEditingPrompt]     = useState<Prompt | null>(null)
 
-  const [guidelines, setGuidelines]         = useState<GuidelinesMap>(() => load("xms_guidelines", {}))
-  const [showGuidelineModal, setShowGuidelineModal] = useState(false)
-  const [editingGuideline, setEditingGuideline]     = useState<Guideline | null>(null)
-
   useEffect(() => { save("xms_prompts", prompts) }, [prompts])
-  useEffect(() => { save("xms_guidelines", guidelines) }, [guidelines])
-
-  const filteredPrompts = prompts.filter(p => {
-    const q = promptSearch.toLowerCase()
-    const matchSearch = !q || p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q) || p.tags.some(t => t.toLowerCase().includes(q))
-    const matchCat = promptCatFilter === "All" || p.category === promptCatFilter
-    return matchSearch && matchCat
-  })
-
-  const currentGuidelines = guidelines[activeGuideCat] ?? []
 
   const savePrompt = (data: Omit<Prompt, "id" | "createdAt">) => {
     if (editingPrompt) {
@@ -884,210 +444,33 @@ export function Guidelines() {
 
   const openEditPrompt = (p: Prompt) => { setEditingPrompt(p); setShowPromptModal(true) }
 
-  const saveGuideline = (data: Omit<Guideline, "id" | "createdAt">) => {
-    if (editingGuideline) {
-      setGuidelines(gs => ({
-        ...gs,
-        [activeGuideCat]: (gs[activeGuideCat] ?? []).map(g => g.id === editingGuideline.id ? { ...editingGuideline, ...data } : g),
-      }))
-    } else {
-      setGuidelines(gs => ({
-        ...gs,
-        [activeGuideCat]: [{ ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString() }, ...(gs[activeGuideCat] ?? [])],
-      }))
-    }
-    setShowGuidelineModal(false)
-    setEditingGuideline(null)
-  }
-
-  const deleteGuideline = (id: string) => {
-    setGuidelines(gs => ({ ...gs, [activeGuideCat]: (gs[activeGuideCat] ?? []).filter(g => g.id !== id) }))
-  }
-
-  const openEditGuideline = (g: Guideline) => { setEditingGuideline(g); setShowGuidelineModal(true) }
-
-  const activeCatMeta = GUIDELINE_CATEGORIES.find(c => c.id === activeGuideCat)!
-  const activeCatStyles = CATEGORY_STYLES[activeCatMeta.accent]
-
   return (
     <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">
       <div className="mx-auto max-w-screen-2xl p-6">
 
         {/* ── Page header ── */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9] tracking-tight">Guidelines & Prompts</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Team playbook and AI prompt library</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9] tracking-tight">Prompts</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Prompt optimizer and AI prompt library</p>
         </div>
 
-        {/* ── Main tabs ── */}
-        <div className="mb-6 flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1 w-fit shadow-sm">
-          {([
-            { id: "prompts",    label: "Prompt Library",  icon: Sparkles },
-            { id: "guidelines", label: "Guidelines",      icon: BookOpen  },
-          ] as const).map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setActiveMain(id)}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-                activeMain === id
-                  ? "bg-[var(--brand-accent)] text-white shadow-sm"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-              {id === "prompts" && prompts.length > 0 && (
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeMain === "prompts" ? "bg-white/20 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"}`}>
-                  {prompts.length}
-                </span>
-              )}
-            </button>
-          ))}
+        <PromptOptimizer />
+
+        {/* Featured prompts */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">Featured</p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {FEATURED_PROMPTS.map(fp => <FeaturedPromptCard key={fp.id} prompt={fp} />)}
+          </div>
         </div>
-
-        <AnimatePresence mode="wait">
-
-          {/* ════════════════════ PROMPTS TAB ════════════════════ */}
-          {activeMain === "prompts" && (
-            <motion.div key="prompts" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-
-              {/* Toolbar */}
-              <div className="mb-5 flex flex-wrap items-center gap-3">
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search prompts…"
-                    value={promptSearch}
-                    onChange={e => setPromptSearch(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-sm text-slate-900 dark:text-[#E2E5E9] placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
-                  />
-                </div>
-
-                {/* Category filter chips */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {["All", ...PROMPT_CATEGORIES].map(cat => {
-                    const accent = cat === "All" ? "slate" : (PROMPT_CAT_ACCENT[cat] ?? "slate")
-                    const styles = CATEGORY_STYLES[accent]
-                    const isActive = promptCatFilter === cat
-                    return (
-                      <button
-                        key={cat}
-                        onClick={() => setPromptCatFilter(cat)}
-                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-all cursor-pointer ${
-                          isActive ? styles.badge + " ring-1 ring-current/30" : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700"
-                        }`}
-                      >
-                        {isActive && <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />}
-                        {cat}
-                        {cat !== "All" && prompts.filter(p => p.category === cat).length > 0 && (
-                          <span className="opacity-60">{prompts.filter(p => p.category === cat).length}</span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Featured prompts */}
-              <div className="mb-6">
-                <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">Featured</p>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  {FEATURED_PROMPTS.map(fp => <FeaturedPromptCard key={fp.id} prompt={fp} />)}
-                </div>
-              </div>
-
-              <CompanySkillsPanel />
-
-              {/* Prompt grid */}
-              {filteredPrompts.length === 0 ? (
-                prompts.length > 0 ? (
-                  <div className="flex flex-col items-center gap-2 py-12 text-center">
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No results found</p>
-                    <button onClick={() => { setPromptSearch(""); setPromptCatFilter("All") }} className="text-xs font-medium text-[var(--brand-accent)] hover:underline cursor-pointer">
-                      Clear filters
-                    </button>
-                  </div>
-                ) : null
-              ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {filteredPrompts.map((p, i) => (
-                    <PromptCard key={p.id} prompt={p} index={i} onEdit={openEditPrompt} onDelete={deletePrompt} />
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* ════════════════════ GUIDELINES TAB ════════════════════ */}
-          {activeMain === "guidelines" && (
-            <motion.div key="guidelines" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-
-              {/* Category tabs */}
-              <div className="mb-5 flex items-center gap-1 flex-wrap">
-                {GUIDELINE_CATEGORIES.map(cat => {
-                  const styles = CATEGORY_STYLES[cat.accent]
-                  const count = (guidelines[cat.id] ?? []).length
-                  const isActive = activeGuideCat === cat.id
-                  return (
-                    <button
-                      key={cat.id}
-                      onClick={() => setActiveGuideCat(cat.id)}
-                      className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-all cursor-pointer border ${
-                        isActive
-                          ? `${styles.badge} border-current/20 shadow-sm`
-                          : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800"
-                      }`}
-                    >
-                      {isActive && <span className={`h-2 w-2 rounded-full ${styles.dot}`} />}
-                      {cat.label}
-                      {count > 0 && (
-                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${isActive ? "bg-current/10" : "bg-slate-100 dark:bg-slate-700 text-slate-400"}`}>
-                          {count}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-
-              </div>
-
-              {/* Category header */}
-              <div className="mb-4 flex items-center gap-3">
-                <span className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-semibold ${activeCatStyles.badge} border border-current/20`}>
-                  <span className={`h-2 w-2 rounded-full ${activeCatStyles.dot}`} />
-                  {activeCatMeta.label} Guidelines
-                </span>
-                <span className="text-xs text-slate-400 dark:text-slate-500">{currentGuidelines.length} {currentGuidelines.length === 1 ? "entry" : "entries"}</span>
-              </div>
-
-              {/* Guidelines list */}
-              {currentGuidelines.length === 0 ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-col items-center justify-center py-20 gap-4 text-center"
-                >
-                  <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                    <BookOpen className="h-8 w-8 text-slate-400 dark:text-slate-500" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-[#E2E5E9]">Guidelines coming soon</p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-xs">
-                      These guidelines are being set up and will be available shortly. Stay tuned.
-                    </p>
-                  </div>
-                </motion.div>
-              ) : (
-                <div className="space-y-3">
-                  {currentGuidelines.map((g, i) => (
-                    <GuidelineItem key={g.id} guideline={g} index={i} onEdit={openEditGuideline} onDelete={deleteGuideline} />
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Prompt grid */}
+        {prompts.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {prompts.map((p, i) => (
+              <PromptCard key={p.id} prompt={p} index={i} onEdit={openEditPrompt} onDelete={deletePrompt} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Modals ── */}
@@ -1098,15 +481,6 @@ export function Guidelines() {
               initial={editingPrompt ?? undefined}
               onSave={savePrompt}
               onClose={() => { setShowPromptModal(false); setEditingPrompt(null) }}
-            />
-          </Modal>
-        )}
-        {showGuidelineModal && (
-          <Modal title={editingGuideline ? "Edit guideline" : "New guideline"} onClose={() => { setShowGuidelineModal(false); setEditingGuideline(null) }}>
-            <GuidelineForm
-              initial={editingGuideline ?? undefined}
-              onSave={saveGuideline}
-              onClose={() => { setShowGuidelineModal(false); setEditingGuideline(null) }}
             />
           </Modal>
         )}

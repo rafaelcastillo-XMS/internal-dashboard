@@ -1342,7 +1342,8 @@ function aiPlugin() {
         const isSemInsight    = req.url === "/api/ai/sem-insights"     && req.method === "POST"
         const isSeoInsight    = req.url === "/api/ai/seo-insights"     && req.method === "POST"
         const isSocialInsight = req.url === "/api/ai/social-insights"  && req.method === "POST"
-        if (!isAsk && !isInsight && !isSemInsight && !isSeoInsight && !isSocialInsight) { next(); return }
+        const isOptimizePrompt = req.url === "/api/ai/optimize-prompt" && req.method === "POST"
+        if (!isAsk && !isInsight && !isSemInsight && !isSeoInsight && !isSocialInsight && !isOptimizePrompt) { next(); return }
 
         if (!process.env.ANTHROPIC_API_KEY) {
           sendJson(res, 503, { error: "ANTHROPIC_API_KEY not configured in .env" })
@@ -1390,6 +1391,36 @@ No intro sentence, no conclusion. Just the actions. Keep each bullet under 20 wo
             })
             const text = msg.content.find(b => b.type === "text")?.text ?? ""
             sendJson(res, 200, { insight: text })
+            return
+          }
+
+          // ── /api/ai/optimize-prompt ──────────────────────────────────────
+          if (isOptimizePrompt) {
+            const prompt = (body.prompt as string | undefined)?.trim()
+            if (!prompt) { sendJson(res, 400, { error: "prompt is required" }); return }
+
+            const msg = await anthropic.messages.create({
+              model: "claude-sonnet-4-6",
+              max_tokens: 2048,
+              system: `You are a prompt engineering auditor. You score a user's prompt against the five pillars of an efficient prompt and rewrite it.
+
+Pillars:
+1. role — Does it define who the model is ("Act as a Senior DevOps…")?
+2. task — Is there one clear, direct instruction?
+3. context — Is the relevant data supplied, without filler?
+4. format — Is the output shape demanded (JSON, table, bullets, markdown code block)?
+5. constraints — Are length, tone, language, or allowed libraries bounded?
+
+Score each pillar 0-20. Feedback must be one short actionable sentence in English.
+The rewritten prompt must preserve the user's original intent and contain all five pillars, written in English, ready to paste.
+
+Return ONLY valid JSON, no markdown fences:
+{"pillars":[{"key":"role","score":0,"feedback":""},{"key":"task","score":0,"feedback":""},{"key":"context","score":0,"feedback":""},{"key":"format","score":0,"feedback":""},{"key":"constraints","score":0,"feedback":""}],"summary":"one sentence verdict","optimized":"the rewritten prompt"}`,
+              messages: [{ role: "user", content: `Audit and optimize this prompt:\n\n<prompt>\n${prompt}\n</prompt>` }],
+            })
+            const text = msg.content.find(b => b.type === "text")?.text ?? "{}"
+            const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
+            sendJson(res, 200, JSON.parse(clean))
             return
           }
 
