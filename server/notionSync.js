@@ -14,6 +14,8 @@ export const NOTION_CLIENT_PROPERTIES = Object.freeze({
   name: ["Client Name", "Name", "Client"],
   logo: ["Logo", "Client Logo", "Brand Logo"],
   monthlySemBudget: ["Monthly SEM Budget", "SEM Monthly Budget", "Monthly Budget", "SEM Budget"],
+  phone: ["Phone", "Telephone", "Phone Number"],
+  status: ["Status", "Client Status"],
 })
 
 export class NotionSyncError extends Error {
@@ -131,6 +133,8 @@ export function extractNotionClientData(page) {
   const idProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.clientId)
   const logoProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.logo)
   const budgetProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.monthlySemBudget)
+  const phoneProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.phone)
+  const statusProperty = findProperty(properties, NOTION_CLIENT_PROPERTIES.status)
 
   return {
     pageId: String(page?.id ?? ""),
@@ -138,6 +142,8 @@ export function extractNotionClientData(page) {
     name: propertyText(nameProperty),
     logo: logoFromProperty(logoProperty) ?? logoFromPageIcon(page),
     monthlySemBudget: parseBudget(budgetProperty),
+    phone: propertyText(phoneProperty),
+    status: propertyText(statusProperty),
   }
 }
 
@@ -509,6 +515,28 @@ export async function syncClientFromNotion({
     budgetAppliedToAccount = true
   }
 
+  const profileUpdates = {}
+  if (notionData.phone) profileUpdates.phone = notionData.phone
+  if (Object.keys(profileUpdates).length > 0) {
+    const { error: profileError } = await supabase
+      .from("client_profiles")
+      .upsert({ client_id: client.id, ...profileUpdates }, { onConflict: "client_id" })
+    databaseError(profileError, "Unable to save the client contact data")
+  }
+
+  const normalizedStatus = normalizeKey(notionData.status)
+  if (normalizedStatus) {
+    const activeStatuses = new Set(["active", "activo", "activa", "enabled", "enrolled", "live"])
+    const inactiveStatuses = new Set(["inactive", "inactivo", "inactiva", "disabled", "paused", "archived"])
+    if (activeStatuses.has(normalizedStatus) || inactiveStatuses.has(normalizedStatus)) {
+      const { error: statusError } = await supabase
+        .from("clients")
+        .update({ status: activeStatuses.has(normalizedStatus) ? "active" : "inactive" })
+        .eq("id", client.id)
+      databaseError(statusError, "Unable to save the client status")
+    }
+  }
+
   const syncedAt = new Date().toISOString()
   const { error: updateError } = await supabase
     .from("clients")
@@ -519,6 +547,8 @@ export async function syncClientFromNotion({
   const warnings = []
   if (!notionData.logo) warnings.push("No logo was found in the configured Notion properties.")
   if (notionData.monthlySemBudget == null) warnings.push("No monthly SEM budget was found in Notion.")
+  if (!notionData.phone) warnings.push("No phone was found in the configured Notion properties.")
+  if (!notionData.status) warnings.push("No status was found in the configured Notion properties.")
   if (notionData.monthlySemBudget != null && !client.sem_account_id) {
     warnings.push("The budget was found, but this client has no linked Google Ads account.")
   }
@@ -532,6 +562,8 @@ export async function syncClientFromNotion({
     logoUrl,
     logoStoragePath,
     monthlySemBudget: notionData.monthlySemBudget,
+    phone: notionData.phone || null,
+    status: notionData.status || null,
     budgetAppliedToAccount,
     warnings,
   }

@@ -45,6 +45,19 @@ describe("Notion client mapping", () => {
     })
   })
 
+  it("extracts phone and status properties", () => {
+    const result = extractNotionClientData(page("notion-contact", {
+      "Client name": title("Contact Client"),
+      Phone: { type: "phone_number", phone_number: "+1 555 123 4567" },
+      Status: { type: "select", select: { name: "Active" } },
+    }))
+
+    expect(result).toMatchObject({
+      phone: "+1 555 123 4567",
+      status: "Active",
+    })
+  })
+
   it("matches by stable dashboard ID before falling back to normalized name", () => {
     const pages = [
       page("wrong", { Name: title("AquaSeekers"), "Dashboard Client ID": richText("another-client") }),
