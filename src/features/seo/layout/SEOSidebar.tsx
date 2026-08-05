@@ -156,28 +156,9 @@ const NAV_GROUPS = [
     ],
   },
   {
-    section: 'Local SEO',
+    section: null,
     collapsible: true,
-    items: [
-      {
-        label: 'Google Business Profile',
-        href: '/seo/reports',
-        icon: (
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-          </svg>
-        ),
-      },
-      {
-        label: 'Local Listings',
-        href: '/seo/onpage-audit#local-listings',
-        icon: (
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm0 5.25h.007v.008H3.75V12zm0 5.25h.007v.008H3.75v-.008z" />
-          </svg>
-        ),
-      },
+    items: [/*
       {
         label: 'Reviews',
         href: '/seo/onpage-audit#reviews',
@@ -188,7 +169,7 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
-    ],
+    */],
   },
 ]
 
