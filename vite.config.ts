@@ -9,6 +9,7 @@ import react from '@vitejs/plugin-react'
 import Anthropic from "@anthropic-ai/sdk"
 import type { IncomingMessage, ServerResponse } from "http"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
+import { optimizePromptWithOpenAI } from "./server/openaiPromptOptimizer.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 import { MetaApiError, getAdCampaigns, getFacebookPageSnapshot } from "./server/metaGraph.js"
@@ -1342,7 +1343,23 @@ function aiPlugin() {
         const isSemInsight    = req.url === "/api/ai/sem-insights"     && req.method === "POST"
         const isSeoInsight    = req.url === "/api/ai/seo-insights"     && req.method === "POST"
         const isSocialInsight = req.url === "/api/ai/social-insights"  && req.method === "POST"
-        if (!isAsk && !isInsight && !isSemInsight && !isSeoInsight && !isSocialInsight) { next(); return }
+        const isPromptOptimize = req.url === "/api/ai/prompt-optimize"  && req.method === "POST"
+        if (!isAsk && !isInsight && !isSemInsight && !isSeoInsight && !isSocialInsight && !isPromptOptimize) { next(); return }
+
+        if (isPromptOptimize) {
+          try {
+            const body = await readJsonBody(req) as Record<string, unknown>
+            const prompt = typeof body.prompt === "string" ? body.prompt.trim() : ""
+            if (!prompt) { sendJson(res, 400, { error: "prompt is required" }); return }
+            const result = await optimizePromptWithOpenAI(prompt.slice(0, 12_000))
+            sendJson(res, 200, result)
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "OpenAI prompt optimization failed"
+            console.error("[ai-prompt-optimize]", message)
+            sendJson(res, (err as { statusCode?: number })?.statusCode ?? 502, { error: message })
+          }
+          return
+        }
 
         if (!process.env.ANTHROPIC_API_KEY) {
           sendJson(res, 503, { error: "ANTHROPIC_API_KEY not configured in .env" })

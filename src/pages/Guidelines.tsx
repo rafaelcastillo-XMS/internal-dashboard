@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Copy, Check, Pencil, Trash2, X, Tag } from "lucide-react"
 import { PromptOptimizer } from "../components/app/PromptOptimizer"
+import { SkillsGrid } from "../components/app/SkillsGrid"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -463,6 +464,9 @@ export function Guidelines() {
             {FEATURED_PROMPTS.map(fp => <FeaturedPromptCard key={fp.id} prompt={fp} />)}
           </div>
         </div>
+
+        <SkillsGrid />
+
         {/* Prompt grid */}
         {prompts.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

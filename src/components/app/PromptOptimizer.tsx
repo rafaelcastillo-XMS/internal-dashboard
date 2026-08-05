@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Check, Copy, Sparkles, Wand2 } from "lucide-react"
+import { AlertCircle, Check, Copy, Loader2, Sparkles, Wand2 } from "lucide-react"
 import { auditPrompt, buildStructuredPrompt } from "../../features/prompts/lib/promptAudit"
 
 function grade(score: number) {
@@ -23,14 +23,45 @@ function CopyBtn({ text }: { text: string }) {
   )
 }
 
+type OpenAIOptimization = {
+  summary: string
+  strengths: string[]
+  improvements: string[]
+  optimizedPrompt: string
+}
+
 export function PromptOptimizer() {
   const [prompt, setPrompt] = useState("")
   const [structured, setStructured] = useState<string | null>(null)
+  const [openAIResult, setOpenAIResult] = useState<OpenAIOptimization | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [openAIError, setOpenAIError] = useState<string | null>(null)
 
   // Audit runs on every keystroke — plain regex, no API call.
   const audit = useMemo(() => auditPrompt(prompt), [prompt])
   const g = grade(audit.score)
   const words = prompt.trim() ? prompt.trim().split(/\s+/).length : 0
+
+  const analyzeWithOpenAI = async () => {
+    if (!prompt.trim()) return
+    setIsAnalyzing(true)
+    setOpenAIError(null)
+    try {
+      const response = await fetch("/api/ai/prompt-optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || "Unable to analyze the prompt")
+      setOpenAIResult(payload as OpenAIOptimization)
+    } catch (error) {
+      setOpenAIError(error instanceof Error ? error.message : "Unable to analyze the prompt")
+      setOpenAIResult(null)
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
 
   return (
     <section className="mb-8">
@@ -49,7 +80,8 @@ export function PromptOptimizer() {
         <div className="rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-800 p-4 shadow-sm">
           <textarea
             value={prompt}
-            onChange={e => setPrompt(e.target.value)}
+            disabled={isAnalyzing}
+            onChange={e => { setPrompt(e.target.value); setOpenAIResult(null); setOpenAIError(null) }}
             rows={12}
             placeholder="Write your prompt here… e.g. Act as a Senior SEO strategist. Analyze the keyword table below and return the 10 highest-opportunity terms as a markdown table. Max 150 words, English only."
             className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2.5 text-sm font-mono leading-relaxed text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
@@ -59,7 +91,7 @@ export function PromptOptimizer() {
             <div className="flex items-center gap-2">
               {prompt && (
                 <button
-                  onClick={() => { setPrompt(""); setStructured(null) }}
+                  onClick={() => { setPrompt(""); setStructured(null); setOpenAIResult(null); setOpenAIError(null) }}
                   className="px-3 py-2 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   Clear
@@ -72,6 +104,14 @@ export function PromptOptimizer() {
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 Restructure prompt
+              </button>
+              <button
+                onClick={analyzeWithOpenAI}
+                disabled={!prompt.trim() || isAnalyzing}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 dark:border-purple-800/70 bg-purple-50 dark:bg-purple-900/20 px-4 py-2 text-xs font-semibold text-purple-700 dark:text-purple-300 shadow-sm transition-colors hover:bg-purple-100 dark:hover:bg-purple-900/40 disabled:opacity-50 cursor-pointer"
+              >
+                {isAnalyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                {isAnalyzing ? "Analyzing…" : "Analyze with OpenAI"}
               </button>
             </div>
           </div>
@@ -106,6 +146,51 @@ export function PromptOptimizer() {
           </ul>
         </div>
       </div>
+
+      {openAIError && (
+        <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{openAIError}</span>
+        </div>
+      )}
+
+      {openAIResult && (
+        <div className="mt-4 rounded-xl border border-purple-200 dark:border-purple-900/50 bg-white dark:bg-slate-800 p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-purple-600 dark:text-purple-300">OpenAI analysis</p>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{openAIResult.summary}</p>
+            </div>
+            <CopyBtn text={openAIResult.optimizedPrompt} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Strengths</p>
+              <ul className="space-y-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                {openAIResult.strengths.map((item, index) => <li key={`${item}-${index}`}>· {item}</li>)}
+              </ul>
+            </div>
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Improvements</p>
+              <ul className="space-y-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                {openAIResult.improvements.map((item, index) => <li key={`${item}-${index}`}>· {item}</li>)}
+              </ul>
+            </div>
+          </div>
+          <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700/60">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Optimized prompt</p>
+              <button
+                onClick={() => { setPrompt(openAIResult.optimizedPrompt); setOpenAIResult(null) }}
+                className="rounded-lg border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
+              >
+                Use it
+              </button>
+            </div>
+            <textarea readOnly value={openAIResult.optimizedPrompt} rows={10} className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2.5 text-xs font-mono leading-relaxed text-slate-700 dark:text-slate-300 focus:outline-none" />
+          </div>
+        </div>
+      )}
 
       {/* Restructured prompt */}
       {structured && (

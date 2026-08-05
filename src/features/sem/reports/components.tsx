@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import DOMPurify from 'dompurify'
 import {
   AlignCenter,
@@ -49,7 +49,9 @@ const coverTrustLogos = {
 const thankYouBackground = '/thanksyoupage-bg.webp'
 
 const googleAdsKpiOrder = ['impressions', 'clicks', 'cost', 'avg-cpc']
-const slideFrameClass = 'mx-auto aspect-[1164/655] w-full max-w-[1164px] overflow-hidden rounded-lg'
+const SLIDE_WIDTH = 1164
+const SLIDE_HEIGHT = 655
+const slideFrameClass = 'mx-auto h-[655px] w-[1164px] overflow-visible rounded-lg'
 const googleAdsKpiStyles: Record<string, {
   card: string
   label: string
@@ -897,6 +899,7 @@ export function PmaxAdPreviewCard({
   ad: AdPerformanceCard
   onChange?: (patch: Partial<AdPerformanceCard>) => void
 }) {
+  const [logoFailed, setLogoFailed] = useState(false)
   const initials = (ad.businessName || '')
     .split(/\s+/)
     .slice(0, 2)
@@ -907,8 +910,16 @@ export function PmaxAdPreviewCard({
   return (
     <div className="flex h-full min-h-[350px] flex-col rounded-lg border border-[#5f6368] bg-white p-5 shadow-[0_10px_24px_rgba(60,64,67,0.08)]">
       <div className="flex items-center gap-3">
-        {ad.logoSrc ? (
-          <img crossOrigin="anonymous" src={ad.logoSrc} alt="" className="h-11 w-11 rounded-full border border-[#dadce0] object-contain" />
+        {ad.logoSrc && !logoFailed ? (
+          <img
+            crossOrigin="anonymous"
+            src={ad.logoSrc}
+            alt=""
+            onError={() => setLogoFailed(true)}
+            className="h-11 w-11 rounded-full border border-[#dadce0] object-contain"
+          />
+        ) : ad.logoSrc || logoFailed ? (
+          <img src="/sem-reports/google-ads-logo.webp" alt="Google Ads" className="h-11 w-11 rounded-full border border-[#dadce0] bg-white object-contain p-1" />
         ) : (
           <span className="flex h-11 w-11 items-center justify-center rounded-full border border-[#dadce0] bg-[#f8f9fa] text-xs font-bold text-[#5f6368]">{initials}</span>
         )}
@@ -1154,6 +1165,61 @@ function CustomSlideEditor({
         <input id={imageInputId} type="file" accept="image/*" onChange={(event) => handleImageChange(event.target.files?.[0])} className="sr-only" data-pdf-hide="true" />
       </div>
     </section>
+  )
+}
+
+export function ResponsiveReportSlide({
+  report,
+  slide,
+  onChange,
+}: {
+  report: Report
+  slide: Slide
+  onChange: (slide: Slide) => void
+}) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+
+  useEffect(() => {
+    const viewport = viewportRef.current
+    const content = contentRef.current
+    if (!viewport || !content) return
+
+    const updateScale = () => {
+      const widthScale = viewport.clientWidth / SLIDE_WIDTH
+      const contentHeight = Math.max(SLIDE_HEIGHT, content.scrollHeight)
+      const heightScale = viewport.clientHeight / contentHeight
+      setScale(Math.min(widthScale, heightScale, 1))
+    }
+
+    updateScale()
+    const resizeObserver = new ResizeObserver(updateScale)
+    const mutationObserver = new MutationObserver(updateScale)
+    resizeObserver.observe(viewport)
+    resizeObserver.observe(content)
+    mutationObserver.observe(content, { childList: true, subtree: true, characterData: true })
+    return () => {
+      resizeObserver.disconnect()
+      mutationObserver.disconnect()
+    }
+  }, [slide])
+
+  return (
+    <div ref={viewportRef} className="relative mx-auto aspect-[1164/655] w-full max-w-[1164px] overflow-hidden rounded-lg">
+      <div
+        ref={contentRef}
+        className="absolute left-0 top-0"
+        style={{
+          width: SLIDE_WIDTH,
+          height: SLIDE_HEIGHT,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+        }}
+      >
+        <ReportSlide report={report} slide={slide} onChange={onChange} />
+      </div>
+    </div>
   )
 }
 

@@ -33,7 +33,7 @@ import {
   PmaxAdPreviewCard,
   ReportActionsBar,
   ReportSidebar,
-  ReportSlide,
+  ResponsiveReportSlide,
   SearchAdPreviewCard,
 } from '@/features/sem/reports/components'
 import type { Report, ReportStatus, Slide } from '@/features/sem/reports/types'
@@ -729,7 +729,7 @@ function ReportEditorView({
               {persistenceError}
             </div>
           )}
-          <ReportSlide report={draft} slide={activeSlide} onChange={updateSlide} />
+          <ResponsiveReportSlide report={draft} slide={activeSlide} onChange={updateSlide} />
           <div className="mt-4 flex w-full max-w-[1164px] items-center justify-end gap-3">
             <button
               type="button"

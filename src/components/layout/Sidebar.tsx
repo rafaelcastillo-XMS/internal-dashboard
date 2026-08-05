@@ -160,6 +160,14 @@ export function Sidebar() {
 
                 <nav className={`flex-1 ${collapsed ? "px-0 py-2" : "px-3"} overflow-y-auto custom-scrollbar pb-2 space-y-0.5`}>
 
+                    <div className="relative group">
+                        <NavLink to="/" end onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                            <Home className="w-4 h-4 shrink-0" />
+                            {!collapsed && "Home"}
+                        </NavLink>
+                        {collapsed && <Tooltip label="Home" />}
+                    </div>
+
                     <SectionLabel label="Menu" collapsed={collapsed} />
 
                     <div className="relative group">
@@ -195,14 +203,6 @@ export function Sidebar() {
                     </div>
 
                     <SectionLabel label="Apps" collapsed={collapsed} />
-
-                    <div className="relative group">
-                        <NavLink to="/" end onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
-                            <Home className="w-4 h-4 shrink-0" />
-                            {!collapsed && "Home"}
-                        </NavLink>
-                        {collapsed && <Tooltip label="Home" />}
-                    </div>
 
                     <div className="relative group">
                         <NavLink to="/seo" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>

@@ -7,6 +7,7 @@ import { execFile } from "child_process"
 import { promisify } from "util"
 import Anthropic from "@anthropic-ai/sdk"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
+import { optimizePromptWithOpenAI } from "./server/openaiPromptOptimizer.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 import { MetaApiError, getAdCampaigns, getFacebookPageSnapshot } from "./server/metaGraph.js"
@@ -369,6 +370,21 @@ If you have dashboard context, use it to give specific answers. Never make up da
     const message = err instanceof Error ? err.message : "AI error"
     console.error("[ai-ask]", message)
     res.status(500).json({ error: message })
+  }
+})
+
+// ─── POST /api/ai/prompt-optimize ────────────────────────────────────────────
+app.post("/api/ai/prompt-optimize", async (req, res) => {
+  const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : ""
+  if (!prompt) return res.status(400).json({ error: "prompt is required" })
+
+  try {
+    const result = await optimizePromptWithOpenAI(prompt.slice(0, 12_000))
+    res.json(result)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "OpenAI prompt optimization failed"
+    console.error("[ai-prompt-optimize]", message)
+    res.status(err?.statusCode ?? 502).json({ error: message })
   }
 })
 
