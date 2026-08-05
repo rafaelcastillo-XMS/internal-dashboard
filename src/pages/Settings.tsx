@@ -25,7 +25,7 @@ export function Settings() {
 
     return (
         <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">
-            <div className="mx-auto max-w-screen-2xl p-6 space-y-6">
+            <div className="mx-auto max-w-screen-2xl space-y-6">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9]">Settings</h1>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Dashboard preferences and integrations</p>

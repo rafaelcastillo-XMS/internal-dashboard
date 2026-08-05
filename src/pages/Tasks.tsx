@@ -16,8 +16,7 @@ import {
 import { useMondayTasks, statusColor, priorityColor, type MondayTask } from "@/features/tasks/useMondayTasks"
 
 // ─── Monday brand colours ─────────────────────────────────────────────────────
-const MONDAY_LOGO =
-  "https://dapulse-res.cloudinary.com/image/upload/f_auto,q_auto/remote_mondaycom_static/uploads/product/monday-logo.png"
+const MONDAY_LOGO = "/logo-monday.svg"
 
 // ─── Status / priority chip helpers ──────────────────────────────────────────
 const colorMap: Record<string, { bg: string; text: string; dot: string }> = {
@@ -139,20 +138,19 @@ export function Tasks() {
   const overdueCount = tasks.filter(t => t.dueDate && new Date(t.dueDate) < todayStart).length
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">
+    <div className="h-full overflow-y-auto custom-scrollbar">
       <div className="mx-auto max-w-screen-2xl px-6 py-6">
 
         {/* ── Header ── */}
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             {/* Monday logo + title */}
-            <div className="relative rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 shadow-sm">
+            <div className="relative rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 shadow-sm">
               <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-[#ff3d57]/10 via-[#ffcb00]/10 to-[#00ca72]/10 blur-md" />
               <img
                 src={MONDAY_LOGO}
                 alt="monday.com"
-                className="relative h-5 w-auto object-contain"
-                onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+                className="relative h-8 w-auto object-contain"
               />
             </div>
             <div>

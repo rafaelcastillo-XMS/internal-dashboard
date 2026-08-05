@@ -32,7 +32,7 @@ export function SocialDashboard() {
   const totalSpend  = campaigns.reduce((sum, c) => sum + c.spend, 0)
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-6">
+    <div className="mx-auto max-w-screen-2xl">
 
       {/* ── Header ── */}
       <div className="mb-6">

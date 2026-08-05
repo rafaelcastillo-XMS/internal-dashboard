@@ -445,7 +445,7 @@ export function Guidelines() {
   const openEditPrompt = (p: Prompt) => { setEditingPrompt(p); setShowPromptModal(true) }
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">
+    <div className="h-full overflow-y-auto custom-scrollbar">
       <div className="mx-auto max-w-screen-2xl p-6">
 
         {/* ── Page header ── */}

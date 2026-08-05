@@ -88,7 +88,7 @@ export function SocialSidebar() {
         style={{ width: collapsed ? 64 : 232 }}
       >
         {/* Back to Home — header slot */}
-        <div className={`h-16 border-b border-[var(--sidebar-border)] flex items-center transition-all duration-200 ${collapsed ? 'justify-center px-3' : 'px-4'}`}>
+        <div className={`h-16 flex items-center transition-all duration-200 ${collapsed ? 'justify-center px-3' : 'px-4'}`}>
           <div className="relative group">
             <Link
               to="/"

@@ -5,7 +5,6 @@ import { CardDataStats }      from '@/features/seo/components/CardDataStats'
 import { ChartVisibility }    from '@/features/seo/components/ChartVisibility'
 import { QueryRankingsTable } from '@/features/seo/components/QueryRankingsTable'
 import { CoreWebVitals }      from '@/features/seo/components/CoreWebVitals'
-import { SEOAIInsights }      from '@/features/seo/components/SEOAIInsights'
 import { useSEODashboardState, formatDateLabel, DATE_PRESETS, SEO_API } from '@/features/seo/hooks/useSEODashboardState'
 import { cacheGet, cacheSet } from '@/features/seo/lib/seoCache'
 
@@ -93,7 +92,7 @@ export function SEODashboard() {
   const dateRangeLabel = formatDateLabel(state.dateRange.startDate, state.dateRange.endDate)
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-6">
+    <div className="mx-auto max-w-screen-2xl">
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -130,15 +129,6 @@ export function SEODashboard() {
           </button>
         </div>
       </div>
-
-      {/* AI Insights banner */}
-      <SEOAIInsights
-        clientName={state.clientName}
-        gscSite={state.selectedGscSite}
-        gsc={data.gsc}
-        ga4={data.ga4}
-        psiScore={data.psi?.metrics ? null : null}
-      />
 
       {/* No-client banner */}
       {state.propertiesLoaded && !state.selectedGscSite && !state.selectedGa4Id && (

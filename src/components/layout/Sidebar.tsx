@@ -6,7 +6,7 @@ import {
     Home, Users, CheckSquare, Calendar,
     Search as SearchIcon,
     BarChart2, Share2, Palette, FileText,
-    User, Bug, X
+    Bug, X
 } from "lucide-react"
 import { XMSLogo } from "@/components/ui/XMSLogo"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -142,7 +142,7 @@ export function Sidebar() {
                 style={{ width: collapsed ? 64 : 232 }}
             >
                 {/* Logo */}
-                <div className={`h-16 border-b border-[var(--sidebar-border)] flex items-center transition-all duration-200 ${collapsed ? "justify-center px-3" : "px-5 justify-between"}`}>
+                <div className={`h-16 flex items-center transition-all duration-200 ${collapsed ? "justify-center px-3" : "px-5 justify-between"}`}>
                     {collapsed ? (
                         <img
                             src="/xms-isotipo.png"
@@ -163,11 +163,11 @@ export function Sidebar() {
                     <SectionLabel label="Menu" collapsed={collapsed} />
 
                     <div className="relative group">
-                        <NavLink to="/" end onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
-                            <Home className="w-4 h-4 shrink-0" />
-                            {!collapsed && "Home"}
+                        <NavLink to="/tasks" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                            <CheckSquare className="w-4 h-4 shrink-0" />
+                            {!collapsed && "Tasks"}
                         </NavLink>
-                        {collapsed && <Tooltip label="Home" />}
+                        {collapsed && <Tooltip label="Tasks" />}
                     </div>
 
                     <div className="relative group">
@@ -176,14 +176,6 @@ export function Sidebar() {
                             {!collapsed && "Calendar"}
                         </NavLink>
                         {collapsed && <Tooltip label="Calendar" />}
-                    </div>
-
-                    <div className="relative group">
-                        <NavLink to="/tasks" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
-                            <CheckSquare className="w-4 h-4 shrink-0" />
-                            {!collapsed && "Tasks"}
-                        </NavLink>
-                        {collapsed && <Tooltip label="Tasks" />}
                     </div>
 
                     <div className="relative group">
@@ -205,7 +197,15 @@ export function Sidebar() {
                     <SectionLabel label="Apps" collapsed={collapsed} />
 
                     <div className="relative group">
-                        <NavLink to="/seo" className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                        <NavLink to="/" end onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                            <Home className="w-4 h-4 shrink-0" />
+                            {!collapsed && "Home"}
+                        </NavLink>
+                        {collapsed && <Tooltip label="Home" />}
+                    </div>
+
+                    <div className="relative group">
+                        <NavLink to="/seo" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
                             <SearchIcon className="w-4 h-4 shrink-0" />
                             {!collapsed && <span>SEO Intelligence</span>}
                         </NavLink>
@@ -213,7 +213,7 @@ export function Sidebar() {
                     </div>
 
                     <div className="relative group">
-                        <NavLink to="/sem" className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                        <NavLink to="/sem" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
                             <BarChart2 className="w-4 h-4 shrink-0" />
                             {!collapsed && <span>SEM Intelligence</span>}
                         </NavLink>
@@ -221,7 +221,7 @@ export function Sidebar() {
                     </div>
 
                     <div className="relative group">
-                        <NavLink to="/social" className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
+                        <NavLink to="/social" onClick={closeMobile} className={({ isActive }) => `${navItemClass} ${isActive ? activeClass : inactiveClass}`}>
                             <Share2 className="w-4 h-4 shrink-0" />
                             {!collapsed && <span>Social Media</span>}
                         </NavLink>

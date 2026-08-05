@@ -1375,7 +1375,7 @@ export function SEMReportes() {
   }, [])
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-6">
+    <div className="mx-auto max-w-screen-2xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">
           Monthly Budget

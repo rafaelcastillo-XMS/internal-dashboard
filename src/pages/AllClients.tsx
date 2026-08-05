@@ -38,11 +38,11 @@ export function AllClients() {
   const activeCount = clients.filter(c => c.status === 'active').length
 
   return (
-    <div className="flex h-full bg-[var(--bg-app)] overflow-hidden relative">
+    <div className="flex h-full overflow-hidden relative">
       <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
         {/* Header */}
-        <div className="border-b border-[var(--border)] bg-[var(--bg-surface)]/90 backdrop-blur-xl shrink-0 sticky top-0 z-20">
-          <div className="mx-auto max-w-screen-2xl p-6 flex items-center gap-3">
+        <div className="shrink-0 sticky top-0 z-20">
+          <div className="mx-auto flex max-w-screen-2xl items-center gap-3 px-6 pt-6">
             <div className="w-10 h-10 rounded-xl bg-blue-600/10 flex items-center justify-center">
               <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>

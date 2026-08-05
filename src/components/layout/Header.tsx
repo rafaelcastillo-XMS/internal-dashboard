@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Sparkles, Moon, Sun, Bell, ChevronDown, X, LogOut, User, ArrowUp, PanelLeft, MoreVertical } from "lucide-react"
+import { Sparkles, Moon, Sun, Bell, X, User, ArrowUp, PanelLeft, MoreVertical } from "lucide-react"
 import { useNavigate, useLocation } from "react-router-dom"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useTheme } from "@/context/useTheme"
 import { useSidebar } from "@/context/useSidebar"
 import { supabase } from "@/lib/supabase"
@@ -18,39 +17,16 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
     const navigate = useNavigate()
     const { pathname } = useLocation()
 
-    const [userName, setUserName] = useState("Rafael A.")
-    const [userAvatar, setUserAvatar] = useState("")
-    const [userInitials, setUserInitials] = useState("RA")
-
-    useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (!session) return
-            const meta = session.user.user_metadata
-            const fullName: string = meta?.full_name ?? meta?.name ?? ""
-            if (fullName) {
-                const parts = fullName.split(" ")
-                setUserName(parts[0] + (parts[1] ? " " + parts[1][0] + "." : ""))
-                setUserInitials((parts[0][0] ?? "") + (parts[1]?.[0] ?? ""))
-            }
-            setUserAvatar(meta?.picture ?? meta?.avatar_url ?? "")
-        })
-    }, [])
-
-    const [dropdownOpen, setDropdownOpen] = useState(false)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
     const [aiOpen, setAiOpen] = useState(false)
     const [aiQuery, setAiQuery] = useState("")
     const [aiResponse, setAiResponse] = useState("")
     const [aiLoading, setAiLoading] = useState(false)
     const aiInputRef = useRef<HTMLTextAreaElement>(null)
-    const dropdownRef = useRef<HTMLDivElement>(null)
     const mobileMenuRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-                setDropdownOpen(false)
-            }
             if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
                 setMobileMenuOpen(false)
             }
@@ -136,7 +112,8 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
 
     return (
         <>
-            <header className="h-16 bg-white/90 dark:bg-[#1C2438]/90 backdrop-blur-md border-b border-[var(--sidebar-border)] flex items-center px-6 justify-between shrink-0 z-[100] sticky top-0">
+            <header className="h-16 shrink-0 z-[100] sticky top-0">
+                <div className="mx-auto flex h-full w-full items-center justify-between px-6">
                 <div className="flex items-center gap-2">
                     {/* Sidebar toggle - Mobile */}
                     <button
@@ -219,6 +196,7 @@ export function Header({ onMobileMenuClick }: HeaderProps = {}) {
                         </AnimatePresence>
                     </div>
 
+                </div>
                 </div>
             </header >
 

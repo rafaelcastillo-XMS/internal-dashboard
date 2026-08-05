@@ -363,7 +363,7 @@ export function CalendarPage() {
 
     return (
         <>
-        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 custom-scrollbar">
+        <div className="h-full overflow-y-auto custom-scrollbar">
             <div className="mx-auto flex min-h-full max-w-screen-2xl flex-col gap-5 p-6 xl:h-full xl:flex-row xl:overflow-hidden">
 
                 {gcalError && (

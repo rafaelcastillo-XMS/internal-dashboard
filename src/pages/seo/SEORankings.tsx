@@ -210,7 +210,7 @@ export function SEORankings() {
   const page1 = allGeoRows.filter((r) => r.position <= 10).length
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-6">
+    <div className="mx-auto max-w-screen-2xl">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">

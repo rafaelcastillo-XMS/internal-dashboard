@@ -144,7 +144,7 @@ export function SEOTraffic() {
   const overallConvRate  = totalSessions > 0 ? totalConversions / totalSessions : 0
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-6">
+    <div className="mx-auto max-w-screen-2xl">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Traffic Quality</h1>

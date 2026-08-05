@@ -18,7 +18,7 @@ export function SocialReports() {
     const [account, setAccount] = useState(ACCOUNT_OPTIONS[0].value)
 
     return (
-        <div className="mx-auto max-w-screen-2xl p-6">
+        <div className="mx-auto max-w-screen-2xl">
 
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-black dark:text-[#E2E5E9]">Reports</h1>

@@ -313,8 +313,8 @@ export function Clients() {
     const logoUrl = profile?.logo_url ?? ""
 
     return (
-        <div className="h-full overflow-y-auto bg-[var(--bg-app)] custom-scrollbar">
-            <div className="mx-auto max-w-screen-2xl p-6 h-full">
+        <div className="h-full overflow-y-auto custom-scrollbar">
+            <div className="mx-auto h-full max-w-screen-2xl p-6">
                 <div className="flex h-full w-full overflow-hidden rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
                     <ChatArea client={client} notebook={notebook} logoUrl={logoUrl} />
                     <SidebarInfo client={client} logoUrl={logoUrl} notionRelated={notionRelated} />

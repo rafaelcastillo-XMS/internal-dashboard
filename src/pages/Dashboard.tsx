@@ -200,7 +200,7 @@ export function Dashboard() {
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar">
-      <div className="mx-auto max-w-screen-2xl p-6">
+      <div className="mx-auto max-w-screen-2xl">
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="mb-8">

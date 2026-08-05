@@ -33,7 +33,7 @@ export function SocialPlanning() {
         currentMonth && day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
 
     return (
-        <div className="mx-auto max-w-screen-2xl p-6">
+        <div className="mx-auto max-w-screen-2xl">
 
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
                 <div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { motion } from "framer-motion"
-import { ArrowLeft, Camera, ChevronDown, Database, Save, Upload, CheckCircle2, XCircle, RefreshCw, Trash2 } from "lucide-react"
+import { ArrowLeft, ChevronDown, Database, Save, CheckCircle2, XCircle, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { updateClientRecord, deleteClientRecord, type ClientRecord } from "@/features/clients/clientsTable"
@@ -67,6 +67,7 @@ const BUDGET_TYPES = [
 const selectClass = "h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 pr-12 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
 
 export function ClientIntegrations() {
+    const showGoogleBusinessProfile = false
     const navigate = useNavigate()
     const { clientId } = useParams<{ clientId: string }>()
     const [searchParams] = useSearchParams()
@@ -450,7 +451,7 @@ export function ClientIntegrations() {
 
     return (
         <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-950 custom-scrollbar">
-            <div className="mx-auto max-w-screen-2xl p-6 space-y-6">
+            <div className="mx-auto max-w-screen-2xl space-y-6">
                 <div className="rounded-[28px] border border-slate-200/70 bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.14),_transparent_32%),linear-gradient(135deg,_rgba(255,255,255,0.97),_rgba(241,245,249,0.92))] p-6 shadow-sm dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),_transparent_30%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(15,23,42,0.92))]">
                     <div className="flex items-center gap-4">
                         <button
@@ -744,7 +745,7 @@ export function ClientIntegrations() {
                                     </p>
                                 </div>
 
-                                {false && (<>
+                                {showGoogleBusinessProfile && (<>
                                 {/* ── Google Business Profile card ── */}
                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
                                     <div className="flex items-start justify-between gap-3">

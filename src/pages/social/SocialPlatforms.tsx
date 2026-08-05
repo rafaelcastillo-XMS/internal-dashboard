@@ -332,7 +332,7 @@ export function SocialPlatforms() {
     const rangeLabel = `${fmtDay(startDate)} – ${fmtDay(endDate)}`
 
     return (
-        <div className="mx-auto max-w-screen-2xl p-6">
+        <div className="mx-auto max-w-screen-2xl">
 
             <div className="mb-6 flex flex-wrap items-end justify-between gap-5">
                 <div>
