@@ -19,6 +19,28 @@ function apiError(message, statusCode) {
   return error
 }
 
+function getResponseText(payload) {
+  if (typeof payload?.output_text === "string") return payload.output_text
+  const parts = (payload?.output || []).flatMap(item => item?.content || [])
+  return parts.find(part => typeof part?.text === "string")?.text || ""
+}
+
+function parseStructuredResult(payload) {
+  const raw = getResponseText(payload).trim()
+  if (!raw) return null
+  const candidates = [raw]
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  if (fenced) candidates.push(fenced[1])
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate)
+      if (parsed && typeof parsed.summary === "string" && Array.isArray(parsed.strengths) &&
+          Array.isArray(parsed.improvements) && typeof parsed.optimizedPrompt === "string") return parsed
+    } catch { /* Try the next representation. */ }
+  }
+  return null
+}
+
 /**
  * Uses the server-side OpenAI Responses API. The API key must never be sent
  * to the browser; callers only receive the structured result below.
@@ -64,9 +86,9 @@ export async function optimizePromptWithOpenAI(prompt) {
     throw apiError(`OpenAI response incomplete: ${payload.incomplete_details?.reason || "unknown reason"}`, 502)
   }
 
-  try {
-    return JSON.parse(payload.output_text)
-  } catch {
+  const result = parseStructuredResult(payload)
+  if (!result) {
     throw apiError("OpenAI returned an invalid structured prompt analysis", 502)
   }
+  return result
 }
