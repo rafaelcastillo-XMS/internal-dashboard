@@ -61,9 +61,9 @@ export async function optimizePromptWithOpenAI(prompt) {
       input: [
         {
           role: "system",
-          content: "You are an expert prompt engineer. Analyze the user's prompt and improve it without changing its intent. Respond in the same language as the user. Be concrete, preserve useful domain details, remove ambiguity, and make the output ready to paste into an AI model. Return only the requested structured fields.",
+          content: "You are an expert prompt engineer. Analyze and improve ONLY the exact prompt between <user_prompt> and </user_prompt>. Do not substitute a generic example or invent a different task. Preserve the user's language, topic, channel, audience, requested length, and intent. Respond in the same language as the user. Be concrete, preserve useful domain details, remove ambiguity, and make the output ready to paste into an AI model. Return only the requested structured fields.",
         },
-        { role: "user", content: prompt },
+        { role: "user", content: `<user_prompt>\n${prompt}\n</user_prompt>` },
       ],
       text: {
         format: {
