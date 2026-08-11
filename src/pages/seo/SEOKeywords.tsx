@@ -73,7 +73,7 @@ export function SEOKeywords() {
         <DashboardControls {...state} onRefresh={() => fetchData(true)} pageTitle="Keyword-Intelligence" />
       </div>
 
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <CardDataStats title="Total Queries" value={gsc.queries.length.toLocaleString()} delta={null}
           deltaLabel="keywords tracked" sparklineData={[]} sparklineColor="#1A72D9"
           icon={<KeywordIcon />} iconBg="bg-[#1A72D9]/10" source="GSC" />

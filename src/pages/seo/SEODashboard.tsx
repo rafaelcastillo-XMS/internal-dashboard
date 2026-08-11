@@ -156,7 +156,7 @@ export function SEODashboard() {
       )}
 
       {/* Stat cards */}
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <CardDataStats title="Total Clicks" value={data.gsc.totalClicks.toLocaleString()}
           delta={data.gsc.clicksDelta} deltaLabel={`vs prior ${DATE_PRESETS[state.selectedPreset].days} days`}
           sparklineData={data.gsc.clicksSparkline} sparklineColor="#1A72D9"
@@ -179,11 +179,11 @@ export function SEODashboard() {
 
       {/* Chart + CWV */}
       <section className="mb-6 grid grid-cols-12 gap-4">
-        <div className="col-span-12 xl:col-span-8">
+        <div className="col-span-12 2xl:col-span-8">
           <ChartVisibility impressions={data.gsc.impressionsTimeSeries} clicks={data.gsc.clicksTimeSeries}
             labels={data.gsc.dateLabels} isDark={isDark} dateRangeLabel={dateRangeLabel} />
         </div>
-        <div className="col-span-12 xl:col-span-4">
+        <div className="col-span-12 2xl:col-span-4">
           <CoreWebVitals metrics={data.psi.metrics} mobile={data.psi.mobile} url={data.psi.auditedUrl} />
         </div>
       </section>

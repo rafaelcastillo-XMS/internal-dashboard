@@ -86,10 +86,10 @@ export function SEOCoreWebVitals() {
       </section>
 
       <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 xl:col-span-7">
+        <div className="col-span-12 2xl:col-span-7">
           <CoreWebVitals metrics={metrics} mobile={psi.mobile} url={psi.auditedUrl} />
         </div>
-        <div className="col-span-12 xl:col-span-5">
+        <div className="col-span-12 2xl:col-span-5">
           <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark h-full">
             <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
               <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Google CWV Thresholds</h3>

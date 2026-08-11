@@ -155,7 +155,7 @@ export function SEOTraffic() {
         <DashboardControls {...state} onRefresh={() => fetchData(true)} pageTitle="Traffic-Quality" />
       </div>
 
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <CardDataStats title="Total Sessions" value={totalSessions.toLocaleString()} delta={ga4.engagedSessionsDelta}
           deltaLabel={`vs prior ${DATE_PRESETS[state.selectedPreset].days} days`} sparklineData={ga4.engagedSessionsSparkline}
           sparklineColor="#1A72D9" icon={<TrafficIcon />} iconBg="bg-[#1A72D9]/10" source="GA4" />

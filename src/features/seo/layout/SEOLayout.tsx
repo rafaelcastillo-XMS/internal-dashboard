@@ -10,7 +10,7 @@ export function SEOLayout() {
         <SEOSidebar />
         <div className="flex flex-col flex-1 h-full min-w-0 relative">
           <Header />
-          <main className="flex-1 overflow-y-auto relative">
+          <main className="internal-dashboard-main flex-1 overflow-y-auto overflow-x-hidden relative">
             <Outlet />
           </main>
         </div>

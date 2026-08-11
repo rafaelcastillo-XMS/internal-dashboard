@@ -244,7 +244,7 @@ export function SEMDashboard() {
           </p>
         </div>
         <div className="px-6 py-5">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-7">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 2xl:grid-cols-7">
             {state.loading ? (
               [...Array(7)].map((_, i) => (
                 <div key={i} className="rounded-xl border border-stroke bg-white px-5 py-4 dark:border-strokedark dark:bg-boxdark">

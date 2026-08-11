@@ -49,7 +49,7 @@ export function SocialDashboard() {
       )}
 
       {/* ── Metric cards ── */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 2xl:grid-cols-4">
         <MetricCard label="Followers"      value={fmt(followers)}  hint="Across connected accounts" />
         <MetricCard label="Posts (30d)"    value={fmt(posts.length)} />
         <MetricCard label="Engagement"     value={fmt(engagement)} hint="People talking about this" />

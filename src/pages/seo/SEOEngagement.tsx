@@ -166,7 +166,7 @@ export function SEOEngagement() {
         <DashboardControls {...state} onRefresh={() => fetchData(true)} pageTitle="GA4-Engagement" />
       </div>
 
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <CardDataStats title="Engaged Sessions" value={(ga4.engagedSessions ?? 0).toLocaleString()} delta={ga4.engagedSessionsDelta}
           deltaLabel={`vs prior ${DATE_PRESETS[state.selectedPreset].days} days`} sparklineData={ga4.engagedSessionsSparkline}
           sparklineColor="#10B981" icon={<SessionsIcon />} iconBg="bg-meta-3/10" source="GA4" />

@@ -66,7 +66,7 @@ export function SEOMobile() {
 
       <div className="grid grid-cols-12 gap-6">
         {/* Left: verdict + issues */}
-        <div className="col-span-12 xl:col-span-5 space-y-4">
+        <div className="col-span-12 2xl:col-span-5 space-y-4">
           <div className={`rounded-xl border px-6 py-6 ${verdict.bg} ${verdict.border}`}>
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10">
@@ -122,7 +122,7 @@ export function SEOMobile() {
         </div>
 
         {/* Right: best practices */}
-        <div className="col-span-12 xl:col-span-7">
+        <div className="col-span-12 2xl:col-span-7">
           <div className="rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark h-full">
             <div className="border-b border-stroke px-6 py-5 dark:border-strokedark">
               <h3 className="font-semibold text-black dark:text-[#E2E5E9]">Mobile Best Practices</h3>

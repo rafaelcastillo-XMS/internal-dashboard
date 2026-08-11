@@ -224,7 +224,7 @@ export function SEORankings() {
         <DashboardControls {...state} onRefresh={() => fetchData(true)} pageTitle="Keyword-Rankings" />
       </div>
 
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <CardDataStats title="Primary Keywords" value={groups.length.toLocaleString()} delta={null}
           deltaLabel="unique keywords tracked" sparklineData={[]} sparklineColor="#1A72D9"
           icon={<KeywordIcon />} iconBg="bg-[#80CAEE]/10" source="GSC" />
