@@ -199,7 +199,7 @@ export function Dashboard() {
   useEffect(() => { requestAnimationFrame(taskSlider.check)  }, [urgentTasks.length])
 
   return (
-    <div className="h-full overflow-y-auto custom-scrollbar">
+    <div className="internal-dashboard-main h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
       <div className="mx-auto max-w-screen-2xl">
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -258,8 +258,7 @@ export function Dashboard() {
                 return (
                   <div
                     key={event.id}
-                    className={`flex-none rounded-xl border border-stroke bg-white p-3 transition-opacity dark:border-strokedark dark:bg-boxdark ${past ? "opacity-40" : "opacity-100"}`}
-                    style={{ width: "calc(25% - 9px)", minWidth: 160 }}
+                    className={`w-[calc(85%_-_6px)] flex-none rounded-xl border border-stroke bg-white p-3 transition-opacity sm:w-[calc(50%_-_6px)] 2xl:w-[calc(25%_-_9px)] dark:border-strokedark dark:bg-boxdark ${past ? "opacity-40" : "opacity-100"}`}
                   >
                     <div className="mb-2 flex items-center gap-2">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#1A72D9]">
@@ -326,8 +325,7 @@ export function Dashboard() {
                   <Link
                     key={task.id}
                     to={`/tasks/${task.id}`}
-                    className="flex-none rounded-xl border border-stroke bg-white p-3 transition-shadow hover:shadow-md dark:border-strokedark dark:bg-boxdark"
-                    style={{ width: "calc(25% - 9px)", minWidth: 160 }}
+                    className="w-[calc(85%_-_6px)] flex-none rounded-xl border border-stroke bg-white p-3 transition-shadow hover:shadow-md sm:w-[calc(50%_-_6px)] 2xl:w-[calc(25%_-_9px)] dark:border-strokedark dark:bg-boxdark"
                   >
                     <div className="mb-2 flex items-center gap-2">
                       <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${overdue ? "bg-red-500" : "bg-[#1A72D9]"}`}>
@@ -364,8 +362,7 @@ export function Dashboard() {
               <Link
                 key={title}
                 to="/guidelines"
-                className="flex-none rounded-xl border border-stroke bg-white p-4 transition-shadow hover:shadow-md dark:border-strokedark dark:bg-boxdark"
-                style={{ width: "calc(25% - 9px)", minWidth: 160 }}
+                className="w-[calc(85%_-_6px)] flex-none rounded-xl border border-stroke bg-white p-4 transition-shadow hover:shadow-md sm:w-[calc(50%_-_6px)] 2xl:w-[calc(25%_-_9px)] dark:border-strokedark dark:bg-boxdark"
               >
                 <div className={`mb-3 flex h-8 w-8 items-center justify-center rounded-lg ${c.bg}`}>
                   <Icon className={`h-4 w-4 ${c.text}`} />
