@@ -86,7 +86,7 @@ export function RunAhrefsCard() {
     if (!result) return
     setSaving(true)
     setError('')
-    const { error: dbErr } = await supabase.from('seo_ahrefs_snapshots').insert({
+    const { error: dbErr } = await supabase.from('seo_ahrefs_snapshots').upsert({
       client,
       domain:            result.domain,
       snapshot_date:     result.snapshot_date,
@@ -97,7 +97,7 @@ export function RunAhrefsCard() {
       backlinks:         result.backlinks,
       referring_domains: result.referring_domains,
       notes:             analysisNotes.trim() || null,
-    })
+    }, { onConflict: 'client,domain,snapshot_date' })
     if (dbErr) {
       setError(dbErr.message)
     } else {

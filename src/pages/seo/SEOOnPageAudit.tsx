@@ -89,6 +89,7 @@ interface OnPageAuditRow {
   error_message: string | null
   created_at: string
   completed_at: string | null
+  screaming_frog_url: string | null
 }
 
 export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
@@ -129,7 +130,7 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
   const loadAudits = useCallback(async () => {
     let query = supabase
       .from('seo_onpage_audits')
-      .select('id, client, landing_page_url, status, error_message, created_at, completed_at')
+      .select('id, client, landing_page_url, status, error_message, created_at, completed_at, screaming_frog_url')
       .order('created_at', { ascending: false })
       .limit(50)
     if (seoState.clientName) query = query.eq('client', seoState.clientName)
@@ -197,7 +198,7 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
     const res = await fetch(`/api/seo/ahrefs-snapshot?target=${encodeURIComponent(domain)}`)
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || `Ahrefs request failed (${res.status})`)
-    const { error: dbErr } = await supabase.from('seo_ahrefs_snapshots').insert({
+    const { error: dbErr } = await supabase.from('seo_ahrefs_snapshots').upsert({
       client: clientName,
       domain: data.domain,
       snapshot_date: data.snapshot_date,
@@ -208,7 +209,7 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
       backlinks: data.backlinks ?? null,
       referring_domains: data.referring_domains ?? null,
       notes: 'Generated from Run Audit',
-    })
+    }, { onConflict: 'client,domain,snapshot_date' })
     if (dbErr) throw new Error(dbErr.message)
     setAhrefsStatus('success')
   }
@@ -266,6 +267,12 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
     }
 
     if (!screamingFrogEnabled) {
+      await supabase.from('seo_onpage_audits').insert({
+        client: selectedClient,
+        landing_page_url: selectedLandingPageUrl,
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+      })
       setStatus(STATUS.idle)
       loadAudits()
       return
@@ -1010,7 +1017,7 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
                           {audit.completed_at ? new Date(audit.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                         </td>
                         <td className="px-5 py-4 text-right">
-                          {audit.status === 'completed' ? (
+                          {audit.status === 'completed' && audit.screaming_frog_url ? (
                             <button
                               type="button"
                               onClick={() => viewSavedAudit(audit)}
@@ -1019,6 +1026,8 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
                             >
                               <Eye className="h-3.5 w-3.5" /> {viewingId === audit.id ? 'Loading…' : 'View Report'} <ChevronRight className="h-3 w-3" />
                             </button>
+                          ) : audit.status === 'completed' ? (
+                            <span className="text-[11px] text-body dark:text-bodydark">Ahrefs baseline only</span>
                           ) : audit.error_message ? (
                             <span className="inline-block max-w-[170px] truncate text-[10px] text-rose-500" title={audit.error_message}>{audit.error_message}</span>
                           ) : <span className="text-body">—</span>}
