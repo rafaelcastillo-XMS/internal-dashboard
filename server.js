@@ -34,6 +34,14 @@ app.use((_req, res, next) => {
 const mondayTaskCache = new Map()
 const MONDAY_CACHE_TTL_MS = 5 * 60 * 1000
 
+function normalizeMondayLabel(label) {
+  return (label ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .toLowerCase()
+}
+
 function buildEmailMap() {
   const raw = process.env.MONDAY_EMAIL_MAP ?? ""
   return Object.fromEntries(
@@ -267,6 +275,7 @@ app.get("/api/monday/tasks", async (req, res) => {
               id name state updated_at
               column_values {
                 id text type
+                column { title }
                 ... on StatusValue { label index }
                 ... on DateValue { date }
                 ... on PeopleValue { persons_and_teams { id kind } }
@@ -302,8 +311,14 @@ app.get("/api/monday/tasks", async (req, res) => {
     const tasks = rawItems.map(item => {
       const byId = id => item.column_values.find(c => c.id === id)
       const byType = type => item.column_values.find(c => c.type === type)
-      const statusCol = byId("status") ?? byType("status")
-      const priorityCol = byId("priority") ?? byType("priority")
+      // Monday reuses the "status" column type for status, priority, and plain
+      // category tags (department, service, etc.), and the "status" column id
+      // is only a convention some boards follow — several boards here rename
+      // or repurpose it. The column *title* is the one thing a human keeps
+      // meaningful, so match on that instead of id/type.
+      const byTitle = titles => item.column_values.find(c => titles.includes(normalizeMondayLabel(c.column?.title ?? "")))
+      const statusCol = byTitle(["status", "estado"]) ?? byId("status") ?? byType("status")
+      const priorityCol = byTitle(["priority", "priori", "prioridad"]) ?? byId("priority")
       const dueDateCol = byId("due_date") ?? byId("date") ?? byType("date")
       return {
         id: item.id,
@@ -316,18 +331,11 @@ app.get("/api/monday/tasks", async (req, res) => {
         dueDate: dueDateCol?.date ?? dueDateCol?.text ?? null,
         updatedAt: item.updated_at,
       }
-    }).filter(task => {
-      const normalized = task.status
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .trim()
-        .toLowerCase()
-      return ![
-        "done", "complete", "completed", "hecho", "hecha",
-        "completado", "completada", "finalizado", "finalizada",
-        "terminado", "terminada", "listo", "lista",
-      ].includes(normalized)
-    }).slice(0, 20)
+    }).filter(task => ![
+      "done", "complete", "completed", "hecho", "hecha",
+      "completado", "completada", "finalizado", "finalizada",
+      "terminado", "terminada", "listo", "lista",
+    ].includes(normalizeMondayLabel(task.status))).slice(0, 20)
 
     const payload = {
       user: { id: user.id, name: user.name, email: user.email, avatar: user.photo_thumb_small },

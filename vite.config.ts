@@ -1096,6 +1096,14 @@ function companySkillsPlugin() {
 const mondayTaskCache = new Map<string, { at: number; payload: unknown }>()
 const MONDAY_CACHE_TTL_MS = 5 * 60 * 1000
 
+function normalizeMondayLabel(label: string | null | undefined): string {
+  return (label ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .toLowerCase()
+}
+
 // ─── Monday.com tasks plugin ──────────────────────────────────────────────────
 function mondayPlugin() {
   return {
@@ -1192,6 +1200,7 @@ function mondayPlugin() {
                         id
                         text
                         type
+                        column { title }
                         ... on StatusValue { label index }
                         ... on DateValue { date }
                         ... on PeopleValue { persons_and_teams { id kind } }
@@ -1210,7 +1219,7 @@ function mondayPlugin() {
                     name: string
                     state: string
                     updated_at: string
-                    column_values: { id: string; text: string; type: string; label?: string; index?: number; date?: string; persons_and_teams?: { id: string; kind: string }[] }[]
+                    column_values: { id: string; text: string; type: string; column?: { title: string }; label?: string; index?: number; date?: string; persons_and_teams?: { id: string; kind: string }[] }[]
                   }[]
                 }
               }[]
@@ -1242,9 +1251,14 @@ function mondayPlugin() {
             const tasks = rawItems.map(item => {
               const byId = (id: string) => item.column_values.find(c => c.id === id)
               const byType = (type: string) => item.column_values.find(c => c.type === type)
+              // Monday reuses the "status" column type for status, priority, and
+              // plain category tags, and the "status" id is only a convention —
+              // several boards rename or repurpose it. Match on the column
+              // title instead, since that's the one thing a human keeps meaningful.
+              const byTitle = (titles: string[]) => item.column_values.find(c => titles.includes(normalizeMondayLabel(c.column?.title)))
 
-              const statusCol = byId("status") ?? byType("status")
-              const priorityCol = byId("priority") ?? byType("priority")
+              const statusCol = byTitle(["status", "estado"]) ?? byId("status") ?? byType("status")
+              const priorityCol = byTitle(["priority", "priori", "prioridad"]) ?? byId("priority")
               const dueDateCol = byId("due_date") ?? byId("date") ?? byType("date")
 
               return {
@@ -1258,18 +1272,11 @@ function mondayPlugin() {
                 dueDate: (dueDateCol as { date?: string })?.date ?? dueDateCol?.text ?? null,
                 updatedAt: item.updated_at,
               }
-            }).filter(task => {
-              const normalized = task.status
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "")
-                .trim()
-                .toLowerCase()
-              return ![
-                "done", "complete", "completed", "hecho", "hecha",
-                "completado", "completada", "finalizado", "finalizada",
-                "terminado", "terminada", "listo", "lista",
-              ].includes(normalized)
-            }).slice(0, 20)
+            }).filter(task => ![
+              "done", "complete", "completed", "hecho", "hecha",
+              "completado", "completada", "finalizado", "finalizada",
+              "terminado", "terminada", "listo", "lista",
+            ].includes(normalizeMondayLabel(task.status))).slice(0, 20)
 
             const payload = { user: { id: user.id, name: user.name, email: user.email, avatar: user.photo_thumb_small }, tasks }
             mondayTaskCache.set(user.id, { at: Date.now(), payload })
