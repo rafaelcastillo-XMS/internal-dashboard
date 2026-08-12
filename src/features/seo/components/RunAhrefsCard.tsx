@@ -117,7 +117,7 @@ export function RunAhrefsCard() {
         <div>
           <h3 className="text-lg font-bold text-black dark:text-[#E2E5E9]">Run Initial Analysis</h3>
           <p className="mt-0.5 text-sm text-body dark:text-bodydark">
-            Select client, enter their domain, and pull the Ahrefs baseline — saved to Supabase
+            Select client, enter their domain, and pull the Ahrefs baseline — saved to the database
           </p>
         </div>
         <span className="shrink-0 flex items-center gap-1.5 rounded-full border border-orange-300/30
@@ -214,7 +214,7 @@ export function RunAhrefsCard() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
             <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              Baseline saved successfully to Supabase
+              Baseline saved successfully
             </p>
           </div>
         )}

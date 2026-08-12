@@ -12,6 +12,8 @@ const report: Report = {
   month: 'July',
   year: 2026,
   status: 'Draft',
+  hasGoogleAds: true,
+  hasLsa: true,
   slides: [
     { id: 'cover', type: 'cover', title: 'Cover', order: 2, notes: '', content: { subtitle: 'July 2026' } },
     { id: 'custom', type: 'custom', title: 'New Slide', order: 3, notes: '', content: { customHtml: '<strong>Saved</strong>' } },
@@ -46,6 +48,8 @@ describe('monthly report Supabase mapping', () => {
       month: report.month,
       year: report.year,
       status: report.status,
+      has_google_ads: report.hasGoogleAds,
+      has_lsa: report.hasLsa,
       slides: report.slides,
       created_at: report.createdAt,
       updated_at: report.updatedAt,

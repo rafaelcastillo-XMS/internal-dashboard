@@ -24,6 +24,8 @@ export interface Report {
   month: string
   year: number
   status: ReportStatus
+  hasGoogleAds: boolean
+  hasLsa: boolean
   slides: Slide[]
   createdAt: string
   updatedAt: string

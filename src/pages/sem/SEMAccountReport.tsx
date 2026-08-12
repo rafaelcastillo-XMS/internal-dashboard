@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, FileText, FolderOpen, Plus, RotateCcw, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, FileText, FolderOpen, MoreVertical, Plus, RotateCcw, Trash2, X } from 'lucide-react'
 import { useSEMDashboardState } from '@/features/sem/hooks/useSEMDashboardState'
 import {
   REPORT_MONTHS,
   createReportFromTemplate,
-  createSeedReportsForClient,
+  createSlidesTemplate,
   initialsForName,
 } from '@/features/sem/reports/mockReports'
 import {
+  deleteStoredReport,
   getStoredReport,
   listStoredReports,
   migrateLegacyStoredReports,
@@ -109,19 +110,128 @@ function ReportStatusBadge({ status }: { status: ReportStatus }) {
   )
 }
 
+function ReportActionsMenu({
+  report,
+  busy,
+  onRestore,
+  onDelete,
+}: {
+  report: Report
+  busy: boolean
+  onRestore: (report: Report) => void
+  onDelete: (report: Report) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  const toggleOpen = () => {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+    }
+    setOpen((value) => !value)
+  }
+
+  return (
+    <div className="relative inline-block text-left">
+      <button
+        ref={buttonRef}
+        onClick={toggleOpen}
+        disabled={busy}
+        aria-label="More actions"
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-stroke bg-white text-slate-500 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-strokedark dark:bg-boxdark dark:hover:bg-slate-800"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && menuPos && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            style={{ top: menuPos.top, right: menuPos.right }}
+            className="fixed z-50 w-44 overflow-hidden rounded-md border border-stroke bg-white py-1 shadow-xl dark:border-strokedark dark:bg-boxdark"
+          >
+            <button
+              onClick={() => { setOpen(false); onRestore(report) }}
+              title="Regenerate this report from scratch, as if it were just created for the same date"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Restore
+            </button>
+            <button
+              onClick={() => { setOpen(false); onDelete(report) }}
+              title="Delete this report"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:hover:bg-red-500/10"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ConfirmDeleteModal({
+  report,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  report: Report | null
+  deleting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  if (!report) return null
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-2xl dark:bg-boxdark">
+        <h2 className="text-lg font-bold text-black dark:text-[#E2E5E9]">Delete report?</h2>
+        <p className="mt-2 text-sm text-body dark:text-bodydark">
+          This permanently deletes the {report.month} {report.year} report for{' '}
+          <span className="font-semibold text-black dark:text-[#E2E5E9]">{report.clientName}</span>. This can&apos;t be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="px-4 py-2 text-sm font-semibold text-slate-600 transition hover:text-black disabled:opacity-60 dark:text-slate-300 dark:hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-60"
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CreateReportPanel({
   clientOptions,
   defaultClientId,
   onCreate,
+  onCancel,
 }: {
   clientOptions: AccountChoice[]
   defaultClientId: string
-  onCreate: (clientId: string, month: string, year: number) => Promise<void>
+  onCreate: (clientId: string, month: string, year: number, hasGoogleAds: boolean, hasLsa: boolean) => Promise<void>
+  onCancel: () => void
 }) {
   const today = new Date()
   const [clientId, setClientId] = useState(defaultClientId)
   const [month, setMonth] = useState(REPORT_MONTHS[today.getMonth()])
   const [year, setYear] = useState(today.getFullYear())
+  const [hasGoogleAds, setHasGoogleAds] = useState(true)
+  const [hasLsa, setHasLsa] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [createError, setCreateError] = useState('')
 
@@ -131,9 +241,40 @@ function CreateReportPanel({
 
   return (
     <div className="rounded-lg border border-stroke bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)] dark:border-strokedark dark:bg-boxdark">
-      <div className="mb-4 flex items-center gap-2">
-        <Plus className="h-4 w-4 text-slate-500" />
-        <h2 className="font-bold text-black dark:text-[#E2E5E9]">Create New Report</h2>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Plus className="h-4 w-4 text-slate-500" />
+          <h2 className="font-bold text-black dark:text-[#E2E5E9]">Create New Report</h2>
+        </div>
+        <button
+          onClick={onCancel}
+          aria-label="Cancel"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-stroke text-slate-500 transition hover:border-slate-400 hover:bg-slate-100 dark:border-strokedark dark:hover:bg-slate-800"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mb-4 flex flex-wrap items-center gap-5">
+        <span className="text-xs font-bold uppercase tracking-[0.14em] text-body dark:text-bodydark">Services</span>
+        <label className="flex items-center gap-2 text-sm font-semibold text-black dark:text-[#E2E5E9]">
+          <input
+            type="checkbox"
+            checked={hasGoogleAds}
+            onChange={(event) => setHasGoogleAds(event.target.checked)}
+            className="h-4 w-4 rounded border-stroke accent-slate-800"
+          />
+          Google Ads
+        </label>
+        <label className="flex items-center gap-2 text-sm font-semibold text-black dark:text-[#E2E5E9]">
+          <input
+            type="checkbox"
+            checked={hasLsa}
+            onChange={(event) => setHasLsa(event.target.checked)}
+            className="h-4 w-4 rounded border-stroke accent-slate-800"
+          />
+          LSA
+        </label>
+        <span className="text-xs text-body dark:text-bodydark">Fixed once the report is created.</span>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(260px,1fr)_180px_140px_auto] lg:items-end">
         <label className="block">
@@ -177,9 +318,9 @@ function CreateReportPanel({
             setGenerating(true)
             setCreateError('')
             try {
-              await onCreate(clientId, month, year)
+              await onCreate(clientId, month, year, hasGoogleAds, hasLsa)
             } catch (error) {
-              setCreateError(error instanceof Error ? error.message : 'Unable to create this report in Supabase.')
+              setCreateError(error instanceof Error ? error.message : 'Unable to create this report. Please try again.')
             } finally {
               setGenerating(false)
             }
@@ -202,14 +343,47 @@ function ReportsListPage({
   currentClient,
   onCreate,
   onOpenReport,
+  onRestoreReport,
+  onDeleteReport,
 }: {
   reports: Report[]
   clientOptions: AccountChoice[]
   currentClient: AccountChoice
-  onCreate: (clientId: string, month: string, year: number) => Promise<void>
+  onCreate: (clientId: string, month: string, year: number, hasGoogleAds: boolean, hasLsa: boolean) => Promise<void>
   onOpenReport: (report: Report) => void
+  onRestoreReport: (report: Report) => Promise<void>
+  onDeleteReport: (report: Report) => Promise<void>
 }) {
   const [createOpen, setCreateOpen] = useState(false)
+  const [busyReportId, setBusyReportId] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<Report | null>(null)
+  const [actionError, setActionError] = useState('')
+
+  const handleRestore = async (report: Report) => {
+    setBusyReportId(report.id)
+    setActionError('')
+    try {
+      await onRestoreReport(report)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to restore this report.')
+    } finally {
+      setBusyReportId(null)
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return
+    setBusyReportId(pendingDelete.id)
+    setActionError('')
+    try {
+      await onDeleteReport(pendingDelete)
+      setPendingDelete(null)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to delete this report.')
+    } finally {
+      setBusyReportId(null)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-screen-2xl">
@@ -240,6 +414,7 @@ function ReportsListPage({
             clientOptions={clientOptions}
             defaultClientId={currentClient.value}
             onCreate={onCreate}
+            onCancel={() => setCreateOpen(false)}
           />
         </div>
       )}
@@ -251,14 +426,17 @@ function ReportsListPage({
             <h2 className="font-bold text-black dark:text-[#E2E5E9]">Monthly Reports</h2>
           </div>
         </div>
+        {actionError && <p className="border-b border-stroke px-5 py-3 text-sm font-semibold text-red-600 dark:border-strokedark">{actionError}</p>}
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-[940px] text-sm">
             <thead>
               <tr className="bg-slate-100 text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <th className="px-5 py-3">Client name</th>
                 <th className="px-5 py-3">Month</th>
                 <th className="px-5 py-3">Year</th>
                 <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3 text-center">G Ads</th>
+                <th className="px-5 py-3 text-center">LSA</th>
                 <th className="px-5 py-3">Last updated</th>
                 <th className="px-5 py-3 text-right">Action</th>
               </tr>
@@ -281,20 +459,38 @@ function ReportsListPage({
                   <td className="px-5 py-4 text-body dark:text-bodydark">{report.month}</td>
                   <td className="px-5 py-4 text-body dark:text-bodydark">{report.year}</td>
                   <td className="px-5 py-4"><ReportStatusBadge status={report.status} /></td>
+                  <td className="px-5 py-4 text-center">
+                    <input type="checkbox" checked={report.hasGoogleAds} disabled readOnly
+                      title={report.hasGoogleAds ? 'Google Ads slides are included' : 'Google Ads slides are not included'}
+                      className="h-4 w-4 rounded border-stroke accent-slate-800" />
+                  </td>
+                  <td className="px-5 py-4 text-center">
+                    <input type="checkbox" checked={report.hasLsa} disabled readOnly
+                      title={report.hasLsa ? 'LSA slides are included' : 'LSA slides are not included'}
+                      className="h-4 w-4 rounded border-stroke accent-slate-800" />
+                  </td>
                   <td className="px-5 py-4 text-body dark:text-bodydark">{formatUpdated(report.updatedAt)}</td>
                   <td className="px-5 py-4 text-right">
-                    <button
-                      onClick={() => onOpenReport(report)}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-stroke bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 dark:border-strokedark dark:bg-boxdark dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      Open Report
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => onOpenReport(report)}
+                        className="inline-flex h-9 items-center gap-2 rounded-md border border-stroke bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 dark:border-strokedark dark:bg-boxdark dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        Open Report
+                      </button>
+                      <ReportActionsMenu
+                        report={report}
+                        busy={busyReportId === report.id}
+                        onRestore={handleRestore}
+                        onDelete={setPendingDelete}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
               {reports.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-sm text-body dark:text-bodydark">
+                  <td colSpan={8} className="px-5 py-12 text-center text-sm text-body dark:text-bodydark">
                     No reports yet for this client.
                   </td>
                 </tr>
@@ -303,6 +499,12 @@ function ReportsListPage({
           </table>
         </div>
       </div>
+      <ConfirmDeleteModal
+        report={pendingDelete}
+        deleting={busyReportId === pendingDelete?.id}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   )
 }
@@ -560,7 +762,7 @@ function ReportEditorView({
       setDraft(persisted)
       setDirty(false)
     } catch (error) {
-      setPersistenceError(error instanceof Error ? error.message : 'Unable to save this report in Supabase.')
+      setPersistenceError(error instanceof Error ? error.message : 'Unable to save this report. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -793,7 +995,7 @@ export function SEMAccountReport() {
 
     loadReports()
       .catch((error) => {
-        if (active) setReportsLoadError(error instanceof Error ? error.message : 'Unable to load monthly reports from Supabase.')
+        if (active) setReportsLoadError(error instanceof Error ? error.message : 'Unable to load monthly reports. Please try again.')
       })
       .finally(() => {
         if (active) setReportsLoading(false)
@@ -837,23 +1039,6 @@ export function SEMAccountReport() {
     return [{ value: currentClientValue, label: currentClientLabel }, ...options]
   }, [semState.accountOptions, currentClientValue, currentClientLabel])
 
-  useEffect(() => {
-    if (reportId || reportsLoading || reportsLoadError) return
-    if (!effectiveClientId || !currentClient.label || clientLogo === null) return
-    if (reports.some((report) => report.clientId === effectiveClientId)) return
-
-    let active = true
-    const seeded = createSeedReportsForClient({ id: effectiveClientId, name: currentClient.label, logo: clientLogo })
-    upsertStoredReports(seeded)
-      .then((saved) => {
-        if (active) setReports((current) => mergeReports(current, saved))
-      })
-      .catch((error) => {
-        if (active) setReportsLoadError(error instanceof Error ? error.message : 'Unable to create the initial monthly reports in Supabase.')
-      })
-    return () => { active = false }
-  }, [effectiveClientId, currentClient.label, clientLogo, reportId, reports, reportsLoadError, reportsLoading])
-
   const sortedReports = useMemo(() => {
     return reports
       .filter((report) => report.clientId === effectiveClientId)
@@ -869,7 +1054,7 @@ export function SEMAccountReport() {
     return saved
   }, [])
 
-  const handleCreate = async (selectedClientId: string, month: string, year: number) => {
+  const handleCreate = async (selectedClientId: string, month: string, year: number, hasGoogleAds: boolean, hasLsa: boolean) => {
     const option = clientOptions.find((item) => item.value === selectedClientId)
     const resolvedLogo = selectedClientId === effectiveClientId && clientLogo !== null
       ? clientLogo
@@ -880,6 +1065,8 @@ export function SEMAccountReport() {
       clientLogo: resolvedLogo,
       month,
       year,
+      hasGoogleAds,
+      hasLsa,
     })
     const report = {
       ...(await hydrateReportWithRealGoogleAdsData(baseReport)),
@@ -894,11 +1081,27 @@ export function SEMAccountReport() {
     navigate(`/sem/clients/${encodeURIComponent(report.clientId)}/reports/${report.id}`)
   }
 
+  const restoreReport = async (report: Report) => {
+    const freshSlides = createSlidesTemplate(report.clientId, report.clientName, report.month, report.year, {
+      hasGoogleAds: report.hasGoogleAds,
+      hasLsa: report.hasLsa,
+    })
+    const reset: Report = { ...report, slides: freshSlides, status: 'Draft', updatedAt: new Date().toISOString() }
+    const hydrated = await hydrateReportWithRealGoogleAdsData(reset)
+    const saved = await upsertStoredReport({ ...hydrated, updatedAt: new Date().toISOString() })
+    setReports((current) => mergeReports(current, [saved]))
+  }
+
+  const deleteReport = async (report: Report) => {
+    await deleteStoredReport(report.id)
+    setReports((current) => current.filter((item) => item.id !== report.id))
+  }
+
   if (reportsLoading) {
     return (
       <div className="mx-auto max-w-screen-xl p-6">
         <div className="rounded-lg border border-stroke bg-white p-8 text-center text-body shadow-sm dark:border-strokedark dark:bg-boxdark dark:text-bodydark">
-          Loading monthly reports from Supabase...
+          Syncing with the database, please wait…
         </div>
       </div>
     )
@@ -933,7 +1136,7 @@ export function SEMAccountReport() {
           <div className="rounded-lg border border-stroke bg-white p-8 text-center dark:border-strokedark dark:bg-boxdark">
             <FileText className="mx-auto mb-3 h-8 w-8 text-body dark:text-bodydark" />
             <h1 className="text-lg font-bold text-black dark:text-[#E2E5E9]">Report not found</h1>
-            <p className="mt-1 text-sm text-body dark:text-bodydark">The requested report is not available in Supabase.</p>
+            <p className="mt-1 text-sm text-body dark:text-bodydark">The requested report is not available.</p>
           </div>
         </div>
       )
@@ -955,6 +1158,8 @@ export function SEMAccountReport() {
       currentClient={currentClient}
       onCreate={handleCreate}
       onOpenReport={openReport}
+      onRestoreReport={restoreReport}
+      onDeleteReport={deleteReport}
     />
   )
 }

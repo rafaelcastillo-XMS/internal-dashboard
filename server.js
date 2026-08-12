@@ -10,7 +10,7 @@ import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { optimizePromptWithOpenAI } from "./server/openaiPromptOptimizer.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
-import { MetaApiError, getAdCampaigns, getFacebookPageSnapshot } from "./server/metaGraph.js"
+import { MetaApiError, getAdCampaigns, getCampaignInsightsSeries, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
 import { handleNotionClientSyncRequest, queryRelatedNotionData, queryNotionClientCovers, syncClientFromNotion } from "./server/notionSync.js"
 
@@ -730,6 +730,24 @@ app.get('/api/social/campaigns', async (req, res) => {
     const message = error instanceof Error ? error.message : 'Meta Ads API error'
     const status = error instanceof MetaApiError ? error.upstreamStatus : 500
     console.error('[social/campaigns]', status, message)
+    res.status(status >= 400 && status < 600 ? status : 502).json({ error: message })
+  }
+})
+
+// ── Social: daily breakdown for one campaign (detail modal charts) ──────────
+app.get('/api/social/campaigns/:campaignId/insights', async (req, res) => {
+  try {
+    const result = await getCampaignInsightsSeries({
+      accessToken: process.env.META_ACCESS_TOKEN ?? '',
+      campaignId: req.params.campaignId,
+      since: typeof req.query.since === 'string' ? req.query.since : '',
+      until: typeof req.query.until === 'string' ? req.query.until : '',
+    })
+    res.json(result)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Meta Ads API error'
+    const status = error instanceof MetaApiError ? error.upstreamStatus : 500
+    console.error('[social/campaign-insights]', status, message)
     res.status(status >= 400 && status < 600 ? status : 502).json({ error: message })
   }
 })

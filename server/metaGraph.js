@@ -158,6 +158,30 @@ export async function getAdCampaigns({ accessToken, pageId, since, until, fetchI
   }
 }
 
+// Daily breakdown for one campaign, for the detail modal's charts. Requested
+// on demand (only when a user opens a campaign), not alongside the list —
+// time_increment fans one insights call out into one per day upstream.
+export async function getCampaignInsightsSeries({ accessToken, campaignId, since, until, fetchImpl = fetch }) {
+  if (!accessToken) throw new MetaApiError('META_ACCESS_TOKEN is not configured.', 503)
+  if (!campaignId) throw new MetaApiError('campaignId is required.', 400)
+
+  const params = { fields: 'spend,impressions,clicks,ctr,cpc,reach', time_increment: '1', access_token: accessToken }
+  if (since && until) params.time_range = JSON.stringify({ since, until })
+
+  const result = await graphGet(`${campaignId}/insights`, params, fetchImpl)
+  return {
+    series: (result.data ?? []).map(row => ({
+      date: row.date_start,
+      spend: Number(row.spend ?? 0),
+      impressions: Number(row.impressions ?? 0),
+      clicks: Number(row.clicks ?? 0),
+      ctr: Number(row.ctr ?? 0),
+      cpc: Number(row.cpc ?? 0),
+      reach: Number(row.reach ?? 0),
+    })),
+  }
+}
+
 export async function getFacebookPageSnapshot({ accessToken, pageId, since, until, limit = 25, fetchImpl = fetch }) {
   if (!accessToken) throw new MetaApiError('META_ACCESS_TOKEN is not configured.', 503)
   if (!pageId) throw new MetaApiError('META_PAGE_ID is not configured.', 503)

@@ -329,7 +329,7 @@ export function ClientIntegrations() {
             setNotionLastSyncedAt(result.lastSyncedAt ?? new Date().toISOString())
             const updated = [result.logoUrl ? "logo" : "", result.budgetAppliedToAccount ? "monthly SEM budget" : ""].filter(Boolean)
             const successText = updated.length > 0
-                ? `Notion synchronized: ${updated.join(" and ")} updated in Supabase.`
+                ? `Notion synchronized: ${updated.join(" and ")} updated.`
                 : "Notion synchronization completed without replacing existing logo or budget data."
             const warningText = result.warnings?.length ? ` ${result.warnings.join(" ")}` : ""
             setNotionMessage({ ok: true, text: successText + warningText })
@@ -427,7 +427,7 @@ export function ClientIntegrations() {
             setProfile(saved)
             setProfileForm(createClientProfileForm(client, saved))
             setLogoFile(null)
-            setProfileMessage({ ok: true, text: "Client data saved to Supabase." })
+            setProfileMessage({ ok: true, text: "Client data saved." })
         } catch (err) {
             setProfileMessage({
                 ok: false,
@@ -1017,7 +1017,7 @@ export function ClientIntegrations() {
                                     </Button>
                                     <div className="ml-auto flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                                         <Database className="h-4 w-4" />
-                                        Stored in Supabase
+                                        Stored in the database
                                     </div>
                                 </div>
 

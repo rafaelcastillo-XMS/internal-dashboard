@@ -62,6 +62,24 @@ export function getAdCampaigns(options: {
   fetchImpl?: typeof fetch
 }): Promise<AdCampaignsResult>
 
+export interface AdCampaignInsightsSeriesPoint {
+  date: string
+  spend: number
+  impressions: number
+  clicks: number
+  ctr: number
+  cpc: number
+  reach: number
+}
+
+export function getCampaignInsightsSeries(options: {
+  accessToken: string
+  campaignId: string
+  since?: string
+  until?: string
+  fetchImpl?: typeof fetch
+}): Promise<{ series: AdCampaignInsightsSeriesPoint[] }>
+
 export function getFacebookPageSnapshot(options: {
   accessToken: string
   pageId: string

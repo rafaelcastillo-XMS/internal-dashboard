@@ -12,7 +12,7 @@ import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { optimizePromptWithOpenAI } from "./server/openaiPromptOptimizer.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
-import { MetaApiError, getAdCampaigns, getFacebookPageSnapshot } from "./server/metaGraph.js"
+import { MetaApiError, getAdCampaigns, getCampaignInsightsSeries, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { handleNotionClientSyncRequest } from "./server/notionSync.js"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
@@ -963,6 +963,24 @@ function socialDevPlugin() {
             const message = error instanceof Error ? error.message : "Meta Ads API error"
             const status  = error instanceof MetaApiError ? error.upstreamStatus : 500
             console.error("[social-api/campaigns]", status, message)
+            sendJson(res, status >= 400 && status < 600 ? status : 502, { error: message })
+          }
+          return
+        }
+
+        const insightsMatch = pathname.match(/^\/api\/social\/campaigns\/([^/]+)\/insights$/)
+        if (insightsMatch) {
+          try {
+            sendJson(res, 200, await getCampaignInsightsSeries({
+              accessToken: process.env.META_ACCESS_TOKEN ?? "",
+              campaignId: decodeURIComponent(insightsMatch[1]),
+              since,
+              until,
+            }))
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Meta Ads API error"
+            const status  = error instanceof MetaApiError ? error.upstreamStatus : 500
+            console.error("[social-api/campaign-insights]", status, message)
             sendJson(res, status >= 400 && status < 600 ? status : 502, { error: message })
           }
           return

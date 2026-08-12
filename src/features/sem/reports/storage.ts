@@ -4,7 +4,7 @@ import { normalizeReport } from './reportSlides'
 
 const TABLE_NAME = 'sem_monthly_reports'
 const LEGACY_STORAGE_KEY = 'xms_sem_monthly_reports'
-const REPORT_COLUMNS = 'id, account_id, client_name, client_logo, month, year, status, slides, created_at, updated_at'
+const REPORT_COLUMNS = 'id, account_id, client_name, client_logo, month, year, status, has_google_ads, has_lsa, slides, created_at, updated_at'
 
 interface MonthlyReportRow {
   id: string
@@ -14,6 +14,8 @@ interface MonthlyReportRow {
   month: string
   year: number
   status: string
+  has_google_ads: boolean | null
+  has_lsa: boolean | null
   slides: unknown
   created_at: string
   updated_at: string
@@ -39,6 +41,8 @@ export function monthlyReportRowToReport(row: MonthlyReportRow): Report {
     month: String(row.month),
     year: Number(row.year),
     status: reportStatus(row.status),
+    hasGoogleAds: row.has_google_ads ?? true,
+    hasLsa: row.has_lsa ?? true,
     slides: Array.isArray(row.slides) ? row.slides as Slide[] : [],
     createdAt,
     updatedAt: validIsoDate(row.updated_at ?? createdAt),
@@ -55,6 +59,8 @@ export function reportToMonthlyReportRow(report: Report) {
     month: normalized.month,
     year: normalized.year,
     status: normalized.status,
+    has_google_ads: normalized.hasGoogleAds,
+    has_lsa: normalized.hasLsa,
     slides: normalized.slides,
     created_at: normalized.createdAt,
     updated_at: normalized.updatedAt,
@@ -62,7 +68,7 @@ export function reportToMonthlyReportRow(report: Report) {
 }
 
 function storageError(action: string, message: string) {
-  return new Error(`Unable to ${action} monthly report data in Supabase: ${message}`)
+  return new Error(`Unable to ${action} monthly report data. ${message}`)
 }
 
 export async function listStoredReports(accountId: string): Promise<Report[]> {

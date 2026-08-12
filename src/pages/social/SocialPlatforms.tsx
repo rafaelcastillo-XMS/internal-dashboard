@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Circle, ExternalLink, Pencil } from 'lucide-react'
+import { CampaignDetailModal } from '@/features/social/components/CampaignDetailModal'
 import { InfoTip } from '@/features/social/components/InfoTip'
 import { PlatformIcon } from '@/features/social/components/PlatformIcon'
 import { useFacebookData, type Campaign, type FbPost } from '@/features/social/hooks/useFacebookData'
@@ -187,7 +188,8 @@ function PostGrid({ posts, loading }: { posts: FbPost[]; loading: boolean }) {
     )
 }
 
-function CampaignTable({ campaigns, currency, loading }: { campaigns: Campaign[]; currency: string; loading: boolean }) {
+function CampaignTable({ campaigns, currency, loading, days }: { campaigns: Campaign[]; currency: string; loading: boolean; days: number }) {
+    const [selected, setSelected] = useState<Campaign | null>(null)
     if (loading) {
         return <p className="px-6 py-10 text-center text-sm text-body dark:text-bodydark">Loading campaigns…</p>
     }
@@ -202,49 +204,59 @@ function CampaignTable({ campaigns, currency, loading }: { campaigns: Campaign[]
         )
     }
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-                <thead>
-                    <tr className="border-b border-stroke dark:border-strokedark">
-                        {[
-                            { label: 'Campaign' },
-                            { label: 'Status', tip: 'ACTIVE campaigns are running now. PAUSED ones keep their historical numbers.' },
-                            { label: 'Spend', tip: 'Amount charged in the selected range.' },
-                            { label: 'Impressions', tip: 'Times the ads were shown, including repeat views to the same person.' },
-                            { label: 'Clicks', tip: 'All clicks on the ads, including likes and shares — not only link clicks.' },
-                            { label: 'CTR', tip: 'Click-through rate: clicks divided by impressions.' },
-                            { label: 'CPC', tip: 'Average cost per click: spend divided by clicks.' },
-                        ].map(h => (
-                            <th key={h.label} className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">
-                                <span className="inline-flex items-center gap-1.5">
-                                    {h.label}
-                                    {h.tip && <InfoTip text={h.tip} />}
-                                </span>
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-stroke dark:divide-strokedark">
-                    {campaigns.map(c => (
-                        <tr key={c.id} className="hover:bg-gray-2 dark:hover:bg-meta-4">
-                            <td className="max-w-[260px] truncate px-5 py-3.5 font-medium text-black dark:text-[#E2E5E9]" title={c.name}>{c.name}</td>
-                            <td className="px-5 py-3.5">
-                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.status === 'ACTIVE'
-                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                    : 'bg-stroke/50 text-body dark:bg-strokedark dark:text-bodydark'}`}>
-                                    {c.status}
-                                </span>
-                            </td>
-                            <td className="px-5 py-3.5 tabular-nums text-black dark:text-[#E2E5E9]">{c.spend.toFixed(2)} {currency}</td>
-                            <td className="px-5 py-3.5 tabular-nums text-body dark:text-bodydark">{fmt(c.impressions)}</td>
-                            <td className="px-5 py-3.5 tabular-nums text-body dark:text-bodydark">{fmt(c.clicks)}</td>
-                            <td className="px-5 py-3.5 tabular-nums text-body dark:text-bodydark">{c.ctr.toFixed(2)}%</td>
-                            <td className="px-5 py-3.5 tabular-nums text-body dark:text-bodydark">{c.cpc.toFixed(2)}</td>
+        <>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-stroke dark:border-strokedark">
+                            {[
+                                { label: 'Campaign' },
+                                { label: 'Status', tip: 'ACTIVE campaigns are running now. PAUSED ones keep their historical numbers.' },
+                                { label: 'Spend', tip: 'Amount charged in the selected range.' },
+                                { label: 'Impressions', tip: 'Times the ads were shown, including repeat views to the same person.' },
+                                { label: 'Clicks', tip: 'All clicks on the ads, including likes and shares — not only link clicks.' },
+                                { label: 'CTR', tip: 'Click-through rate: clicks divided by impressions.' },
+                                { label: 'CPC', tip: 'Average cost per click: spend divided by clicks.' },
+                            ].map(h => (
+                                <th key={h.label} className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        {h.label}
+                                        {h.tip && <InfoTip text={h.tip} />}
+                                    </span>
+                                </th>
+                            ))}
                         </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                        {campaigns.map(c => (
+                            <tr
+                                key={c.id}
+                                onClick={() => setSelected(c)}
+                                title="Click for campaign details and health score"
+                                className="cursor-pointer hover:bg-gray-2 dark:hover:bg-meta-4"
+                            >
+                                <td className="max-w-[260px] truncate px-5 py-3.5 font-medium text-black dark:text-[#E2E5E9]" title={c.name}>{c.name}</td>
+                                <td className="px-5 py-3.5">
+                                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.status === 'ACTIVE'
+                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                        : 'bg-stroke/50 text-body dark:bg-strokedark dark:text-bodydark'}`}>
+                                        {c.status}
+                                    </span>
+                                </td>
+                                <td className="px-5 py-3.5 tabular-nums text-black dark:text-[#E2E5E9]">{c.spend.toFixed(2)} {currency}</td>
+                                <td className="px-5 py-3.5 tabular-nums text-body dark:text-bodydark">{fmt(c.impressions)}</td>
+                                <td className="px-5 py-3.5 tabular-nums text-body dark:text-bodydark">{fmt(c.clicks)}</td>
+                                <td className="px-5 py-3.5 tabular-nums text-body dark:text-bodydark">{c.ctr.toFixed(2)}%</td>
+                                <td className="px-5 py-3.5 tabular-nums text-body dark:text-bodydark">{c.cpc.toFixed(2)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            {selected && (
+                <CampaignDetailModal campaign={selected} currency={currency} days={days} onClose={() => setSelected(null)} />
+            )}
+        </>
     )
 }
 
@@ -302,7 +314,7 @@ function FacebookTab({ days }: { days: number }) {
                         </span>
                     }
                 />
-                <CampaignTable campaigns={campaigns} currency={currency} loading={loading} />
+                <CampaignTable campaigns={campaigns} currency={currency} loading={loading} days={days} />
             </Card>
         </div>
     )

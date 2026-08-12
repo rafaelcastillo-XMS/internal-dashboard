@@ -1692,12 +1692,12 @@ export async function hydrateReportWithRealGoogleAdsData(
 ): Promise<Report> {
   const originalReport = normalizeReport(report)
   const force = options.force === true
-  const needsKpis = force || reportNeedsGoogleAdsKpiHydration(originalReport)
-  const needsAds = force || reportNeedsGoogleAdsAdHydration(originalReport)
-  const needsKeywords = force || reportNeedsGoogleAdsKeywordHydration(originalReport)
-  const needsSearchTerms = force || reportNeedsGoogleAdsSearchTermHydration(originalReport)
-  const needsBreakdowns = force || reportNeedsGoogleAdsBreakdownHydration(originalReport)
-  const needsLsa = force || reportNeedsLsaKeyResultsHydration(originalReport)
+  const needsKpis = originalReport.hasGoogleAds && (force || reportNeedsGoogleAdsKpiHydration(originalReport))
+  const needsAds = originalReport.hasGoogleAds && (force || reportNeedsGoogleAdsAdHydration(originalReport))
+  const needsKeywords = originalReport.hasGoogleAds && (force || reportNeedsGoogleAdsKeywordHydration(originalReport))
+  const needsSearchTerms = originalReport.hasGoogleAds && (force || reportNeedsGoogleAdsSearchTermHydration(originalReport))
+  const needsBreakdowns = originalReport.hasGoogleAds && (force || reportNeedsGoogleAdsBreakdownHydration(originalReport))
+  const needsLsa = originalReport.hasLsa && (force || reportNeedsLsaKeyResultsHydration(originalReport))
 
   let hydratedReport = originalReport
   if (needsKpis) hydratedReport = await hydrateReportWithRealGoogleAdsKpis(hydratedReport)

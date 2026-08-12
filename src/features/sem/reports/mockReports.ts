@@ -41,7 +41,23 @@ export function makeReportId(clientId: string, month: string, year: number) {
   return `${safeClient}-${safeMonth}-${year}-${Date.now()}`
 }
 
-export function createSlidesTemplate(clientId: string, clientName: string, month: string, year: number): Slide[] {
+const GOOGLE_ADS_SLIDE_IDS = new Set([
+  'google-ads-key-stats',
+  'google-ads-keywords',
+  'google-ads-ad-performance',
+  'google-ads-search-terms',
+  'devices-day-hour',
+])
+
+const LSA_SLIDE_IDS = new Set(['lsa-key-results', 'lsa-account-notes'])
+
+export function createSlidesTemplate(
+  clientId: string,
+  clientName: string,
+  month: string,
+  year: number,
+  services: { hasGoogleAds: boolean; hasLsa: boolean } = { hasGoogleAds: true, hasLsa: true },
+): Slide[] {
   const googleAdsData = getGoogleAdsReportData(clientId, month, year)
   const lsaData = getLsaReportData(clientId, month, year)
 
@@ -68,7 +84,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       id: 'google-ads-key-stats',
       type: 'google_ads_kpis',
       title: 'Google Ads - Key Stats and Performance KPIs',
-      order: 3,
+      order: 2,
       notes: 'Use this slide to summarize Google Ads momentum and month-over-month movement.',
       content: {
         dataSource: {
@@ -91,7 +107,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       id: 'google-ads-keywords',
       type: 'keywords',
       title: 'Google Ads - Keywords Stats and Performance',
-      order: 4,
+      order: 3,
       notes: 'Highlight both winning keywords and terms that require bid, match type, or negative keyword action.',
       content: {
         dataSource: {
@@ -121,7 +137,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       id: 'google-ads-ad-performance',
       type: 'ads',
       title: 'Google Ads - Ads Stats and Performance',
-      order: 5,
+      order: 4,
       notes: 'Show top ad themes and describe why they worked.',
       content: {
         ads: [
@@ -163,7 +179,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       id: 'google-ads-search-terms',
       type: 'search_terms',
       title: 'Google Ads - Search Terms Stats and Performance',
-      order: 6,
+      order: 5,
       notes: 'Use recommendations to document what should be added, excluded, or watched next month.',
       content: {
         tables: [
@@ -202,7 +218,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       id: 'devices-day-hour',
       type: 'devices_day_hour',
       title: 'Google Ads - Devices and Day & Hour Stats',
-      order: 7,
+      order: 6,
       notes: 'Summarize timing and device patterns that should influence bids and staffing.',
       content: {
         dataSource: {
@@ -250,7 +266,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       id: 'lsa-key-results',
       type: 'lsa_key_results',
       title: 'Local Services Ads - Key Results',
-      order: 8,
+      order: 7,
       notes: 'Focus LSA commentary on lead quality, responsiveness, and account trust signals.',
       content: {
         kpis: lsaData.kpis,
@@ -264,21 +280,10 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       },
     },
     {
-      id: 'highlights',
-      type: 'highlights',
-      title: 'Highlights',
-      order: 9,
-      notes: 'Document completed optimization work in plain language.',
-      content: {
-        subtitle: 'Summary of Highlights',
-      },
-    },
-    createHighlightsSummarySlide(10),
-    {
       id: 'lsa-account-notes',
       type: 'lsa_notes',
       title: 'LSA Account Notes',
-      order: 11,
+      order: 8,
       notes: 'Review credited Local Services Ads leads for the selected client and month.',
       content: {
         textBlocks: [
@@ -297,10 +302,21 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       },
     },
     {
+      id: 'highlights',
+      type: 'highlights',
+      title: 'Highlights',
+      order: 9,
+      notes: 'Document completed optimization work in plain language.',
+      content: {
+        subtitle: 'Summary of Highlights',
+      },
+    },
+    createHighlightsSummarySlide(10),
+    {
       id: 'next-steps',
       type: 'next_steps',
       title: 'Next Step & Recommendations',
-      order: 12,
+      order: 11,
       notes: 'Keep next steps practical and tied to client behavior.',
       content: {
         subtitle: 'Priorities for the Month Ahead',
@@ -310,7 +326,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       id: 'recommendations-content',
       type: 'recommendations',
       title: 'Recommendations',
-      order: 13,
+      order: 12,
       notes: 'Keep recommendations practical and tied to client behavior.',
       content: {
         textBlocks: [
@@ -326,7 +342,7 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
       id: 'final-thank-you',
       type: 'thank_you',
       title: 'Final Thank You Slide',
-      order: 14,
+      order: 13,
       notes: 'Close with a concise client-facing message.',
       content: {
         finalMessage: 'Thank you for your business. If you have any questions let us know, we are here to help.',
@@ -334,7 +350,13 @@ export function createSlidesTemplate(clientId: string, clientName: string, month
     },
   ]
 
-  return normalizeReportSlides(slides)
+  const filteredSlides = slides.filter((slide) => {
+    if (GOOGLE_ADS_SLIDE_IDS.has(slide.id)) return services.hasGoogleAds
+    if (LSA_SLIDE_IDS.has(slide.id)) return services.hasLsa
+    return true
+  })
+
+  return normalizeReportSlides(filteredSlides)
 }
 
 export function createReportFromTemplate(input: {
@@ -344,8 +366,12 @@ export function createReportFromTemplate(input: {
   month: string
   year: number
   status?: Report['status']
+  hasGoogleAds?: boolean
+  hasLsa?: boolean
 }): Report {
   const createdAt = nowIso()
+  const hasGoogleAds = input.hasGoogleAds ?? true
+  const hasLsa = input.hasLsa ?? true
   return {
     id: makeReportId(input.clientId, input.month, input.year),
     clientId: input.clientId,
@@ -354,37 +380,11 @@ export function createReportFromTemplate(input: {
     month: input.month,
     year: input.year,
     status: input.status ?? 'Draft',
-    slides: createSlidesTemplate(input.clientId, input.clientName, input.month, input.year),
+    hasGoogleAds,
+    hasLsa,
+    slides: createSlidesTemplate(input.clientId, input.clientName, input.month, input.year, { hasGoogleAds, hasLsa }),
     createdAt,
     updatedAt: createdAt,
   }
 }
 
-export function createSeedReportsForClient(client: {
-  id: string
-  name: string
-  logo?: string
-}): Report[] {
-  return [
-    createReportFromTemplate({
-      clientId: client.id,
-      clientName: client.name,
-      clientLogo: client.logo,
-      month: 'June',
-      year: 2026,
-      status: 'In Review',
-    }),
-    createReportFromTemplate({
-      clientId: client.id,
-      clientName: client.name,
-      clientLogo: client.logo,
-      month: 'May',
-      year: 2026,
-      status: 'Ready',
-    }),
-  ].map((report, index) => ({
-    ...report,
-    id: `${client.id}-sample-${index === 0 ? 'june' : 'may'}-2026`,
-    updatedAt: index === 0 ? '2026-06-28T16:30:00.000Z' : '2026-05-31T18:15:00.000Z',
-  }))
-}
