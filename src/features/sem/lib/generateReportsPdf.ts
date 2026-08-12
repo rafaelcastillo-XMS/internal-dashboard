@@ -20,6 +20,47 @@ export interface PdfMonthlyRow {
   paidWith?: string
 }
 
+export interface PdfOpenAiRow {
+  clientName: string
+  campaignName: string
+  status: string
+  budget: number
+  spend: number
+  cpc: number
+  impressions: number
+}
+
+// ─── Branding ─────────────────────────────────────────────────────────────────
+
+// Decoded once per session and reused across every PDF generated: the source
+// is a .webp, which jsPDF's addImage cannot embed directly, so it is redrawn
+// onto a canvas and re-read as a PNG data URL.
+const LOGO_SRC = '/xms-logo-dark.webp'
+const LOGO_ASPECT = 1314 / 370
+let logoPromise: Promise<string | null> | null = null
+
+function loadXmsLogoDataUrl(): Promise<string | null> {
+  if (!logoPromise) {
+    logoPromise = new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
+          const ctx = canvas.getContext('2d')
+          if (!ctx) { resolve(null); return }
+          ctx.drawImage(img, 0, 0)
+          resolve(canvas.toDataURL('image/png'))
+        } catch { resolve(null) }
+      }
+      img.onerror = () => resolve(null)
+      img.src = LOGO_SRC
+    })
+  }
+  return logoPromise
+}
+
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
 const C = {
@@ -82,6 +123,37 @@ function drawStatusDot(doc: jsPDF, active: boolean, x: number, cy: number) {
   doc.setFontSize(7.5)
   setColor(doc, active ? C.greenText : C.body, 'text')
   doc.text(active ? 'Active' : 'Inactive', x + 7, cy + 1.2)
+}
+
+function drawSummaryStrip(
+  doc: jsPDF,
+  y: number,
+  boxes: { label: string; value: string; color: [number, number, number] }[],
+): number {
+  const gap  = 4
+  const boxW = (USABLE - gap * (boxes.length - 1)) / boxes.length
+  const boxH = 15
+
+  boxes.forEach((box, i) => {
+    const x = ML + i * (boxW + gap)
+    setColor(doc, C.rowAlt, 'fill')
+    doc.roundedRect(x, y, boxW, boxH, 2, 2, 'F')
+    setColor(doc, C.border, 'draw')
+    doc.setLineWidth(0.2)
+    doc.roundedRect(x, y, boxW, boxH, 2, 2, 'S')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    setColor(doc, box.color, 'text')
+    doc.text(box.value, x + 4, y + 9.5)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6)
+    setColor(doc, C.body, 'text')
+    doc.text(box.label.toUpperCase(), x + 4, y + 13)
+  })
+
+  return y + boxH
 }
 
 // ─── Weekly Table ─────────────────────────────────────────────────────────────
@@ -217,7 +289,23 @@ function drawWeeklyTotals(doc: jsPDF, rows: PdfWeeklyRow[], y: number, pendingCo
   return y + ROW_H + 1
 }
 
-function drawPageHeader(doc: jsPDF, dateLabel: string, pageNum?: number) {
+function drawBrandMark(doc: jsPDF, logoDataUrl: string | null) {
+  const h = 7
+  const w = h * LOGO_ASPECT
+  const x = PAGE_W - ML - w
+  const y = 4.5
+  if (logoDataUrl) {
+    try { doc.addImage(logoDataUrl, 'PNG', x, y, w, h) } catch { /* fall through to text below */ }
+  }
+  if (!logoDataUrl) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    setColor(doc, C.greenHeader, 'text')
+    doc.text('XMS Intelligence', PAGE_W - ML, 10, { align: 'right' })
+  }
+}
+
+function drawPageHeader(doc: jsPDF, title: string, dateLabel: string, logoDataUrl: string | null, pageNum?: number) {
   setColor(doc, C.green, 'fill')
   doc.rect(0, 0, PAGE_W, 26, 'F')
   // Accent strip
@@ -227,17 +315,16 @@ function drawPageHeader(doc: jsPDF, dateLabel: string, pageNum?: number) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
   setColor(doc, C.white, 'text')
-  doc.text('Google Ads Budget Report', ML, 11)
+  doc.text(title, ML, 11)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.5)
   setColor(doc, C.greenHeader, 'text')
   doc.text(dateLabel, ML, 19)
 
-  doc.setFontSize(8)
-  setColor(doc, C.greenHeader, 'text')
-  doc.text('XMS Intelligence', PAGE_W - ML, 10, { align: 'right' })
+  drawBrandMark(doc, logoDataUrl)
   setColor(doc, [167, 243, 208], 'text')
+  doc.setFontSize(8)
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   doc.text(`Generated: ${dateStr}`, PAGE_W - ML, 17.5, { align: 'right' })
 
@@ -297,37 +384,60 @@ function drawFooters(doc: jsPDF) {
 
 // ─── Public: Weekly PDF ───────────────────────────────────────────────────────
 
+function weeklySummaryBoxes(rows: PdfWeeklyRow[], accent: [number, number, number]) {
+  const budget    = rows.reduce((s, r) => s + r.budget, 0)
+  const spend     = rows.reduce((s, r) => s + r.cost, 0)
+  const remaining = budget > 0 ? budget - spend : 0
+  return [
+    { label: 'Total budget', value: fc(budget), color: accent },
+    { label: 'Period spend', value: fc(spend), color: C.red },
+    { label: 'Remaining', value: fc(remaining), color: remaining < 0 ? C.red : accent },
+  ]
+}
+
+const TITLE_WEEKLY = 'Weekly Budget Report'
+
 export async function generateWeeklyBudgetPdf(params: {
   dateLabel: string
   adsRows: PdfWeeklyRow[]
   guaranteeRows: PdfWeeklyRow[]
 }): Promise<void> {
   const { dateLabel, adsRows, guaranteeRows } = params
+  const logoDataUrl = await loadXmsLogoDataUrl()
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
-  // Page 1 header
-  drawPageHeader(doc, dateLabel)
+  drawPageHeader(doc, TITLE_WEEKLY, dateLabel, logoDataUrl)
   let y = 32
 
-  // ── Google Ads section ────────────────────────────────────────────
-  drawSectionLabel(doc, 'GOOGLE ADS', `Period: ${dateLabel} · Google Ads API`, y, 'ads')
-  y += 11
-  drawWeeklyTableHeader(doc, y, C.green)
-  y += HDR_H
-  y = drawWeeklyRows(doc, adsRows, y, false)
-  y = drawWeeklyTotals(doc, adsRows, y, false)
+  if (adsRows.length > 0) {
+    y = drawSummaryStrip(doc, y, weeklySummaryBoxes(adsRows, C.green))
+    y += 6
+    drawSectionLabel(doc, 'GOOGLE ADS', `Period: ${dateLabel} · Google Ads API`, y, 'ads')
+    y += 11
+    drawWeeklyTableHeader(doc, y, C.green)
+    y += HDR_H
+    y = drawWeeklyRows(doc, adsRows, y, false)
+    y = drawWeeklyTotals(doc, adsRows, y, false)
+  }
 
   if (guaranteeRows.length > 0) {
-    const guaranteeHeight = HDR_H + guaranteeRows.length * ROW_H + ROW_H + 1 + 22
-    if (PAGE_H - y - 14 < guaranteeHeight) {
+    const guaranteeHeight = 21 + HDR_H + guaranteeRows.length * ROW_H + ROW_H + 1 + 22
+    if (adsRows.length === 0) {
+      // Sole section on the page — no need to reserve room below an Ads table.
+      y = drawSummaryStrip(doc, y, weeklySummaryBoxes(guaranteeRows, C.blue))
+      y += 6
+    } else if (PAGE_H - y - 14 < guaranteeHeight) {
       doc.addPage()
-      drawPageHeader(doc, dateLabel, 2)
+      drawPageHeader(doc, TITLE_WEEKLY, dateLabel, logoDataUrl, 2)
       y = 32
+      y = drawSummaryStrip(doc, y, weeklySummaryBoxes(guaranteeRows, C.blue))
+      y += 6
     } else {
       y += 8
+      y = drawSummaryStrip(doc, y, weeklySummaryBoxes(guaranteeRows, C.blue))
+      y += 6
     }
 
-    // ── Google Guarantee section ────────────────────────────────────
     drawSectionLabel(doc, 'GOOGLE GUARANTEE', `Period: ${dateLabel}`, y, 'guarantee')
     y += 11
     drawWeeklyTableHeader(doc, y, C.blue)
@@ -336,41 +446,20 @@ export async function generateWeeklyBudgetPdf(params: {
     drawWeeklyTotals(doc, guaranteeRows, y, false)
   }
 
+  if (adsRows.length === 0 && guaranteeRows.length === 0) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    setColor(doc, C.muted, 'text')
+    doc.text('No accounts to report for this period.', ML, y + 10)
+  }
+
   drawFooters(doc)
 
   const filename = `XMS-Budget-Report-${new Date().toISOString().slice(0, 10)}.pdf`
   doc.save(filename)
 }
 
-function drawMonthlyPdfHeader(doc: jsPDF, monthLabel: string, pageNum?: number) {
-  setColor(doc, C.green, 'fill')
-  doc.rect(0, 0, PAGE_W, 26, 'F')
-  setColor(doc, [16, 185, 129], 'fill')
-  doc.rect(0, 23.5, PAGE_W, 2.5, 'F')
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(14)
-  setColor(doc, C.white, 'text')
-  doc.text('Monthly Budget Report', ML, 11)
-
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8.5)
-  setColor(doc, C.greenHeader, 'text')
-  doc.text(monthLabel, ML, 19)
-
-  doc.setFontSize(8)
-  setColor(doc, C.greenHeader, 'text')
-  doc.text('XMS Intelligence', PAGE_W - ML, 10, { align: 'right' })
-  setColor(doc, [167, 243, 208], 'text')
-  const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-  doc.text(`Generated: ${dateStr}`, PAGE_W - ML, 17.5, { align: 'right' })
-
-  if (pageNum && pageNum > 1) {
-    doc.setFontSize(7)
-    setColor(doc, [167, 243, 208], 'text')
-    doc.text('(continued)', PAGE_W / 2, 17.5, { align: 'center' })
-  }
-}
+const TITLE_MONTHLY = 'Monthly Budget Report'
 
 const MONTHLY_COLS = [18, 55, 30, 34, 28, 28, 34, 38] as const
 const MONTHLY_HEADERS = ['STATUS', 'CLIENT', 'ID', 'PLATFORM', 'BUDGET', 'SPEND', 'CREDITS', 'PAID WITH']
@@ -395,10 +484,21 @@ export async function generateMonthlyBudgetPdf(params: {
   rows: PdfMonthlyRow[]
 }): Promise<void> {
   const { monthLabel, rows } = params
+  const logoDataUrl = await loadXmsLogoDataUrl()
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
-  drawMonthlyPdfHeader(doc, monthLabel)
+  drawPageHeader(doc, TITLE_MONTHLY, monthLabel, logoDataUrl)
   let y = 32
+
+  const totalBudgetHead = rows.reduce((s, r) => s + r.budget, 0)
+  const totalSpendHead  = rows.reduce((s, r) => s + r.spend, 0)
+  y = drawSummaryStrip(doc, y, [
+    { label: 'Total budget', value: fc(totalBudgetHead), color: C.green },
+    { label: 'Total spend', value: fc(totalSpendHead), color: C.red },
+    { label: 'Remaining', value: fc(totalBudgetHead - totalSpendHead), color: totalBudgetHead - totalSpendHead < 0 ? C.red : C.green },
+    { label: 'Credits refunded', value: fc(rows.reduce((s, r) => s + (r.refunded ?? 0), 0)), color: C.green },
+  ])
+  y += 6
 
   // Section label
   drawSectionLabel(doc, 'MONTHLY BUDGET', 'Google Ads + Google Guarantee · SEM monthly data', y, 'ads')
@@ -408,11 +508,18 @@ export async function generateMonthlyBudgetPdf(params: {
   drawMonthlyTableHeader(doc, y)
   y += HDR_H
 
+  if (rows.length === 0) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    setColor(doc, C.muted, 'text')
+    doc.text('No accounts to report for this month.', ML, y + 10)
+  }
+
   // Rows
   rows.forEach((row, ri) => {
     if (y + ROW_H > PAGE_H - 14) {
       doc.addPage()
-      drawMonthlyPdfHeader(doc, monthLabel, doc.getNumberOfPages())
+      drawPageHeader(doc, TITLE_MONTHLY, monthLabel, logoDataUrl, doc.getNumberOfPages())
       y = 32
       drawSectionLabel(doc, 'MONTHLY BUDGET', `Continued · ${monthLabel}`, y, 'ads')
       y += 11
@@ -479,5 +586,95 @@ export async function generateMonthlyBudgetPdf(params: {
   drawFooters(doc)
 
   const filename = `XMS-Budget-Monthly-${monthLabel.replace(/\s/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`
+  doc.save(filename)
+}
+
+// ─── Public: OpenAI Ads PDF ───────────────────────────────────────────────────
+
+const OPENAI_COLS = [45, 68, 24, 30, 30, 28, 40] as const
+const OPENAI_HEADERS = ['CLIENT', 'CAMPAIGN', 'STATUS', 'BUDGET', 'SPEND', 'CPC', 'IMPRESSIONS']
+const TITLE_OPENAI = 'OpenAI Ads Report'
+
+function drawOpenAiTableHeader(doc: jsPDF, y: number) {
+  setColor(doc, C.green, 'fill')
+  doc.rect(ML, y, USABLE, HDR_H, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(6.5)
+  setColor(doc, C.white, 'text')
+  let x = ML
+  OPENAI_HEADERS.forEach((h, i) => {
+    doc.text(h, x + 3, y + HDR_H / 2 + 2)
+    x += OPENAI_COLS[i]
+  })
+}
+
+export async function generateOpenAiAdsPdf(params: {
+  dateLabel: string
+  rows: PdfOpenAiRow[]
+}): Promise<void> {
+  const { dateLabel, rows } = params
+  const logoDataUrl = await loadXmsLogoDataUrl()
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+  drawPageHeader(doc, TITLE_OPENAI, dateLabel, logoDataUrl)
+  let y = 32
+
+  const totalBudget = rows.reduce((s, r) => s + r.budget, 0)
+  const totalSpend  = rows.reduce((s, r) => s + r.spend, 0)
+  const totalImpr   = rows.reduce((s, r) => s + r.impressions, 0)
+  y = drawSummaryStrip(doc, y, [
+    { label: 'Total budget', value: fc(totalBudget), color: C.green },
+    { label: 'Total spend', value: fc(totalSpend), color: C.red },
+    { label: 'Impressions', value: totalImpr.toLocaleString('en-US'), color: C.green },
+  ])
+  y += 6
+
+  drawSectionLabel(doc, 'OPENAI ADS', `Period: ${dateLabel} · OpenAI Ads API`, y, 'ads')
+  y += 11
+  drawOpenAiTableHeader(doc, y)
+  y += HDR_H
+
+  if (rows.length === 0) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    setColor(doc, C.muted, 'text')
+    doc.text('No campaigns to report for this period.', ML, y + 10)
+  }
+
+  rows.forEach((row, ri) => {
+    if (y + ROW_H > PAGE_H - 14) {
+      doc.addPage()
+      drawPageHeader(doc, TITLE_OPENAI, dateLabel, logoDataUrl, doc.getNumberOfPages())
+      y = 32
+      drawOpenAiTableHeader(doc, y)
+      y += HDR_H
+    }
+    setColor(doc, ri % 2 === 1 ? C.rowAlt : C.white, 'fill')
+    doc.rect(ML, y, USABLE, ROW_H, 'F')
+
+    let x = ML
+    cell(doc, row.clientName, x, y, OPENAI_COLS[0], ROW_H, { bold: true, color: C.dark })
+    x += OPENAI_COLS[0]
+    cell(doc, row.campaignName, x, y, OPENAI_COLS[1], ROW_H, { color: C.dark, size: 7 })
+    x += OPENAI_COLS[1]
+    cell(doc, row.status === 'active' ? 'Active' : 'Paused', x, y, OPENAI_COLS[2], ROW_H, { color: row.status === 'active' ? C.greenText : C.muted, size: 7 })
+    x += OPENAI_COLS[2]
+    cell(doc, fc(row.budget), x, y, OPENAI_COLS[3], ROW_H, { color: row.budget > 0 ? C.dark : C.muted, align: 'right' })
+    x += OPENAI_COLS[3]
+    cell(doc, fc(row.spend), x, y, OPENAI_COLS[4], ROW_H, { color: row.spend > 0 ? C.red : C.muted, align: 'right' })
+    x += OPENAI_COLS[4]
+    cell(doc, row.cpc > 0 ? fc(row.cpc) : '—', x, y, OPENAI_COLS[5], ROW_H, { color: C.body, align: 'right' })
+    x += OPENAI_COLS[5]
+    cell(doc, row.impressions > 0 ? row.impressions.toLocaleString('en-US') : '—', x, y, OPENAI_COLS[6], ROW_H, { color: C.body, align: 'right' })
+
+    setColor(doc, C.border, 'draw')
+    doc.setLineWidth(0.1)
+    doc.line(ML, y + ROW_H, ML + USABLE, y + ROW_H)
+    y += ROW_H
+  })
+
+  drawFooters(doc)
+
+  const filename = `XMS-OpenAI-Ads-Report-${new Date().toISOString().slice(0, 10)}.pdf`
   doc.save(filename)
 }

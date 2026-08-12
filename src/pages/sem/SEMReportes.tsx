@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import { Download, Mail } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { edgeFetch } from '@/lib/edgeFetch'
-import { generateMonthlyBudgetPdf, generateWeeklyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
-import type { PdfMonthlyRow, PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
+import { generateMonthlyBudgetPdf, generateOpenAiAdsPdf, generateWeeklyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
+import type { PdfMonthlyRow, PdfOpenAiRow, PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -756,6 +756,11 @@ type EmailReportPayload =
       monthLabel: string
       rows: PdfMonthlyRow[]
     }
+  | {
+      kind: 'openai'
+      dateLabel: string
+      rows: PdfOpenAiRow[]
+    }
 
 function buildWeeklyText(dateLabel: string, adsRows: PdfWeeklyRow[], guaranteeRows: PdfWeeklyRow[]): string {
   const lines: string[] = []
@@ -822,6 +827,35 @@ function buildMonthlyText(monthLabel: string, rows: PdfMonthlyRow[]): string {
   return lines.join('\n')
 }
 
+function buildOpenAiText(dateLabel: string, rows: PdfOpenAiRow[]): string {
+  const lines: string[] = []
+  const fmt = (n: number) => n > 0 ? fmtCurrency(n) : '—'
+
+  lines.push(`OpenAI Ads Report — ${dateLabel}`)
+  lines.push('')
+  lines.push('Client | Campaign | Status | Budget | Spend | CPC | Impressions')
+  lines.push('-'.repeat(100))
+
+  rows.forEach(r => {
+    lines.push([
+      r.clientName,
+      r.campaignName,
+      r.status === 'active' ? 'Active' : 'Paused',
+      fmt(r.budget),
+      fmt(r.spend),
+      r.cpc > 0 ? fmtCurrency(r.cpc) : '—',
+      r.impressions > 0 ? r.impressions.toLocaleString('en-US') : '—',
+    ].join(' | '))
+  })
+
+  const totalBudget = rows.reduce((s, r) => s + r.budget, 0)
+  const totalSpend = rows.reduce((s, r) => s + r.spend, 0)
+  lines.push('')
+  lines.push(`Totals | Budget: ${fmt(totalBudget)} | Spend: ${fmt(totalSpend)}`)
+
+  return lines.join('\n')
+}
+
 function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | null; onClose: () => void }) {
   const [email, setEmail]         = useState('')
   const [scheduled, setScheduled] = useState('')
@@ -834,9 +868,11 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
 
   const reportText = payload.kind === 'monthly'
     ? buildMonthlyText(payload.monthLabel, payload.rows)
-    : buildWeeklyText(payload.dateLabel, payload.adsRows, payload.guaranteeRows)
+    : payload.kind === 'openai'
+      ? buildOpenAiText(payload.dateLabel, payload.rows)
+      : buildWeeklyText(payload.dateLabel, payload.adsRows, payload.guaranteeRows)
   const label = payload.kind === 'monthly' ? payload.monthLabel : payload.dateLabel
-  const subjectPrefix = payload.kind === 'monthly' ? 'Monthly Budget Report' : 'Budget Report'
+  const subjectPrefix = payload.kind === 'monthly' ? 'Monthly Budget Report' : payload.kind === 'openai' ? 'OpenAI Ads Report' : 'Budget Report'
 
   const handleSend = () => {
     const subject = scheduled
@@ -1045,6 +1081,8 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
   const [loadingBudgets, setLoadingBudgets] = useState(true)
   const [ggPeriod, setGgPeriod]             = useState<Record<string, { spend: number; leads: number }>>({})
   const [loadingPeriod, setLoadingPeriod]   = useState(false)
+  const [exporting, setExporting]           = useState(false)
+  const [emailPayload, setEmailPayload]     = useState<EmailReportPayload | null>(null)
 
   useEffect(() => {
     if (!accounts.length) return
@@ -1083,8 +1121,24 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
   const totalSpend  = accounts.reduce((s, a) => s + (ggPeriod[a.id]?.spend ?? 0), 0)
   const totalLeads  = accounts.reduce((s, a) => s + (ggPeriod[a.id]?.leads ?? 0), 0)
 
+  const buildGuaranteeRows = (): PdfWeeklyRow[] => accounts.map(a => ({
+    status: a.status,
+    accountName: a.name,
+    budget: ggBudgets[a.id]?.budget ?? 0,
+    cost: ggPeriod[a.id]?.spend ?? 0,
+  }))
+
+  const dateLabel = `Week ${weekLabel(fromDate, toDate)}`
+
+  async function handleExport() {
+    setExporting(true)
+    try { await generateWeeklyBudgetPdf({ dateLabel, adsRows: [], guaranteeRows: buildGuaranteeRows() }) }
+    finally { setExporting(false) }
+  }
+
   return (
     <div>
+      <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <WeekPicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} accentColor="#3b82f6" />
@@ -1094,6 +1148,22 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
           )}
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setEmailPayload({ kind: 'weekly', dateLabel, adsRows: [], guaranteeRows: buildGuaranteeRows() })}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#3b82f6] hover:text-[#3b82f6]
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            <Mail className="h-4 w-4" />
+            Send by Email
+          </button>
+          <button onClick={handleExport} disabled={exporting}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#3b82f6] hover:text-[#3b82f6] disabled:opacity-60
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            <Download className="h-4 w-4" />
+            {exporting ? 'Exporting…' : 'Export PDF'}
+          </button>
         </div>
       </div>
 
@@ -1209,6 +1279,8 @@ function OpenAiAdsReport() {
   const [results, setResults]   = useState<OpenAiClientResult[]>([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
+  const [exporting, setExporting]       = useState(false)
+  const [emailPayload, setEmailPayload] = useState<EmailReportPayload | null>(null)
 
   const load = useCallback(async (from: string, to: string) => {
     setLoading(true); setError(null)
@@ -1252,16 +1324,52 @@ function OpenAiAdsReport() {
     impressions: allCampaigns.reduce((s, c) => s + c.impressions, 0),
   }
 
+  const dateLabel = `Week ${weekLabel(fromDate, toDate)}`
+  const buildOpenAiRows = (): PdfOpenAiRow[] => results.flatMap(r => r.campaigns.map(c => ({
+    clientName: r.clientName,
+    campaignName: c.name,
+    status: c.status,
+    budget: c.budget,
+    spend: c.spend,
+    cpc: c.cpc,
+    impressions: c.impressions,
+  })))
+
+  async function handleExport() {
+    setExporting(true)
+    try { await generateOpenAiAdsPdf({ dateLabel, rows: buildOpenAiRows() }) }
+    finally { setExporting(false) }
+  }
+
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <WeekPicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} />
-        {loading && (
-          <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-        )}
+      <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <WeekPicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} />
+          {loading && (
+            <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setEmailPayload({ kind: 'openai', dateLabel, rows: buildOpenAiRows() })}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            <Mail className="h-4 w-4" />
+            Send by Email
+          </button>
+          <button onClick={handleExport} disabled={exporting}
+            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
+                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+            <Download className="h-4 w-4" />
+            {exporting ? 'Exporting…' : 'Export PDF'}
+          </button>
+        </div>
       </div>
 
       {error && (
