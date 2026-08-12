@@ -1382,18 +1382,9 @@ export function SEMReportes() {
           <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-bold bg-[#16a34a]/20 text-[#16a34a] align-middle">
             SEM Intelligence
           </span>
-          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-600 align-middle dark:text-amber-400">
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-            Work in Progress
-          </span>
         </h1>
         <p className="mt-1 text-sm text-body dark:text-bodydark">
-          Budget tracking and performance reports for all Google Ads accounts. Export to PDF for client delivery.
-        </p>
-        <p className="mt-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-          This section is still under development — it may contain errors or incomplete data.
+          Budget and spend for every client account, organized by week and by month.
         </p>
       </div>
 
