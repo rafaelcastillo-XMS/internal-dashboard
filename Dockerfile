@@ -41,6 +41,7 @@ COPY --from=builder /app/dist ./dist
 COPY server.js ./
 COPY server/ ./server/
 COPY tools/ ./tools/
+COPY prompts/ ./prompts/
 
 # credentials.json and token.json are bind-mounted at runtime (see docker-compose.yml)
 
