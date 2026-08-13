@@ -125,8 +125,14 @@ export async function getAdCampaigns({ accessToken, pageId, since, until, fetchI
     params = Object.fromEntries(nextUrl.searchParams)
   }
 
+  // Traffic/landing-page campaigns don't set promoted_object.page_id at all
+  // (no Page is being promoted), so they'd otherwise be silently excluded.
+  // XMS's own campaigns follow a fixed "XMS | ..." naming convention, so that
+  // prefix is a safe secondary signal — it doesn't reopen the isolation gap
+  // for other clients, who use their own naming.
   const promotesPage = campaign =>
-    (campaign.adsets?.data ?? []).some(adset => adset.promoted_object?.page_id === pageId)
+    (campaign.adsets?.data ?? []).some(adset => adset.promoted_object?.page_id === pageId) ||
+    campaign.name?.startsWith('XMS |')
 
   const timeRange = since && until ? JSON.stringify({ since, until }) : ''
   const mine = raw.filter(promotesPage)
