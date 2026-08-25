@@ -43,17 +43,64 @@ function createExportHost() {
   return host
 }
 
+// html2canvas doesn't reliably paint CSS `text-overflow: ellipsis` — a
+// truncated cell just cuts the glyphs with no "…", indistinguishable from
+// the clipping bug this is meant to replace. Truncating the text itself
+// (measured with Canvas2D, same approach as the jsPDF budget-table export)
+// guarantees the "…" is real, painted text.
+let measureCtx: CanvasRenderingContext2D | null = null
+
+function truncateTextToWidth(text: string, maxWidth: number, font: string): string {
+  if (maxWidth <= 0) return ''
+  measureCtx ??= document.createElement('canvas').getContext('2d')
+  if (!measureCtx) return text
+  measureCtx.font = font
+  if (measureCtx.measureText(text).width <= maxWidth) return text
+
+  // html2canvas doesn't reliably paint the single-glyph "…" (U+2026) —
+  // renders as a stray mark instead of visible dots. ASCII periods paint
+  // correctly in every font html2canvas has to fall back to.
+  const ellipsis = '...'
+  let lo = 0
+  let hi = text.length
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    const candidate = text.slice(0, mid).trimEnd() + ellipsis
+    if (measureCtx.measureText(candidate).width <= maxWidth) lo = mid
+    else hi = mid - 1
+  }
+  return lo === 0 ? ellipsis : text.slice(0, lo).trimEnd() + ellipsis
+}
+
 function replaceEditableControlsWithStaticText(container: HTMLElement) {
   const controls = Array.from(container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea'))
 
-  controls.forEach((control) => {
+  // Table columns (e.g. the keywords/search-terms report tables) use the
+  // browser's auto table-layout, which sizes every column from the combined
+  // content of every cell in it. Reading each control's bounds one at a time
+  // while replacing controls in the same pass meant every replacement (an
+  // input swapped for a fixed-width div) could itself shift that column
+  // solution before the next control's bounds were read — the widths drifted
+  // further with each cell, producing a "wavy", increasingly crooked table.
+  // Reading every bound up front, against the untouched layout, then
+  // replacing everything in a second pass avoids that compounding drift.
+  const measurements = controls.map((control) => ({
+    control,
+    bounds: control.getBoundingClientRect(),
+    computed: window.getComputedStyle(control),
+    value: control.value,
+    // A cell that wraps to two lines still only pushes its own <td> taller;
+    // the other cells in that row (rendered top-aligned) stay level with the
+    // wrapped cell's first line, so every wrapped row visually splits from
+    // its neighbors — a staircase of misaligned rows. Table data truncates
+    // with an ellipsis instead, so every row stays exactly one line.
+    inTableCell: control.closest('table') !== null,
+  }))
+
+  measurements.forEach(({ control, bounds, computed, value, inTableCell }) => {
     const replacement = document.createElement('div')
-    const bounds = control.getBoundingClientRect()
-    const computed = window.getComputedStyle(control)
-    const multiline = control instanceof HTMLTextAreaElement
 
     replacement.className = control.className
-    replacement.textContent = control.value
     replacement.style.width = `${bounds.width}px`
     replacement.style.height = `${bounds.height}px`
     replacement.style.minWidth = '0'
@@ -67,11 +114,32 @@ function replaceEditableControlsWithStaticText(container: HTMLElement) {
     replacement.style.border = computed.border
     replacement.style.borderRadius = computed.borderRadius
     replacement.style.background = computed.background
-    replacement.style.whiteSpace = multiline ? 'pre-wrap' : 'nowrap'
-    // html2canvas calculates native input baselines outside their CSS box on
-    // some font sizes. Static text may paint beyond that box without changing
-    // layout, which prevents glyphs from being cut at the top or bottom.
-    replacement.style.overflow = 'visible'
+    if (inTableCell) {
+      const contentBoxWidth = computed.boxSizing === 'content-box'
+        ? bounds.width
+        : bounds.width - parseFloat(computed.paddingLeft) - parseFloat(computed.paddingRight)
+        - parseFloat(computed.borderLeftWidth) - parseFloat(computed.borderRightWidth)
+      // `computed.font` (the shorthand) comes back empty in some engines —
+      // assigning an empty string to canvas `.font` is a silent no-op, which
+      // left it at the 10px default and under-truncated real (larger) text.
+      // Building the font spec from the individual longhands is reliable.
+      const fontSpec = `${computed.fontStyle} ${computed.fontWeight} ${computed.fontSize} ${computed.fontFamily}`
+      replacement.textContent = truncateTextToWidth(value, contentBoxWidth, fontSpec)
+      replacement.style.whiteSpace = 'nowrap'
+      replacement.style.overflow = 'hidden'
+    } else {
+      replacement.textContent = value
+      // Single-line inputs were forced to `nowrap`, so a title longer than
+      // the control's rendered width overflowed horizontally and got clipped
+      // by the slide's `overflow: hidden` wrapper. Wrapping instead of
+      // clipping is the safer failure mode for exported titles/text blocks.
+      replacement.style.whiteSpace = 'pre-wrap'
+      // html2canvas calculates native input baselines outside their CSS box
+      // on some font sizes. Static text may paint beyond that box without
+      // changing layout, which prevents glyphs from being cut at the top or
+      // bottom.
+      replacement.style.overflow = 'visible'
+    }
     replacement.style.overflowWrap = 'anywhere'
     replacement.style.flexShrink = '0'
 

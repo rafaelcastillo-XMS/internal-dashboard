@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import { Download, Mail } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { edgeFetch } from '@/lib/edgeFetch'
-import { generateMonthlyBudgetPdf, generateOpenAiAdsPdf, generateWeeklyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
+import { generateMonthlyBudgetPdf, generateMonthlyBudgetPdfBytes, generateOpenAiAdsPdf, generateWeeklyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
 import type { PdfMonthlyRow, PdfOpenAiRow, PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
+import { captureTableAsImage } from '@/features/sem/lib/tableToImage'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -288,6 +289,7 @@ function MonthlyReport({ accounts, accentColor = '#16a34a' }: { accounts: AdsAcc
   const [cells, setCells]         = useState<Record<string, MonthlyCell>>({})
   const [loading, setLoading]     = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [preparingEmail, setPreparingEmail] = useState(false)
   const [emailPayload, setEmailPayload] = useState<EmailReportPayload | null>(null)
 
   // Budgets are set per account in the client integration cards (not month-scoped)
@@ -392,6 +394,43 @@ function MonthlyReport({ accounts, accentColor = '#16a34a' }: { accounts: AdsAcc
     finally { setExporting(false) }
   }
 
+  const monthlyTableHeaders = ['Client', 'ID', 'Budget', 'Spend', 'Credits Refunded', 'Paid With']
+  const rowsToTable = (platformRows: PdfMonthlyRow[]) => platformRows.map(r => [
+    r.accountName,
+    r.accountId ?? '—',
+    r.budget > 0 ? fmtCurrency(r.budget) : '—',
+    r.spend > 0 ? fmtCurrency(r.spend) : '—',
+    (r.refunded ?? 0) > 0 ? fmtCurrency(r.refunded ?? 0) : '—',
+    r.paidWith || '—',
+  ])
+
+  async function handleOpenEmailModal() {
+    setPreparingEmail(true)
+    try {
+      const rows = buildMonthlyRows()
+      const adsRows = rows.filter(r => r.platform === 'Google Ads')
+      const guaranteeRows = rows.filter(r => r.platform === 'Google Guarantee')
+      const [adsImage, guaranteeImage, pdf] = await Promise.all([
+        captureTableAsImage({ title: 'Google Ads Budget Report', headers: monthlyTableHeaders, rows: rowsToTable(adsRows) }),
+        captureTableAsImage({ title: 'Google Guarantee (LSA) Budget Report', headers: monthlyTableHeaders, rows: rowsToTable(guaranteeRows) }),
+        generateMonthlyBudgetPdfBytes({ monthLabel, rows }),
+      ])
+      setEmailPayload({
+        kind: 'monthly',
+        monthLabel,
+        rows,
+        images: [
+          { label: 'Google Ads Budget Report', ...adsImage },
+          { label: 'Google Guarantee (LSA) Budget Report', ...guaranteeImage },
+        ],
+        pdfBase64: uint8ToBase64(pdf.bytes),
+        pdfFilename: pdf.filename,
+      })
+    } finally {
+      setPreparingEmail(false)
+    }
+  }
+
   const selectCls = 'h-7 rounded-lg border border-stroke bg-white px-2 text-xs font-medium text-black outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]'
 
   return (
@@ -415,12 +454,12 @@ function MonthlyReport({ accounts, accentColor = '#16a34a' }: { accounts: AdsAcc
           )}
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setEmailPayload({ kind: 'monthly', monthLabel, rows: buildMonthlyRows() })}
+          <button onClick={handleOpenEmailModal} disabled={preparingEmail}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
+                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
                        dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             <Mail className="h-4 w-4" />
-            Send by Email
+            {preparingEmail ? 'Preparing…' : 'Send by Email'}
           </button>
           <button onClick={handleExportMonthly} disabled={exporting}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
@@ -755,12 +794,24 @@ type EmailReportPayload =
       kind: 'monthly'
       monthLabel: string
       rows: PdfMonthlyRow[]
+      images: { label: string; dataUrl: string; width: number; height: number }[]
+      pdfBase64: string
+      pdfFilename: string
     }
   | {
       kind: 'openai'
       dateLabel: string
       rows: PdfOpenAiRow[]
     }
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
+}
 
 function buildWeeklyText(dateLabel: string, adsRows: PdfWeeklyRow[], guaranteeRows: PdfWeeklyRow[]): string {
   const lines: string[] = []
@@ -856,15 +907,44 @@ function buildOpenAiText(dateLabel: string, rows: PdfOpenAiRow[]): string {
   return lines.join('\n')
 }
 
+// The wording adapts to the report period — "reporte mensual" for a whole
+// month, "reporte semanal" for a date range — instead of one fixed sentence.
+function buildEmailBodyTemplate(payload: EmailReportPayload): string {
+  const intro = 'Hola team,'
+  const closing = 'Los presupuestos están actualizados y se hicieron los ajustes en las cuentas que lo requerían. Más detalles en la Master List de SEM clients.'
+
+  if (payload.kind === 'monthly') {
+    return `${intro}\n\nLes comparto el reporte de presupuesto mensual correspondiente a ${payload.monthLabel}. ${closing}`
+  }
+  if (payload.kind === 'weekly') {
+    return `${intro}\n\nLes comparto el reporte de presupuesto semanal correspondiente al periodo ${payload.dateLabel}. ${closing}`
+  }
+  return `${intro}\n\nLes comparto el reporte de OpenAI Ads correspondiente al periodo ${payload.dateLabel}. ${closing}`
+}
+
+function buildEmailTitle(payload: EmailReportPayload): string {
+  if (payload.kind === 'monthly') return `Reporte de Presupuesto Mensual — ${payload.monthLabel}`
+  if (payload.kind === 'weekly') return `Reporte de Presupuesto Semanal — ${payload.dateLabel}`
+  return `Reporte de OpenAI Ads — ${payload.dateLabel}`
+}
+
 function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | null; onClose: () => void }) {
   const [email, setEmail]         = useState('')
   const [scheduled, setScheduled] = useState('')
   const [note, setNote]           = useState('')
+  const [bodyDraft, setBodyDraft] = useState('')
   const [sent, setSent]           = useState(false)
+  const [sending, setSending]     = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
 
-  useEffect(() => { if (!payload) { setEmail(''); setScheduled(''); setNote(''); setSent(false) } }, [payload])
+  useEffect(() => {
+    setEmail(''); setScheduled(''); setNote(''); setSent(false); setSendError(null); setSending(false)
+    if (payload) setBodyDraft(buildEmailBodyTemplate(payload))
+  }, [payload])
 
   if (!payload) return null
+
+  const isRealSend = payload.kind === 'monthly'
 
   const reportText = payload.kind === 'monthly'
     ? buildMonthlyText(payload.monthLabel, payload.rows)
@@ -873,15 +953,54 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
       : buildWeeklyText(payload.dateLabel, payload.adsRows, payload.guaranteeRows)
   const label = payload.kind === 'monthly' ? payload.monthLabel : payload.dateLabel
   const subjectPrefix = payload.kind === 'monthly' ? 'Monthly Budget Report' : payload.kind === 'openai' ? 'OpenAI Ads Report' : 'Budget Report'
+  const subject = `${subjectPrefix} — ${label}`
 
-  const handleSend = () => {
-    const subject = scheduled
-      ? `${subjectPrefix} — ${label} (scheduled ${new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`
-      : `${subjectPrefix} — ${label}`
+  const handleSendReal = async () => {
+    if (payload.kind !== 'monthly') return
+    setSending(true)
+    setSendError(null)
+    try {
+      const { error } = await supabase.functions.invoke('send-report-email', {
+        body: {
+          to: email,
+          subject,
+          title: buildEmailTitle(payload),
+          bodyText: bodyDraft,
+          images: payload.images,
+          pdfBase64: payload.pdfBase64,
+          pdfFilename: payload.pdfFilename,
+        },
+      })
+      if (error) throw error
+      setSent(true)
+    } catch (err) {
+      // supabase-js collapses a non-2xx function response into a generic
+      // FunctionsHttpError — the real `{error: "..."}` body from our
+      // function lives on `error.context` (the raw Response), not `.message`.
+      let message = err instanceof Error ? err.message : 'Failed to send email'
+      const context = (err as { context?: Response })?.context
+      if (context && typeof context.json === 'function') {
+        try {
+          const body = await context.json()
+          if (body?.error) message = body.error
+        } catch { /* not JSON — keep the generic message */ }
+      }
+      setSendError(message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleSendMailto = () => {
+    const subjectWithSchedule = scheduled
+      ? `${subject} (scheduled ${new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`
+      : subject
     const body = [reportText, note ? `\n\nNote:\n${note}` : ''].join('')
-    window.open(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`)
+    window.open(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subjectWithSchedule)}&body=${encodeURIComponent(body)}`)
     setSent(true)
   }
+
+  const handleSend = isRealSend ? handleSendReal : handleSendMailto
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -913,14 +1032,54 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
             </div>
-            <p className="text-sm font-semibold text-[#15803d] dark:text-[#4ade80]">Email client opened</p>
-            <p className="mt-1 text-xs text-body dark:text-bodydark">The report was pre-filled in your email client. Review and send.</p>
-            {scheduled && (
-              <p className="mt-2 text-[11px] text-body/70 dark:text-bodydark/70">
-                Reminder set for {new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </p>
+            {isRealSend ? (
+              <>
+                <p className="text-sm font-semibold text-[#15803d] dark:text-[#4ade80]">Email sent</p>
+                <p className="mt-1 text-xs text-body dark:text-bodydark">Sent to {email} from eva@xperienceusa.com.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-[#15803d] dark:text-[#4ade80]">Email client opened</p>
+                <p className="mt-1 text-xs text-body dark:text-bodydark">The report was pre-filled in your email client. Review and send.</p>
+                {scheduled && (
+                  <p className="mt-2 text-[11px] text-body/70 dark:text-bodydark/70">
+                    Reminder set for {new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+              </>
             )}
             <button onClick={onClose} className="mt-4 rounded-lg bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#15803d] transition-colors">Done</button>
+          </div>
+        ) : isRealSend ? (
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-[#E2E5E9]">Recipient Email <span className="text-red-400">*</span></label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@example.com"
+                className="w-full rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-[#E2E5E9] dark:focus:border-[#16a34a]" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-[#E2E5E9]">Message</label>
+              <textarea value={bodyDraft} onChange={e => setBodyDraft(e.target.value)} rows={5}
+                className="w-full resize-none rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-[#E2E5E9] dark:focus:border-[#16a34a]" />
+            </div>
+            <div className="rounded-lg border border-stroke bg-gray-2 px-3.5 py-3 dark:border-strokedark dark:bg-meta-4">
+              <p className="text-[11px] text-body dark:text-bodydark">
+                <span className="font-semibold text-black dark:text-[#E2E5E9]">Attached:</span> Google Ads + Google Guarantee budget tables (embedded as images below the message) and the Monthly Budget PDF.
+              </p>
+            </div>
+            {sendError && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400">{sendError}</p>
+            )}
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-body hover:text-black dark:text-bodydark dark:hover:text-white transition-colors">Cancel</button>
+              <button onClick={handleSend} disabled={!email.includes('@') || sending}
+                className="flex items-center gap-2 rounded-lg bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#15803d] disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+                {sending ? 'Sending…' : 'Send Email'}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">

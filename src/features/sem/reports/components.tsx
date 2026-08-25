@@ -115,9 +115,13 @@ function fieldClass(extra = '') {
 function AutoResizeSlideTitle({
   value,
   onChange,
+  className = 'text-2xl font-bold leading-tight text-[#003B8F] placeholder:text-[#003B8F]/50 max-md:text-xl',
+  ariaLabel,
 }: {
   value: string
   onChange: (value: string) => void
+  className?: string
+  ariaLabel?: string
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -134,7 +138,8 @@ function AutoResizeSlideTitle({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       rows={1}
-      className="block w-full resize-none overflow-hidden bg-transparent text-2xl font-bold leading-tight text-[#003B8F] outline-none placeholder:text-[#003B8F]/50 max-md:text-xl"
+      aria-label={ariaLabel}
+      className={`block w-full resize-none overflow-hidden bg-transparent outline-none ${className}`}
     />
   )
 }
@@ -867,12 +872,11 @@ export function SearchAdPreviewCard({
             <span className="truncate">{ad.displayUrl}</span>
             {path ? <span className="truncate">› {path}</span> : null}
           </div>
-          <textarea
+          <AutoResizeSlideTitle
             value={ad.headline}
-            onChange={(event) => onChange?.({ headline: event.target.value })}
-            rows={2}
-            className="block w-full resize-none overflow-hidden bg-transparent text-[23px] font-normal leading-[1.2] text-[#1a0dab] outline-none"
-            aria-label="Ad headline"
+            onChange={(headline) => onChange?.({ headline })}
+            className="text-[23px] font-normal leading-[1.2] text-[#1a0dab]"
+            ariaLabel="Ad headline"
           />
           <textarea
             value={ad.description}
@@ -929,12 +933,11 @@ export function PmaxAdPreviewCard({
         </div>
       </div>
 
-      <textarea
+      <AutoResizeSlideTitle
         value={ad.longHeadline || ad.headline}
-        onChange={(event) => onChange?.({ longHeadline: event.target.value })}
-        rows={2}
-        className="mt-4 block w-full resize-none overflow-hidden bg-transparent text-[25px] leading-[1.2] text-[#0b57d0] outline-none"
-        aria-label="Performance Max headline"
+        onChange={(longHeadline) => onChange?.({ longHeadline })}
+        className="mt-4 text-[25px] leading-[1.2] text-[#0b57d0]"
+        ariaLabel="Performance Max headline"
       />
 
       <div className="mt-3 flex min-h-0 flex-1 gap-4">
@@ -1394,17 +1397,16 @@ export function ReportSlide({
         />
         <div className="relative z-10 w-full max-w-3xl text-left">
           {slide.type === 'next_steps' ? (
-            <textarea
+            <AutoResizeSlideTitle
               value={slide.title}
-              onChange={(event) => onChange({ ...slide, title: event.target.value })}
-              rows={2}
-              className="block w-full resize-none overflow-hidden whitespace-normal break-words bg-transparent text-left text-6xl font-bold leading-[1.08] text-white outline-none placeholder:text-white/50 max-md:text-4xl"
+              onChange={(title) => onChange({ ...slide, title })}
+              className="whitespace-normal break-words text-left text-6xl font-bold leading-[1.08] text-white placeholder:text-white/50 max-md:text-4xl"
             />
           ) : (
-            <input
+            <AutoResizeSlideTitle
               value={slide.title}
-              onChange={(event) => onChange({ ...slide, title: event.target.value })}
-              className="w-full bg-transparent text-left text-7xl font-bold leading-tight text-white outline-none placeholder:text-white/50 max-md:text-5xl"
+              onChange={(title) => onChange({ ...slide, title })}
+              className="whitespace-normal break-words text-left text-7xl font-bold leading-tight text-white placeholder:text-white/50 max-md:text-5xl"
             />
           )}
           <input
@@ -1477,9 +1479,13 @@ export function ReportSlide({
           </div>
 
           <div className="flex flex-1 flex-col">
-            <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 xl:grid-cols-4">
+            {/* Flex, not grid: html2canvas doesn't reliably stretch CSS Grid rows
+                to equal height, which staggered these cards' bottom edges. */}
+            <div className="flex flex-wrap">
               {googleAdsKpis.map((metric) => (
-                <GoogleAdsKpiCard key={metric.id} metric={metric} onChange={(patch) => updateKpi(metric.id, patch)} />
+                <div key={metric.id} className="flex w-1/2 xl:w-1/4">
+                  <GoogleAdsKpiCard metric={metric} onChange={(patch) => updateKpi(metric.id, patch)} />
+                </div>
               ))}
             </div>
 

@@ -63,17 +63,20 @@ function loadXmsLogoDataUrl(): Promise<string | null> {
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
+// Key names are legacy (green/blue) but the values are the XMS brand palette:
+// primary accent is xms-blue (#1A72D9, tailwind.config.js), secondary accent
+// (used for the Google Guarantee section) is xms-orange (#F47C20).
 const C = {
-  green:       [21,  128, 61]   as [number,number,number],
-  greenLight:  [240, 253, 244]  as [number,number,number],
-  greenMid:    [187, 247, 208]  as [number,number,number],
-  greenText:   [22,  163, 74]   as [number,number,number],
-  greenHeader: [209, 250, 229]  as [number,number,number],
-  blue:        [29,  78,  216]  as [number,number,number],
-  blueLight:   [239, 246, 255]  as [number,number,number],
-  blueMid:     [191, 219, 254]  as [number,number,number],
-  blueHeader:  [219, 234, 254]  as [number,number,number],
-  totals:      [238, 247, 242]  as [number,number,number],
+  green:       [26,  114, 217]  as [number,number,number],
+  greenLight:  [235, 244, 253]  as [number,number,number],
+  greenMid:    [191, 219, 254]  as [number,number,number],
+  greenText:   [26,  114, 217]  as [number,number,number],
+  greenHeader: [219, 234, 254]  as [number,number,number],
+  blue:        [244, 124, 32]   as [number,number,number],
+  blueLight:   [255, 243, 230]  as [number,number,number],
+  blueMid:     [253, 211, 170]  as [number,number,number],
+  blueHeader:  [255, 232, 209]  as [number,number,number],
+  totals:      [232, 241, 253]  as [number,number,number],
   rowAlt:      [249, 250, 251]  as [number,number,number],
   white:       [255, 255, 255]  as [number,number,number],
   dark:        [17,  24,  39]   as [number,number,number],
@@ -108,10 +111,23 @@ function cell(doc: jsPDF, text: string, x: number, y: number, w: number, h: numb
   doc.setFontSize(size)
   setColor(doc, color, 'text')
   const px = align === 'right' ? x + w - 2.5 : align === 'center' ? x + w / 2 : x + 3
-  // Truncate text to fit column width
-  const maxW = w - 5
-  const lines = doc.splitTextToSize(text, maxW)
-  doc.text(lines[0] ?? '', px, y + h / 2 + 2, { align })
+  doc.text(truncateToWidth(doc, text, w - 5), px, y + h / 2 + 2, { align })
+}
+
+// Truncates with an ellipsis measured against actual glyph widths, instead of
+// jsPDF's word-wrap (which silently drops overflow text with no indicator).
+function truncateToWidth(doc: jsPDF, text: string, maxW: number): string {
+  if (doc.getTextWidth(text) <= maxW) return text
+  const ellipsis = '…'
+  let lo = 0
+  let hi = text.length
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    const candidate = text.slice(0, mid).trimEnd() + ellipsis
+    if (doc.getTextWidth(candidate) <= maxW) lo = mid
+    else hi = mid - 1
+  }
+  return lo === 0 ? ellipsis : text.slice(0, lo).trimEnd() + ellipsis
 }
 
 function drawStatusDot(doc: jsPDF, active: boolean, x: number, cy: number) {
@@ -309,7 +325,7 @@ function drawPageHeader(doc: jsPDF, title: string, dateLabel: string, logoDataUr
   setColor(doc, C.green, 'fill')
   doc.rect(0, 0, PAGE_W, 26, 'F')
   // Accent strip
-  setColor(doc, [16, 185, 129], 'fill')
+  setColor(doc, [59, 168, 245], 'fill')
   doc.rect(0, 23.5, PAGE_W, 2.5, 'F')
 
   doc.setFont('helvetica', 'bold')
@@ -323,14 +339,14 @@ function drawPageHeader(doc: jsPDF, title: string, dateLabel: string, logoDataUr
   doc.text(dateLabel, ML, 19)
 
   drawBrandMark(doc, logoDataUrl)
-  setColor(doc, [167, 243, 208], 'text')
+  setColor(doc, [191, 219, 254], 'text')
   doc.setFontSize(8)
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   doc.text(`Generated: ${dateStr}`, PAGE_W - ML, 17.5, { align: 'right' })
 
   if (pageNum && pageNum > 1) {
     doc.setFontSize(7)
-    setColor(doc, [167, 243, 208], 'text')
+    setColor(doc, [191, 219, 254], 'text')
     doc.text(`(continued)`, PAGE_W / 2, 17.5, { align: 'center' })
   }
 }
@@ -367,9 +383,12 @@ function drawSectionLabel(
   doc.text(note, PAGE_W - ML, y + 5.8, { align: 'right' })
 }
 
-function drawFooters(doc: jsPDF) {
+// startPage skips the cover page — it carries no footer, and content pages
+// are numbered relative to each other ("Page 1 of N"), not by absolute index.
+function drawFooters(doc: jsPDF, startPage = 1) {
   const totalPages = doc.getNumberOfPages()
-  for (let p = 1; p <= totalPages; p++) {
+  const contentPages = totalPages - startPage + 1
+  for (let p = startPage; p <= totalPages; p++) {
     doc.setPage(p)
     setColor(doc, C.border, 'draw')
     doc.setLineWidth(0.25)
@@ -378,8 +397,70 @@ function drawFooters(doc: jsPDF) {
     doc.setFontSize(6.5)
     setColor(doc, C.muted, 'text')
     doc.text('XMS Intelligence Platform · Confidential · Do not distribute', ML, PAGE_H - 5.5)
-    doc.text(`Page ${p} of ${totalPages}`, PAGE_W - ML, PAGE_H - 5.5, { align: 'right' })
+    doc.text(`Page ${p - startPage + 1} of ${contentPages}`, PAGE_W - ML, PAGE_H - 5.5, { align: 'right' })
   }
+}
+
+function drawCoverPage(
+  doc: jsPDF,
+  opts: { title: string; subtitle: string; dateLabel: string; logoDataUrl: string | null; stats?: { label: string; value: string }[] },
+) {
+  const { title, subtitle, dateLabel, logoDataUrl, stats = [] } = opts
+
+  setColor(doc, C.green, 'fill')
+  doc.rect(0, 0, PAGE_W, PAGE_H, 'F')
+  setColor(doc, [59, 168, 245], 'fill')
+  doc.rect(0, 0, PAGE_W, 3, 'F')
+  doc.rect(0, PAGE_H - 3, PAGE_W, 3, 'F')
+
+  if (logoDataUrl) {
+    const h = 44
+    const w = h * LOGO_ASPECT
+    try { doc.addImage(logoDataUrl, 'PNG', PAGE_W / 2 - w / 2, 38, w, h) } catch { /* skip logo */ }
+  }
+
+  setColor(doc, C.white, 'text')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(30)
+  doc.text(title, PAGE_W / 2, 116, { align: 'center' })
+
+  setColor(doc, [219, 234, 254], 'text')
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(13)
+  doc.text(subtitle, PAGE_W / 2, 128, { align: 'center' })
+
+  setColor(doc, C.greenHeader, 'text')
+  doc.setFontSize(10)
+  doc.text(dateLabel, PAGE_W / 2, 138, { align: 'center' })
+
+  if (stats.length > 0) {
+    const gap  = 10
+    const boxW = 48
+    const boxH = 22
+    const totalW = stats.length * boxW + (stats.length - 1) * gap
+    let x = PAGE_W / 2 - totalW / 2
+    const y = 158
+    stats.forEach((s) => {
+      setColor(doc, [255, 255, 255], 'draw')
+      doc.setLineWidth(0.3)
+      doc.roundedRect(x, y, boxW, boxH, 2, 2, 'S')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(13)
+      setColor(doc, C.white, 'text')
+      doc.text(s.value, x + boxW / 2, y + 11, { align: 'center' })
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(6.5)
+      setColor(doc, [191, 219, 254], 'text')
+      doc.text(s.label.toUpperCase(), x + boxW / 2, y + 17.5, { align: 'center' })
+      x += boxW + gap
+    })
+  }
+
+  setColor(doc, [191, 219, 254], 'text')
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  const generated = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  doc.text(`Generated ${generated} · Confidential · Do not distribute`, PAGE_W / 2, PAGE_H - 14, { align: 'center' })
 }
 
 // ─── Public: Weekly PDF ───────────────────────────────────────────────────────
@@ -405,6 +486,20 @@ export async function generateWeeklyBudgetPdf(params: {
   const { dateLabel, adsRows, guaranteeRows } = params
   const logoDataUrl = await loadXmsLogoDataUrl()
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+  const allRows = [...adsRows, ...guaranteeRows]
+  drawCoverPage(doc, {
+    title: TITLE_WEEKLY,
+    subtitle: 'Google Ads + Google Guarantee',
+    dateLabel,
+    logoDataUrl,
+    stats: [
+      { label: 'Total budget', value: fc(allRows.reduce((s, r) => s + r.budget, 0)) },
+      { label: 'Period spend', value: fc(allRows.reduce((s, r) => s + r.cost, 0)) },
+      { label: 'Accounts', value: String(allRows.length) },
+    ],
+  })
+  doc.addPage()
 
   drawPageHeader(doc, TITLE_WEEKLY, dateLabel, logoDataUrl)
   let y = 32
@@ -453,7 +548,7 @@ export async function generateWeeklyBudgetPdf(params: {
     doc.text('No accounts to report for this period.', ML, y + 10)
   }
 
-  drawFooters(doc)
+  drawFooters(doc, 2)
 
   const filename = `XMS-Budget-Report-${new Date().toISOString().slice(0, 10)}.pdf`
   doc.save(filename)
@@ -479,13 +574,26 @@ function drawMonthlyTableHeader(doc: jsPDF, y: number) {
 
 // ─── Public: Monthly PDF ──────────────────────────────────────────────────────
 
-export async function generateMonthlyBudgetPdf(params: {
+async function buildMonthlyBudgetPdfDoc(params: {
   monthLabel: string
   rows: PdfMonthlyRow[]
-}): Promise<void> {
+}): Promise<{ doc: jsPDF; filename: string }> {
   const { monthLabel, rows } = params
   const logoDataUrl = await loadXmsLogoDataUrl()
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+  drawCoverPage(doc, {
+    title: TITLE_MONTHLY,
+    subtitle: 'Google Ads + Google Guarantee · SEM monthly data',
+    dateLabel: monthLabel,
+    logoDataUrl,
+    stats: [
+      { label: 'Total budget', value: fc(rows.reduce((s, r) => s + r.budget, 0)) },
+      { label: 'Total spend', value: fc(rows.reduce((s, r) => s + r.spend, 0)) },
+      { label: 'Accounts', value: String(rows.length) },
+    ],
+  })
+  doc.addPage()
 
   drawPageHeader(doc, TITLE_MONTHLY, monthLabel, logoDataUrl)
   let y = 32
@@ -583,10 +691,27 @@ export async function generateMonthlyBudgetPdf(params: {
   x += MONTHLY_COLS[5]
   cell(doc, fc(totalRefund), x, y, MONTHLY_COLS[6], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
 
-  drawFooters(doc)
+  drawFooters(doc, 2)
 
   const filename = `XMS-Budget-Monthly-${monthLabel.replace(/\s/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`
+  return { doc, filename }
+}
+
+export async function generateMonthlyBudgetPdf(params: {
+  monthLabel: string
+  rows: PdfMonthlyRow[]
+}): Promise<void> {
+  const { doc, filename } = await buildMonthlyBudgetPdfDoc(params)
   doc.save(filename)
+}
+
+// Bytes instead of a browser download — for attaching the same PDF to an email.
+export async function generateMonthlyBudgetPdfBytes(params: {
+  monthLabel: string
+  rows: PdfMonthlyRow[]
+}): Promise<{ bytes: Uint8Array; filename: string }> {
+  const { doc, filename } = await buildMonthlyBudgetPdfDoc(params)
+  return { bytes: new Uint8Array(doc.output('arraybuffer')), filename }
 }
 
 // ─── Public: OpenAI Ads PDF ───────────────────────────────────────────────────
@@ -615,6 +740,19 @@ export async function generateOpenAiAdsPdf(params: {
   const { dateLabel, rows } = params
   const logoDataUrl = await loadXmsLogoDataUrl()
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+  drawCoverPage(doc, {
+    title: TITLE_OPENAI,
+    subtitle: 'OpenAI Ads API',
+    dateLabel,
+    logoDataUrl,
+    stats: [
+      { label: 'Total budget', value: fc(rows.reduce((s, r) => s + r.budget, 0)) },
+      { label: 'Total spend', value: fc(rows.reduce((s, r) => s + r.spend, 0)) },
+      { label: 'Campaigns', value: String(rows.length) },
+    ],
+  })
+  doc.addPage()
 
   drawPageHeader(doc, TITLE_OPENAI, dateLabel, logoDataUrl)
   let y = 32
@@ -673,7 +811,7 @@ export async function generateOpenAiAdsPdf(params: {
     y += ROW_H
   })
 
-  drawFooters(doc)
+  drawFooters(doc, 2)
 
   const filename = `XMS-OpenAI-Ads-Report-${new Date().toISOString().slice(0, 10)}.pdf`
   doc.save(filename)
