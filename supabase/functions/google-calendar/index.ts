@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { importPKCS8, SignJWT } from "https://esm.sh/jose@5"
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
+import { CORS_HEADERS } from "../_shared/cors.ts"
 
 async function getGoogleAccessToken(userEmail: string): Promise<string> {
   const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!)

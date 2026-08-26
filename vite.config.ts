@@ -187,17 +187,14 @@ function appendAuthResult(returnPath: string, authResult: string) {
   return `${returnPath}${separator}auth=${authResult}`
 }
 
-function getClientCreds() {
-  const raw = JSON.parse(fs.readFileSync(GOOGLE_CREDS_PATH, "utf-8"))
+function getClientCreds(path: string = GOOGLE_CREDS_PATH) {
+  const raw = JSON.parse(fs.readFileSync(path, "utf-8"))
   const data = raw.installed || raw.web
   return { client_id: data.client_id as string, client_secret: data.client_secret as string }
 }
 
 function getGbpClientCreds() {
-  const credsPath = fs.existsSync(GBP_CREDS_PATH) ? GBP_CREDS_PATH : GOOGLE_CREDS_PATH
-  const raw = JSON.parse(fs.readFileSync(credsPath, "utf-8"))
-  const data = raw.installed || raw.web
-  return { client_id: data.client_id as string, client_secret: data.client_secret as string }
+  return getClientCreds(fs.existsSync(GBP_CREDS_PATH) ? GBP_CREDS_PATH : GOOGLE_CREDS_PATH)
 }
 
 function readStoredToken(): Record<string, unknown> | null {

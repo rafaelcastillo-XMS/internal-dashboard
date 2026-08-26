@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { SMTPClient } from "https://deno.land/x/denomailer/mod.ts"
-
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
+import { CORS_HEADERS as CORS } from "../_shared/cors.ts"
 
 const SENDER_ADDRESS = Deno.env.get("EVA_GMAIL_ADDRESS") || "eva@xperienceusa.com"
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
