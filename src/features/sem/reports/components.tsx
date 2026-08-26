@@ -400,21 +400,25 @@ function RichTextBlockEditor({
   block,
   onChange,
   compact = false,
+  bordered = true,
+  fill = false,
 }: {
   block: TextBlock
   onChange: (patch: Pick<TextBlock, 'value' | 'html'>) => void
   compact?: boolean
+  bordered?: boolean
+  fill?: boolean
 }) {
   return (
-    <div className={`rounded-lg border border-[#D8E4F2] bg-white shadow-[0_10px_24px_rgba(0,59,143,0.06)] ${compact ? 'p-2' : 'p-3'}`}>
-      <label className={`${compact ? 'mb-1' : 'mb-2'} block text-xs font-bold uppercase tracking-[0.14em] text-[#0057C2]`}>
+    <div className={`${bordered ? 'rounded-lg border border-[#D8E4F2] shadow-[0_10px_24px_rgba(0,59,143,0.06)]' : ''} bg-white ${fill ? 'flex h-full min-h-0 flex-col' : ''} ${compact ? 'p-2' : 'p-3'}`}>
+      <label className={`${compact ? 'mb-1' : 'mb-2'} ${fill ? 'shrink-0' : ''} block text-xs font-bold uppercase tracking-[0.14em] text-[#0057C2]`}>
         {block.label}
       </label>
       <RichTextEditor
         html={block.html}
         fallbackText={block.value}
         placeholder={block.label}
-        editorClassName={compact ? 'min-h-[50px] max-h-[75px] text-[13px]' : 'min-h-[260px] max-h-[360px] text-xl'}
+        editorClassName={fill ? 'flex-1 min-h-0' : compact ? 'min-h-[50px] max-h-[75px] text-[13px]' : 'min-h-[260px] max-h-[360px] text-xl'}
         onChange={(html, value) => onChange({ html, value })}
       />
     </div>
@@ -859,14 +863,14 @@ export function SearchAdPreviewCard({
   const path = (ad.pathLabels ?? []).join(' › ')
 
   return (
-    <div className="mx-auto flex h-full min-w-0 min-h-[350px] w-full max-w-[760px] flex-col px-6">
+    <div className="mx-auto flex h-full min-w-0 min-h-[280px] w-full max-w-[480px] flex-col px-6">
       <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[#1a73e8]">
         <span className="h-2.5 w-2.5 rounded-full bg-[#188038]" />
         <span>{ad.businessName}</span>
         {path ? <><span className="text-slate-400">›</span><span>{path}</span></> : null}
       </div>
 
-      <div className="relative flex flex-1 flex-col rounded-t-[38px] rounded-b-none border-[5px] border-[#dadce0] bg-white px-5 pb-5 pt-8 shadow-[0_14px_35px_rgba(60,64,67,0.12)]">
+      <div className="relative flex flex-1 flex-col rounded-t-[38px] rounded-b-none border-[5px] border-[#dadce0] bg-white px-4 pb-4 pt-6 shadow-[0_14px_35px_rgba(60,64,67,0.12)]">
         <span className="absolute left-1/2 top-2 h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-[#dadce0] bg-white" />
         <div className="flex flex-1 flex-col rounded border border-[#dadce0] bg-[#f8f9fa] px-3 py-2">
           <div className="mb-2 flex items-center gap-1.5 border-b border-[#e2e5e9] pb-2 text-xs text-[#188038]">
@@ -877,14 +881,14 @@ export function SearchAdPreviewCard({
           <AutoResizeSlideTitle
             value={ad.headline}
             onChange={(headline) => onChange?.({ headline })}
-            className="text-[23px] font-normal leading-[1.2] text-[#1a0dab]"
+            className="text-[19px] font-normal leading-[1.2] text-[#1a0dab]"
             ariaLabel="Ad headline"
           />
           <textarea
             value={ad.description}
             onChange={(event) => onChange?.({ description: event.target.value })}
             rows={3}
-            className="mt-2 block w-full resize-none overflow-hidden border-t border-[#e2e5e9] bg-transparent pt-2 text-base leading-6 text-[#5f6368] outline-none"
+            className="mt-2 block w-full resize-none overflow-hidden border-t border-[#e2e5e9] bg-transparent pt-2 text-sm leading-6 text-[#5f6368] outline-none"
             aria-label="Ad description"
           />
           {(ad.pathLabels ?? []).length ? (
@@ -914,7 +918,7 @@ export function PmaxAdPreviewCard({
     .toUpperCase()
 
   return (
-    <div className="flex h-full min-h-[350px] min-w-0 flex-col rounded-lg border border-[#5f6368] bg-white p-5 shadow-[0_10px_24px_rgba(60,64,67,0.08)]">
+    <div className="mx-auto flex h-full min-h-[280px] min-w-0 w-full max-w-[480px] flex-col rounded-lg border border-[#5f6368] bg-white p-4 shadow-[0_10px_24px_rgba(60,64,67,0.08)]">
       <div className="flex items-center gap-3">
         {ad.logoSrc && !logoFailed ? (
           <img
@@ -922,32 +926,32 @@ export function PmaxAdPreviewCard({
             src={ad.logoSrc}
             alt=""
             onError={() => setLogoFailed(true)}
-            className="h-11 w-11 rounded-full border border-[#dadce0] object-contain"
+            className="h-9 w-9 rounded-full border border-[#dadce0] object-contain"
           />
         ) : ad.logoSrc || logoFailed ? (
-          <img src="/sem-reports/google-ads-logo.webp" alt="Google Ads" className="h-11 w-11 rounded-full border border-[#dadce0] bg-white object-contain p-1" />
+          <img src="/sem-reports/google-ads-logo.webp" alt="Google Ads" className="h-9 w-9 rounded-full border border-[#dadce0] bg-white object-contain p-1" />
         ) : (
-          <span className="flex h-11 w-11 items-center justify-center rounded-full border border-[#dadce0] bg-[#f8f9fa] text-xs font-bold text-[#5f6368]">{initials}</span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#dadce0] bg-[#f8f9fa] text-xs font-bold text-[#5f6368]">{initials}</span>
         )}
         <div className="min-w-0">
-          <p className="truncate text-base font-medium text-[#202124]">{ad.businessName}</p>
-          <p className="truncate text-sm text-[#5f6368]">{ad.displayUrl}</p>
+          <p className="truncate text-sm font-medium text-[#202124]">{ad.businessName}</p>
+          <p className="truncate text-xs text-[#5f6368]">{ad.displayUrl}</p>
         </div>
       </div>
 
       <AutoResizeSlideTitle
         value={ad.longHeadline || ad.headline}
         onChange={(longHeadline) => onChange?.({ longHeadline })}
-        className="mt-4 text-[25px] leading-[1.2] text-[#0b57d0]"
+        className="mt-3 text-[20px] leading-[1.2] text-[#0b57d0]"
         ariaLabel="Performance Max headline"
       />
 
-      <div className="mt-3 flex min-h-0 flex-1 gap-4">
+      <div className="mt-2 flex min-h-0 flex-1 gap-3">
         <textarea
           value={ad.description}
           onChange={(event) => onChange?.({ description: event.target.value })}
-          rows={5}
-          className="block min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-base leading-6 text-[#5f6368] outline-none"
+          rows={4}
+          className="block min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-sm leading-6 text-[#5f6368] outline-none"
           aria-label="Performance Max description"
         />
         {ad.imageSrc ? (
@@ -955,16 +959,16 @@ export function PmaxAdPreviewCard({
             crossOrigin="anonymous"
             src={ad.imageSrc}
             alt="Performance Max creative"
-            className="h-32 w-32 shrink-0 rounded-lg object-cover"
+            className="h-24 w-24 shrink-0 rounded-lg object-cover"
           />
         ) : (
-          <div className="h-32 w-32 shrink-0 rounded-lg bg-[#f1f3f4]" />
+          <div className="h-24 w-24 shrink-0 rounded-lg bg-[#f1f3f4]" />
         )}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
         {(ad.ctaLabels ?? []).slice(0, 3).map((label) => (
-          <span key={label} className="rounded-full border border-[#dadce0] px-4 py-2 text-sm font-medium text-[#0b57d0]">{label}</span>
+          <span key={label} className="rounded-full border border-[#dadce0] px-3 py-1.5 text-xs font-medium text-[#0b57d0]">{label}</span>
         ))}
       </div>
     </div>
@@ -1627,7 +1631,7 @@ export function ReportSlide({
   return (
     <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
       <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
-      <div className="min-h-0 flex-1 p-5">
+      <div className="min-h-0 flex-1 p-7">
       <div className="mb-4 border-b border-[#D8E4F2] pb-3">
         <div className="min-w-0">
           <AutoResizeSlideTitle
@@ -1637,7 +1641,7 @@ export function ReportSlide({
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className={slide.type === 'ads' ? 'flex h-full min-h-0 flex-col gap-4' : 'space-y-4'}>
         {slide.content.kpis?.length ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {slide.content.kpis.map((metric) => (
@@ -1647,7 +1651,7 @@ export function ReportSlide({
         ) : null}
 
         {slide.content.ads?.length ? (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-6">
             {searchAd ? (
               <SearchAdPreviewCard
                 ad={searchAd}
@@ -1712,12 +1716,15 @@ export function ReportSlide({
 
         {slide.content.textBlocks?.map((block) => (
           slide.type === 'ads' ? (
-            <RichTextBlockEditor
-              key={block.id}
-              block={{ ...block, label: 'Google Ads Analysis' }}
-              compact
-              onChange={(patch) => updateRichTextBlock('textBlocks', block.id, patch)}
-            />
+            <div key={block.id} className="min-h-0 flex-1">
+              <RichTextBlockEditor
+                block={{ ...block, label: 'Google Ads Analysis' }}
+                compact
+                bordered={false}
+                fill
+                onChange={(patch) => updateRichTextBlock('textBlocks', block.id, patch)}
+              />
+            </div>
           ) : slide.type === 'keywords' || slide.type === 'search_terms' ? (
             <GoogleAdsSummaryBlock key={block.id} block={block} onChange={(value) => updateTextBlock('textBlocks', block.id, value)} />
           ) : (

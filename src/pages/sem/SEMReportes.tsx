@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import { Download, Mail } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { edgeFetch } from '@/lib/edgeFetch'
-import { generateMonthlyBudgetPdf, generateMonthlyBudgetPdfBytes, generateOpenAiAdsPdf, generateWeeklyBudgetPdf } from '@/features/sem/lib/generateReportsPdf'
+import { generateMonthlyBudgetPdf, generateMonthlyBudgetPdfBytes, generateOpenAiAdsPdf, generateWeeklyBudgetPdf, generateWeeklyBudgetPdfBytes } from '@/features/sem/lib/generateReportsPdf'
 import type { PdfMonthlyRow, PdfOpenAiRow, PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
 import { captureTableAsImage } from '@/features/sem/lib/tableToImage'
 
@@ -789,6 +789,9 @@ type EmailReportPayload =
       dateLabel: string
       adsRows: PdfWeeklyRow[]
       guaranteeRows: PdfWeeklyRow[]
+      images: { label: string; dataUrl: string; width: number; height: number }[]
+      pdfBase64: string
+      pdfFilename: string
     }
   | {
       kind: 'monthly'
@@ -844,6 +847,23 @@ function buildWeeklyText(dateLabel: string, adsRows: PdfWeeklyRow[], guaranteeRo
   }
 
   return lines.join('\n')
+}
+
+const WEEKLY_TABLE_HEADERS = ['Status', 'Account Name', 'Budget', 'Period Spend', 'Remaining', '% Used']
+
+function weeklyRowsToTable(rows: PdfWeeklyRow[]): string[][] {
+  return rows.map(r => {
+    const remaining = r.budget > 0 ? r.budget - r.cost : 0
+    const pct = r.budget > 0 ? `${((r.cost / r.budget) * 100).toFixed(1)}%` : '—'
+    return [
+      r.status === 'ENABLED' ? 'Active' : 'Inactive',
+      r.accountName,
+      r.budget > 0 ? fmtCurrency(r.budget) : '—',
+      r.cost > 0 ? fmtCurrency(r.cost) : '—',
+      r.budget > 0 ? fmtCurrency(remaining) : '—',
+      pct,
+    ]
+  })
 }
 
 function buildMonthlyText(monthLabel: string, rows: PdfMonthlyRow[]): string {
@@ -944,7 +964,7 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
 
   if (!payload) return null
 
-  const isRealSend = payload.kind === 'monthly'
+  const isRealSend = payload.kind === 'monthly' || payload.kind === 'weekly'
 
   const reportText = payload.kind === 'monthly'
     ? buildMonthlyText(payload.monthLabel, payload.rows)
@@ -956,7 +976,7 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
   const subject = `${subjectPrefix} — ${label}`
 
   const handleSendReal = async () => {
-    if (payload.kind !== 'monthly') return
+    if (payload.kind !== 'monthly' && payload.kind !== 'weekly') return
     setSending(true)
     setSendError(null)
     try {
@@ -1143,6 +1163,7 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
   const [costByAccount, setCostByAccount]   = useState<Record<string, number>>({})
   const [loadingCost, setLoadingCost]       = useState(false)
   const [exporting, setExporting]           = useState(false)
+  const [preparingEmail, setPreparingEmail] = useState(false)
   const [emailPayload, setEmailPayload]     = useState<EmailReportPayload | null>(null)
 
   useEffect(() => {
@@ -1188,6 +1209,28 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
     finally { setExporting(false) }
   }
 
+  async function handleOpenEmailModal() {
+    setPreparingEmail(true)
+    try {
+      const adsRows = buildRows()
+      const [adsImage, pdf] = await Promise.all([
+        captureTableAsImage({ title: 'Google Ads Budget Report', headers: WEEKLY_TABLE_HEADERS, rows: weeklyRowsToTable(adsRows) }),
+        generateWeeklyBudgetPdfBytes({ dateLabel, adsRows, guaranteeRows: [] }),
+      ])
+      setEmailPayload({
+        kind: 'weekly',
+        dateLabel,
+        adsRows,
+        guaranteeRows: [],
+        images: [{ label: 'Google Ads Budget Report', ...adsImage }],
+        pdfBase64: uint8ToBase64(pdf.bytes),
+        pdfFilename: pdf.filename,
+      })
+    } finally {
+      setPreparingEmail(false)
+    }
+  }
+
   return (
     <div>
       <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
@@ -1202,14 +1245,14 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setEmailPayload({ kind: 'weekly', dateLabel, adsRows: buildRows(), guaranteeRows: [] })}
+          <button onClick={handleOpenEmailModal} disabled={preparingEmail}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
+                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
                        dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
             </svg>
-            Send by Email
+            {preparingEmail ? 'Preparing…' : 'Send by Email'}
           </button>
           <button onClick={handleExport} disabled={exporting}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
@@ -1241,6 +1284,7 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
   const [ggPeriod, setGgPeriod]             = useState<Record<string, { spend: number; leads: number }>>({})
   const [loadingPeriod, setLoadingPeriod]   = useState(false)
   const [exporting, setExporting]           = useState(false)
+  const [preparingEmail, setPreparingEmail] = useState(false)
   const [emailPayload, setEmailPayload]     = useState<EmailReportPayload | null>(null)
 
   useEffect(() => {
@@ -1295,6 +1339,28 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
     finally { setExporting(false) }
   }
 
+  async function handleOpenEmailModal() {
+    setPreparingEmail(true)
+    try {
+      const guaranteeRows = buildGuaranteeRows()
+      const [guaranteeImage, pdf] = await Promise.all([
+        captureTableAsImage({ title: 'Google Guarantee Budget Report', headers: WEEKLY_TABLE_HEADERS, rows: weeklyRowsToTable(guaranteeRows) }),
+        generateWeeklyBudgetPdfBytes({ dateLabel, adsRows: [], guaranteeRows }),
+      ])
+      setEmailPayload({
+        kind: 'weekly',
+        dateLabel,
+        adsRows: [],
+        guaranteeRows,
+        images: [{ label: 'Google Guarantee Budget Report', ...guaranteeImage }],
+        pdfBase64: uint8ToBase64(pdf.bytes),
+        pdfFilename: pdf.filename,
+      })
+    } finally {
+      setPreparingEmail(false)
+    }
+  }
+
   return (
     <div>
       <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
@@ -1309,12 +1375,12 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setEmailPayload({ kind: 'weekly', dateLabel, adsRows: [], guaranteeRows: buildGuaranteeRows() })}
+          <button onClick={handleOpenEmailModal} disabled={preparingEmail}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#3b82f6] hover:text-[#3b82f6]
+                       transition-colors hover:border-[#3b82f6] hover:text-[#3b82f6] disabled:opacity-60
                        dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
             <Mail className="h-4 w-4" />
-            Send by Email
+            {preparingEmail ? 'Preparing…' : 'Send by Email'}
           </button>
           <button onClick={handleExport} disabled={exporting}
             className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card

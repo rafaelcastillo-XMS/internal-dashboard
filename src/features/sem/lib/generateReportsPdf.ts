@@ -485,11 +485,11 @@ function weeklySummaryBoxes(rows: PdfWeeklyRow[], accent: [number, number, numbe
 
 const TITLE_WEEKLY = 'Weekly Budget Report'
 
-export async function generateWeeklyBudgetPdf(params: {
+async function buildWeeklyBudgetPdfDoc(params: {
   dateLabel: string
   adsRows: PdfWeeklyRow[]
   guaranteeRows: PdfWeeklyRow[]
-}): Promise<void> {
+}): Promise<{ doc: jsPDF; filename: string }> {
   const { dateLabel, adsRows, guaranteeRows } = params
   const logoDataUrl = await loadXmsLogoDataUrl()
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
@@ -558,7 +558,26 @@ export async function generateWeeklyBudgetPdf(params: {
   drawFooters(doc, 2)
 
   const filename = `XMS-Budget-Report-${new Date().toISOString().slice(0, 10)}.pdf`
+  return { doc, filename }
+}
+
+export async function generateWeeklyBudgetPdf(params: {
+  dateLabel: string
+  adsRows: PdfWeeklyRow[]
+  guaranteeRows: PdfWeeklyRow[]
+}): Promise<void> {
+  const { doc, filename } = await buildWeeklyBudgetPdfDoc(params)
   doc.save(filename)
+}
+
+// Bytes instead of a browser download — for attaching the same PDF to an email.
+export async function generateWeeklyBudgetPdfBytes(params: {
+  dateLabel: string
+  adsRows: PdfWeeklyRow[]
+  guaranteeRows: PdfWeeklyRow[]
+}): Promise<{ bytes: Uint8Array; filename: string }> {
+  const { doc, filename } = await buildWeeklyBudgetPdfDoc(params)
+  return { bytes: new Uint8Array(doc.output('arraybuffer')), filename }
 }
 
 const TITLE_MONTHLY = 'Monthly Budget Report'
