@@ -699,6 +699,7 @@ function ReportEditorView({
   const [dirty, setDirty] = useState(false)
   const [googleAdsDataLoading, setGoogleAdsDataLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [persistenceError, setPersistenceError] = useState('')
   const initialSlidesRef = useRef(new Map<string, Slide>())
 
@@ -781,6 +782,15 @@ function ReportEditorView({
       setPersistenceError(error instanceof Error ? error.message : 'Unable to refresh and save the Google Ads report data.')
     } finally {
       setGoogleAdsDataLoading(false)
+    }
+  }
+
+  const exportPdf = async () => {
+    setExporting(true)
+    try {
+      await exportReportToPdf(draft)
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -872,7 +882,8 @@ function ReportEditorView({
         saving={saving}
         onRefresh={refreshGoogleAdsData}
         refreshing={googleAdsDataLoading}
-        onExportPdf={() => exportReportToPdf(draft)}
+        onExportPdf={exportPdf}
+        exporting={exporting}
       />
       <div className="grid min-h-[calc(100vh-122px)] grid-cols-[280px_minmax(0,1fr)] max-xl:grid-cols-1">
         <div className="max-xl:hidden">

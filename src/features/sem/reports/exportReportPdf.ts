@@ -151,6 +151,49 @@ function hidePdfOnlyControls(container: HTMLElement) {
   container.querySelectorAll<HTMLElement>('[data-pdf-hide="true"]').forEach((element) => element.remove())
 }
 
+// Same html2canvas limitation as replaceEditableControlsWithStaticText above,
+// but for static text (client name on the cover slide, ad preview URLs, LSA
+// filter labels) that relies on Tailwind's `truncate` (CSS text-overflow:
+// ellipsis) instead of an input/textarea — html2canvas paints those elements
+// hard-clipped mid-word, with no "…". Baking the ellipsis into the text
+// itself fixes every `.truncate` element in one pass instead of one per slide.
+function truncateOverflowingStaticText(container: HTMLElement) {
+  const elements = Array.from(container.querySelectorAll<HTMLElement>('.truncate'))
+
+  // Read every bound before mutating any element — same reasoning as the
+  // measurements pass above: truncating one flex/grid sibling reflows the
+  // others, so measuring-then-mutating one at a time drifts.
+  const measurements = elements.map((element) => {
+    const bounds = element.getBoundingClientRect()
+    const computed = window.getComputedStyle(element)
+    return { element, bounds, computed }
+  })
+
+  measurements.forEach(({ element, bounds, computed }) => {
+    const text = element.textContent ?? ''
+    if (!text || !bounds.width) return
+    const contentWidth = computed.boxSizing === 'content-box'
+      ? bounds.width
+      : bounds.width - parseFloat(computed.paddingLeft) - parseFloat(computed.paddingRight)
+        - parseFloat(computed.borderLeftWidth) - parseFloat(computed.borderRightWidth)
+    const fontSpec = `${computed.fontStyle} ${computed.fontWeight} ${computed.fontSize} ${computed.fontFamily}`
+    element.textContent = truncateTextToWidth(text, contentWidth, fontSpec)
+    // html2canvas recomputes flex/grid layout in its own clone rather than
+    // reusing the live browser's — pin the box to its measured width so it
+    // can't land on a narrower one and clip the ellipsis this just baked in.
+    element.style.width = `${bounds.width}px`
+    element.style.maxWidth = `${bounds.width}px`
+    element.style.flex = '0 0 auto'
+    // html2canvas measures text with its own font metrics, which run a
+    // few px narrower than the browser's for some fonts/sizes — enough to
+    // re-clip the "…" this just baked in even though it fit here. The text
+    // is already the right length; overflow:hidden has nothing left to do
+    // except risk cutting it again, so drop it.
+    element.style.overflow = 'visible'
+    element.style.whiteSpace = 'nowrap'
+  })
+}
+
 function imageCanBeSafelyRasterized(image: HTMLImageElement) {
   try {
     const url = new URL(image.currentSrc || image.src, window.location.href)
@@ -230,6 +273,7 @@ export async function exportReportToPdf(report: Report) {
     await waitForRenderedAssets(host)
     hidePdfOnlyControls(host)
     replaceEditableControlsWithStaticText(host)
+    truncateOverflowingStaticText(host)
     rasterizeImagesAtTheirRenderedAspectRatio(host)
     const slideNodes = Array.from(host.querySelectorAll<HTMLElement>('[data-pdf-slide]'))
     const pdf = new jsPDF({

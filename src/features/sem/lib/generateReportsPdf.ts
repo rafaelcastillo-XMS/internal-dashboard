@@ -311,7 +311,14 @@ function drawBrandMark(doc: jsPDF, logoDataUrl: string | null) {
   const x = PAGE_W - ML - w
   const y = 4.5
   if (logoDataUrl) {
-    try { doc.addImage(logoDataUrl, 'PNG', x, y, w, h) } catch { /* fall through to text below */ }
+    // jsPDF's default compression is 'NONE' — it embeds the decoded raw
+    // pixels (plus a raw alpha soft-mask) instead of the source PNG's own
+    // compressed bytes, which alone turned this one small logo into ~1.9MB
+    // per PDF (and pushed the email edge function over its resource limit
+    // once that PDF was attached as base64 alongside the table images).
+    // 'MEDIUM' deflates the image stream like the source PNG already was.
+    // The alias lets jsPDF reuse one embedded copy across every call site.
+    try { doc.addImage(logoDataUrl, 'PNG', x, y, w, h, 'xms-logo', 'MEDIUM') } catch { /* fall through to text below */ }
   }
   if (!logoDataUrl) {
     doc.setFont('helvetica', 'bold')
@@ -416,7 +423,7 @@ function drawCoverPage(
   if (logoDataUrl) {
     const h = 44
     const w = h * LOGO_ASPECT
-    try { doc.addImage(logoDataUrl, 'PNG', PAGE_W / 2 - w / 2, 38, w, h) } catch { /* skip logo */ }
+    try { doc.addImage(logoDataUrl, 'PNG', PAGE_W / 2 - w / 2, 38, w, h, 'xms-logo', 'MEDIUM') } catch { /* skip logo */ }
   }
 
   setColor(doc, C.white, 'text')

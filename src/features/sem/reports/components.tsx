@@ -153,6 +153,7 @@ export function ReportActionsBar({
   onRefresh,
   refreshing,
   onExportPdf,
+  exporting,
 }: {
   report: Report
   dirty: boolean
@@ -162,6 +163,7 @@ export function ReportActionsBar({
   onRefresh: () => void
   refreshing: boolean
   onExportPdf: () => void
+  exporting: boolean
 }) {
   return (
     <div className="sticky top-0 z-20 border-b border-stroke bg-white/95 px-5 py-3 backdrop-blur dark:border-strokedark dark:bg-boxdark/95">
@@ -199,9 +201,9 @@ export function ReportActionsBar({
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshing ? 'Refreshing…' : 'Refresh Data'}
           </button>
-          <button onClick={onExportPdf} className="inline-flex h-9 items-center gap-2 rounded-md border border-stroke bg-white px-3 text-sm font-semibold text-black transition hover:border-slate-400 hover:bg-slate-100 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] dark:hover:bg-slate-800">
+          <button onClick={onExportPdf} disabled={exporting} className="inline-flex h-9 items-center gap-2 rounded-md border border-stroke bg-white px-3 text-sm font-semibold text-black transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9] dark:hover:bg-slate-800">
             <Download className="h-4 w-4" />
-            Export PDF
+            {exporting ? 'Exporting…' : 'Export PDF'}
           </button>
         </div>
       </div>
@@ -527,12 +529,12 @@ function LsaCreditedLeadsTable({
       <div className="grid grid-cols-[1fr_1fr_1fr_1.2fr_1.5fr] border-b border-[#dadce0] bg-white">
         {filters.map((filter) => (
           <div key={filter} className="flex min-w-0 items-center justify-between gap-2 px-4 py-4 text-[13px] font-medium text-[#202124]">
-            <span className="truncate">{filter}</span>
+            <span className="min-w-0 truncate">{filter}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 fill-[#9aa0a6] text-[#9aa0a6]" />
           </div>
         ))}
         <div className="flex min-w-0 items-center justify-between gap-2 px-4 py-4 text-[13px] font-medium text-[#202124]">
-          <span className="truncate">{formatLsaDateRange(table.dataSource?.dateRange)}</span>
+          <span className="min-w-0 truncate">{formatLsaDateRange(table.dataSource?.dateRange)}</span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 fill-[#9aa0a6] text-[#9aa0a6]" />
         </div>
       </div>
@@ -857,7 +859,7 @@ export function SearchAdPreviewCard({
   const path = (ad.pathLabels ?? []).join(' › ')
 
   return (
-    <div className="mx-auto flex h-full min-h-[350px] w-full max-w-[760px] flex-col px-6">
+    <div className="mx-auto flex h-full min-w-0 min-h-[350px] w-full max-w-[760px] flex-col px-6">
       <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[#1a73e8]">
         <span className="h-2.5 w-2.5 rounded-full bg-[#188038]" />
         <span>{ad.businessName}</span>
@@ -868,9 +870,9 @@ export function SearchAdPreviewCard({
         <span className="absolute left-1/2 top-2 h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-[#dadce0] bg-white" />
         <div className="flex flex-1 flex-col rounded border border-[#dadce0] bg-[#f8f9fa] px-3 py-2">
           <div className="mb-2 flex items-center gap-1.5 border-b border-[#e2e5e9] pb-2 text-xs text-[#188038]">
-            <span className="rounded-sm border border-[#188038] px-1 font-semibold leading-4">Ad</span>
-            <span className="truncate">{ad.displayUrl}</span>
-            {path ? <span className="truncate">› {path}</span> : null}
+            <span className="shrink-0 rounded-sm border border-[#188038] px-1 font-semibold leading-4">Ad</span>
+            <span className="min-w-0 shrink truncate">{ad.displayUrl}</span>
+            {path ? <span className="min-w-0 shrink truncate">› {path}</span> : null}
           </div>
           <AutoResizeSlideTitle
             value={ad.headline}
@@ -912,7 +914,7 @@ export function PmaxAdPreviewCard({
     .toUpperCase()
 
   return (
-    <div className="flex h-full min-h-[350px] flex-col rounded-lg border border-[#5f6368] bg-white p-5 shadow-[0_10px_24px_rgba(60,64,67,0.08)]">
+    <div className="flex h-full min-h-[350px] min-w-0 flex-col rounded-lg border border-[#5f6368] bg-white p-5 shadow-[0_10px_24px_rgba(60,64,67,0.08)]">
       <div className="flex items-center gap-3">
         {ad.logoSrc && !logoFailed ? (
           <img
