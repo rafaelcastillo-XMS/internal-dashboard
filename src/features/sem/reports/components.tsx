@@ -1631,8 +1631,8 @@ export function ReportSlide({
   return (
     <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
       <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
-      <div className="min-h-0 flex-1 p-7">
-      <div className="mb-4 border-b border-[#D8E4F2] pb-3">
+      <div className="flex min-h-0 flex-1 flex-col p-8">
+      <div className="mb-4 shrink-0 border-b border-[#D8E4F2] pb-3">
         <div className="min-w-0">
           <AutoResizeSlideTitle
             value={slide.title}
@@ -1641,7 +1641,7 @@ export function ReportSlide({
         </div>
       </div>
 
-      <div className={slide.type === 'ads' ? 'flex h-full min-h-0 flex-col gap-4' : 'space-y-4'}>
+      <div className={slide.type === 'ads' ? 'flex min-h-0 flex-1 flex-col gap-4' : 'space-y-4'}>
         {slide.content.kpis?.length ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {slide.content.kpis.map((metric) => (

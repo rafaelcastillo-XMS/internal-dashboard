@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { Download, Mail } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { edgeFetch } from '@/lib/edgeFetch'
@@ -1154,54 +1154,24 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
 
 // ─── Google Ads Budget Report Tab ─────────────────────────────────────────────
 
-function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
-  const { from: defaultFrom, to: defaultTo } = getCurrentWeekRange()
-  const [fromDate, setFromDate]             = useState(defaultFrom)
-  const [toDate, setToDate]                 = useState(defaultTo)
-  const [adsBudgets, setAdsBudgets]         = useState<BudgetStore>({})
-  const [loadingBudgets, setLoadingBudgets] = useState(true)
-  const [costByAccount, setCostByAccount]   = useState<Record<string, number>>({})
-  const [loadingCost, setLoadingCost]       = useState(false)
-  const [exporting, setExporting]           = useState(false)
-  const [preparingEmail, setPreparingEmail] = useState(false)
-  const [emailPayload, setEmailPayload]     = useState<EmailReportPayload | null>(null)
-
-  useEffect(() => {
-    if (!accounts.length) return
-    setLoadingBudgets(true)
-    fetchSupabaseBudgets('ads_monthly').then(map => {
-      const next: BudgetStore = {}
-      for (const a of accounts) next[a.id] = { budget: map[a.id] ?? 0 }
-      setAdsBudgets(next)
-    }).finally(() => setLoadingBudgets(false))
-  }, [accounts])
-
-  const fetchSpend = useCallback(async (from: string, to: string) => {
-    if (!accounts.length) return
-    setLoadingCost(true)
-    try {
-      const { data } = await supabase
-        .from('sem_ads_daily')
-        .select('account_id, spend')
-        .in('account_id', accounts.map(a => a.id))
-        .gte('date', from)
-        .lte('date', to)
-      const map: Record<string, number> = {}
-      for (const r of data ?? []) map[r.account_id] = (map[r.account_id] ?? 0) + Number(r.spend)
-      setCostByAccount(map)
-    } finally { setLoadingCost(false) }
-  }, [accounts])
-
-  useEffect(() => { if (accounts.length) fetchSpend(fromDate, toDate) }, [accounts, fromDate, toDate, fetchSpend])
+function AdsReport({
+  accounts, dateLabel, budgets, loadingBudgets, costByAccount, loadingCost,
+}: {
+  accounts: AdsAccount[]
+  dateLabel: string
+  budgets: BudgetStore
+  loadingBudgets: boolean
+  costByAccount: Record<string, number>
+  loadingCost: boolean
+}) {
+  const [exporting, setExporting] = useState(false)
 
   const buildRows = (): PdfWeeklyRow[] => accounts.map(a => ({
     status: a.status,
     accountName: a.name,
-    budget: adsBudgets[a.id]?.budget ?? 0,
+    budget: budgets[a.id]?.budget ?? 0,
     cost: costByAccount[a.id] ?? 0,
   }))
-
-  const dateLabel = `Week ${weekLabel(fromDate, toDate)}`
 
   async function handleExport() {
     setExporting(true)
@@ -1209,65 +1179,28 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
     finally { setExporting(false) }
   }
 
-  async function handleOpenEmailModal() {
-    setPreparingEmail(true)
-    try {
-      const adsRows = buildRows()
-      const [adsImage, pdf] = await Promise.all([
-        captureTableAsImage({ title: 'Google Ads Budget Report', headers: WEEKLY_TABLE_HEADERS, rows: weeklyRowsToTable(adsRows) }),
-        generateWeeklyBudgetPdfBytes({ dateLabel, adsRows, guaranteeRows: [] }),
-      ])
-      setEmailPayload({
-        kind: 'weekly',
-        dateLabel,
-        adsRows,
-        guaranteeRows: [],
-        images: [{ label: 'Google Ads Budget Report', ...adsImage }],
-        pdfBase64: uint8ToBase64(pdf.bytes),
-        pdfFilename: pdf.filename,
-      })
-    } finally {
-      setPreparingEmail(false)
-    }
-  }
-
   return (
     <div>
-      <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <WeekPicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} />
-          {loadingCost && (
-            <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={handleOpenEmailModal} disabled={preparingEmail}
-            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
-                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-            </svg>
-            {preparingEmail ? 'Preparing…' : 'Send by Email'}
-          </button>
-          <button onClick={handleExport} disabled={exporting}
-            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
-                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            {exporting ? 'Exporting…' : 'Export PDF'}
-          </button>
-        </div>
+      <div className="mb-6 flex flex-wrap items-center justify-end gap-3">
+        {loadingCost && (
+          <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        )}
+        <button onClick={handleExport} disabled={exporting}
+          className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                     transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
+                     dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          {exporting ? 'Exporting…' : 'Export PDF'}
+        </button>
       </div>
       {loadingBudgets
         ? <div className="flex items-center gap-2 py-8 text-sm text-body dark:text-bodydark"><svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Loading budgets…</div>
-        : <BudgetTableSection accounts={accounts} budgets={adsBudgets} costByAccount={costByAccount} pendingCost={loadingCost} />
+        : <BudgetTableSection accounts={accounts} budgets={budgets} costByAccount={costByAccount} pendingCost={loadingCost} />
       }
     </div>
   )
@@ -1275,50 +1208,19 @@ function AdsReport({ accounts }: { accounts: AdsAccount[] }) {
 
 // ─── Google Guarantee Report Tab ──────────────────────────────────────────────
 
-function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
-  const { from: defaultFrom, to: defaultTo } = getCurrentWeekRange()
-  const [fromDate, setFromDate]             = useState(defaultFrom)
-  const [toDate, setToDate]                 = useState(defaultTo)
-  const [ggBudgets, setGgBudgets]           = useState<BudgetStore>({})
-  const [loadingBudgets, setLoadingBudgets] = useState(true)
-  const [ggPeriod, setGgPeriod]             = useState<Record<string, { spend: number; leads: number }>>({})
-  const [loadingPeriod, setLoadingPeriod]   = useState(false)
-  const [exporting, setExporting]           = useState(false)
-  const [preparingEmail, setPreparingEmail] = useState(false)
-  const [emailPayload, setEmailPayload]     = useState<EmailReportPayload | null>(null)
-
-  useEffect(() => {
-    if (!accounts.length) return
-    setLoadingBudgets(true)
-    fetchSupabaseBudgets('guarantee_monthly').then(map => {
-      const next: BudgetStore = {}
-      for (const a of accounts) next[a.id] = { budget: map[a.id] ?? 0 }
-      setGgBudgets(next)
-    }).finally(() => setLoadingBudgets(false))
-  }, [accounts])
-
-  const fetchPeriod = useCallback(async (from: string, to: string) => {
-    if (!accounts.length) return
-    setLoadingPeriod(true)
-    try {
-      const { data } = await supabase
-        .from('sem_guarantee_daily')
-        .select('account_id, spend, leads')
-        .in('account_id', accounts.map(a => a.id))
-        .gte('date', from)
-        .lte('date', to)
-      const map: Record<string, { spend: number; leads: number }> = {}
-      for (const r of data ?? []) {
-        map[r.account_id] = {
-          spend: (map[r.account_id]?.spend ?? 0) + Number(r.spend),
-          leads: (map[r.account_id]?.leads ?? 0) + Number(r.leads),
-        }
-      }
-      setGgPeriod(map)
-    } finally { setLoadingPeriod(false) }
-  }, [accounts])
-
-  useEffect(() => { if (accounts.length) fetchPeriod(fromDate, toDate) }, [accounts, fromDate, toDate, fetchPeriod])
+function GuaranteeReport({
+  accounts, dateLabel, budgets, loadingBudgets, period, loadingPeriod,
+}: {
+  accounts: AdsAccount[]
+  dateLabel: string
+  budgets: BudgetStore
+  loadingBudgets: boolean
+  period: Record<string, { spend: number; leads: number }>
+  loadingPeriod: boolean
+}) {
+  const ggBudgets = budgets
+  const ggPeriod = period
+  const [exporting, setExporting] = useState(false)
 
   const totalBudget = accounts.reduce((s, a) => s + (ggBudgets[a.id]?.budget ?? 0), 0)
   const totalSpend  = accounts.reduce((s, a) => s + (ggPeriod[a.id]?.spend ?? 0), 0)
@@ -1331,65 +1233,28 @@ function GuaranteeReport({ accounts }: { accounts: AdsAccount[] }) {
     cost: ggPeriod[a.id]?.spend ?? 0,
   }))
 
-  const dateLabel = `Week ${weekLabel(fromDate, toDate)}`
-
   async function handleExport() {
     setExporting(true)
     try { await generateWeeklyBudgetPdf({ dateLabel, adsRows: [], guaranteeRows: buildGuaranteeRows() }) }
     finally { setExporting(false) }
   }
 
-  async function handleOpenEmailModal() {
-    setPreparingEmail(true)
-    try {
-      const guaranteeRows = buildGuaranteeRows()
-      const [guaranteeImage, pdf] = await Promise.all([
-        captureTableAsImage({ title: 'Google Guarantee Budget Report', headers: WEEKLY_TABLE_HEADERS, rows: weeklyRowsToTable(guaranteeRows) }),
-        generateWeeklyBudgetPdfBytes({ dateLabel, adsRows: [], guaranteeRows }),
-      ])
-      setEmailPayload({
-        kind: 'weekly',
-        dateLabel,
-        adsRows: [],
-        guaranteeRows,
-        images: [{ label: 'Google Guarantee Budget Report', ...guaranteeImage }],
-        pdfBase64: uint8ToBase64(pdf.bytes),
-        pdfFilename: pdf.filename,
-      })
-    } finally {
-      setPreparingEmail(false)
-    }
-  }
-
   return (
     <div>
-      <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <WeekPicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} accentColor="#3b82f6" />
-          {loadingPeriod && (
-            <svg className="h-4 w-4 animate-spin text-[#3b82f6]" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={handleOpenEmailModal} disabled={preparingEmail}
-            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#3b82f6] hover:text-[#3b82f6] disabled:opacity-60
-                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            <Mail className="h-4 w-4" />
-            {preparingEmail ? 'Preparing…' : 'Send by Email'}
-          </button>
-          <button onClick={handleExport} disabled={exporting}
-            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#3b82f6] hover:text-[#3b82f6] disabled:opacity-60
-                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            <Download className="h-4 w-4" />
-            {exporting ? 'Exporting…' : 'Export PDF'}
-          </button>
-        </div>
+      <div className="mb-5 flex flex-wrap items-center justify-end gap-3">
+        {loadingPeriod && (
+          <svg className="h-4 w-4 animate-spin text-[#3b82f6]" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        )}
+        <button onClick={handleExport} disabled={exporting}
+          className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                     transition-colors hover:border-[#3b82f6] hover:text-[#3b82f6] disabled:opacity-60
+                     dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+          <Download className="h-4 w-4" />
+          {exporting ? 'Exporting…' : 'Export PDF'}
+        </button>
       </div>
 
       {loadingBudgets && <div className="flex items-center gap-2 py-4 text-sm text-body dark:text-bodydark"><svg className="h-4 w-4 animate-spin text-[#3b82f6]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Loading budgets…</div>}
@@ -1707,6 +1572,132 @@ export function SEMReportes() {
     })()
   }, [])
 
+  // ── Shared weekly date range + per-platform budget/spend data ──────────────
+  // Lifted out of AdsReport/GuaranteeReport so both platforms share one week
+  // and a single "Send by Email" can combine them into one email, the same
+  // way the Monthly report already combines Google Ads + Google Guarantee.
+  const { from: defaultWeekFrom, to: defaultWeekTo } = getCurrentWeekRange()
+  const [weekFrom, setWeekFrom] = useState(defaultWeekFrom)
+  const [weekTo, setWeekTo]     = useState(defaultWeekTo)
+
+  const adsAccounts = useMemo(() => accounts.filter(a => adsAccountIds.has(a.id)), [accounts, adsAccountIds])
+  const ggAccounts  = useMemo(() => accounts.filter(a => ggAccountIds.has(a.id)), [accounts, ggAccountIds])
+
+  const [adsBudgets, setAdsBudgets]             = useState<BudgetStore>({})
+  const [loadingAdsBudgets, setLoadingAdsBudgets] = useState(true)
+  const [adsCost, setAdsCost]                   = useState<Record<string, number>>({})
+  const [loadingAdsCost, setLoadingAdsCost]     = useState(false)
+
+  useEffect(() => {
+    if (!adsAccounts.length) return
+    setLoadingAdsBudgets(true)
+    fetchSupabaseBudgets('ads_monthly').then(map => {
+      const next: BudgetStore = {}
+      for (const a of adsAccounts) next[a.id] = { budget: map[a.id] ?? 0 }
+      setAdsBudgets(next)
+    }).finally(() => setLoadingAdsBudgets(false))
+  }, [adsAccounts])
+
+  const fetchAdsSpend = useCallback(async (from: string, to: string) => {
+    if (!adsAccounts.length) return
+    setLoadingAdsCost(true)
+    try {
+      const { data } = await supabase
+        .from('sem_ads_daily')
+        .select('account_id, spend')
+        .in('account_id', adsAccounts.map(a => a.id))
+        .gte('date', from)
+        .lte('date', to)
+      const map: Record<string, number> = {}
+      for (const r of data ?? []) map[r.account_id] = (map[r.account_id] ?? 0) + Number(r.spend)
+      setAdsCost(map)
+    } finally { setLoadingAdsCost(false) }
+  }, [adsAccounts])
+
+  useEffect(() => { if (adsAccounts.length) fetchAdsSpend(weekFrom, weekTo) }, [adsAccounts, weekFrom, weekTo, fetchAdsSpend])
+
+  const [ggBudgets, setGgBudgets]               = useState<BudgetStore>({})
+  const [loadingGgBudgets, setLoadingGgBudgets] = useState(true)
+  const [ggPeriod, setGgPeriod]                 = useState<Record<string, { spend: number; leads: number }>>({})
+  const [loadingGgPeriod, setLoadingGgPeriod]   = useState(false)
+
+  useEffect(() => {
+    if (!ggAccounts.length) return
+    setLoadingGgBudgets(true)
+    fetchSupabaseBudgets('guarantee_monthly').then(map => {
+      const next: BudgetStore = {}
+      for (const a of ggAccounts) next[a.id] = { budget: map[a.id] ?? 0 }
+      setGgBudgets(next)
+    }).finally(() => setLoadingGgBudgets(false))
+  }, [ggAccounts])
+
+  const fetchGgPeriod = useCallback(async (from: string, to: string) => {
+    if (!ggAccounts.length) return
+    setLoadingGgPeriod(true)
+    try {
+      const { data } = await supabase
+        .from('sem_guarantee_daily')
+        .select('account_id, spend, leads')
+        .in('account_id', ggAccounts.map(a => a.id))
+        .gte('date', from)
+        .lte('date', to)
+      const map: Record<string, { spend: number; leads: number }> = {}
+      for (const r of data ?? []) {
+        map[r.account_id] = {
+          spend: (map[r.account_id]?.spend ?? 0) + Number(r.spend),
+          leads: (map[r.account_id]?.leads ?? 0) + Number(r.leads),
+        }
+      }
+      setGgPeriod(map)
+    } finally { setLoadingGgPeriod(false) }
+  }, [ggAccounts])
+
+  useEffect(() => { if (ggAccounts.length) fetchGgPeriod(weekFrom, weekTo) }, [ggAccounts, weekFrom, weekTo, fetchGgPeriod])
+
+  const weekDateLabel = `Week ${weekLabel(weekFrom, weekTo)}`
+
+  const weeklyAdsRows: PdfWeeklyRow[] = adsAccounts.map(a => ({
+    status: a.status,
+    accountName: a.name,
+    budget: adsBudgets[a.id]?.budget ?? 0,
+    cost: adsCost[a.id] ?? 0,
+  }))
+
+  const weeklyGuaranteeRows: PdfWeeklyRow[] = ggAccounts.map(a => ({
+    status: a.status,
+    accountName: a.name,
+    budget: ggBudgets[a.id]?.budget ?? 0,
+    cost: ggPeriod[a.id]?.spend ?? 0,
+  }))
+
+  const [preparingWeeklyEmail, setPreparingWeeklyEmail] = useState(false)
+  const [weeklyEmailPayload, setWeeklyEmailPayload]     = useState<EmailReportPayload | null>(null)
+
+  async function handleOpenWeeklyEmailModal() {
+    setPreparingWeeklyEmail(true)
+    try {
+      const [adsImage, guaranteeImage, pdf] = await Promise.all([
+        captureTableAsImage({ title: 'Google Ads Budget Report', headers: WEEKLY_TABLE_HEADERS, rows: weeklyRowsToTable(weeklyAdsRows) }),
+        captureTableAsImage({ title: 'Google Guarantee Budget Report', headers: WEEKLY_TABLE_HEADERS, rows: weeklyRowsToTable(weeklyGuaranteeRows) }),
+        generateWeeklyBudgetPdfBytes({ dateLabel: weekDateLabel, adsRows: weeklyAdsRows, guaranteeRows: weeklyGuaranteeRows }),
+      ])
+      setWeeklyEmailPayload({
+        kind: 'weekly',
+        dateLabel: weekDateLabel,
+        adsRows: weeklyAdsRows,
+        guaranteeRows: weeklyGuaranteeRows,
+        images: [
+          { label: 'Google Ads Budget Report', ...adsImage },
+          { label: 'Google Guarantee Budget Report', ...guaranteeImage },
+        ],
+        pdfBase64: uint8ToBase64(pdf.bytes),
+        pdfFilename: pdf.filename,
+      })
+    } finally {
+      setPreparingWeeklyEmail(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-screen-2xl">
       <div className="mb-6">
@@ -1743,23 +1734,39 @@ export function SEMReportes() {
         <MonthlyReport accounts={accounts} />
       ) : (
         <>
+          <SendEmailModal payload={weeklyEmailPayload} onClose={() => setWeeklyEmailPayload(null)} />
           {/* Weekly sub-tabs */}
-          <div className="mb-6 flex w-fit gap-1 rounded-lg border border-stroke bg-gray-2 p-0.5 dark:border-strokedark dark:bg-meta-4">
-            {([
-              { id: 'ads',       label: 'Google Ads Budget Report' },
-              { id: 'guarantee', label: 'Google Guarantee Report' },
-              { id: 'openai',    label: 'OpenAI Ads' },
-            ] as { id: ReportTab; label: string }[]).map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)}
-                className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-all duration-150
-                  ${activeTab === t.id
-                    ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-[#E2E5E9]'
-                    : 'text-body hover:text-black dark:text-bodydark dark:hover:text-white'
-                  }`}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex w-fit gap-1 rounded-lg border border-stroke bg-gray-2 p-0.5 dark:border-strokedark dark:bg-meta-4">
+              {([
+                { id: 'ads',       label: 'Google Ads Budget Report' },
+                { id: 'guarantee', label: 'Google Guarantee Report' },
+                { id: 'openai',    label: 'OpenAI Ads' },
+              ] as { id: ReportTab; label: string }[]).map(t => (
+                <button key={t.id} onClick={() => setActiveTab(t.id)}
+                  className={`rounded-md px-4 py-1.5 text-xs font-semibold transition-all duration-150
+                    ${activeTab === t.id
+                      ? 'bg-white text-black shadow-sm dark:bg-boxdark dark:text-[#E2E5E9]'
+                      : 'text-body hover:text-black dark:text-bodydark dark:hover:text-white'
+                    }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {activeTab !== 'openai' && (
+              <div className="flex items-center gap-3">
+                <WeekPicker from={weekFrom} to={weekTo} onChange={(f, t) => { setWeekFrom(f); setWeekTo(t) }} />
+                <button onClick={handleOpenWeeklyEmailModal} disabled={preparingWeeklyEmail}
+                  className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                             transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
+                             dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+                  <Mail className="h-4 w-4" />
+                  {preparingWeeklyEmail ? 'Preparing…' : 'Send by Email'}
+                </button>
+              </div>
+            )}
           </div>
 
           {loading ? (
@@ -1772,8 +1779,26 @@ export function SEMReportes() {
             </div>
           ) : (
             <>
-              {activeTab === 'ads'       && <AdsReport accounts={accounts.filter(a => adsAccountIds.has(a.id))} />}
-              {activeTab === 'guarantee' && <GuaranteeReport accounts={accounts.filter(a => ggAccountIds.has(a.id))} />}
+              {activeTab === 'ads' && (
+                <AdsReport
+                  accounts={adsAccounts}
+                  dateLabel={weekDateLabel}
+                  budgets={adsBudgets}
+                  loadingBudgets={loadingAdsBudgets}
+                  costByAccount={adsCost}
+                  loadingCost={loadingAdsCost}
+                />
+              )}
+              {activeTab === 'guarantee' && (
+                <GuaranteeReport
+                  accounts={ggAccounts}
+                  dateLabel={weekDateLabel}
+                  budgets={ggBudgets}
+                  loadingBudgets={loadingGgBudgets}
+                  period={ggPeriod}
+                  loadingPeriod={loadingGgPeriod}
+                />
+              )}
               {activeTab === 'openai'    && <OpenAiAdsReport />}
             </>
           )}
