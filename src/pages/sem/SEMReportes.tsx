@@ -789,6 +789,7 @@ type EmailReportPayload =
       dateLabel: string
       adsRows: PdfWeeklyRow[]
       guaranteeRows: PdfWeeklyRow[]
+      openaiRows: PdfOpenAiRow[]
       images: { label: string; dataUrl: string; width: number; height: number }[]
       pdfBase64: string
       pdfFilename: string
@@ -801,11 +802,6 @@ type EmailReportPayload =
       pdfBase64: string
       pdfFilename: string
     }
-  | {
-      kind: 'openai'
-      dateLabel: string
-      rows: PdfOpenAiRow[]
-    }
 
 function uint8ToBase64(bytes: Uint8Array): string {
   let binary = ''
@@ -814,39 +810,6 @@ function uint8ToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
   }
   return btoa(binary)
-}
-
-function buildWeeklyText(dateLabel: string, adsRows: PdfWeeklyRow[], guaranteeRows: PdfWeeklyRow[]): string {
-  const lines: string[] = []
-  const fmt = (n: number) => n > 0 ? fmtCurrency(n) : '—'
-
-  lines.push(`Google Ads Budget Report — ${dateLabel}`)
-  lines.push('')
-
-  if (adsRows.length > 0) {
-    lines.push('GOOGLE ADS — BUDGET REPORT')
-    lines.push('Account Name | Budget | Period Spend | Remaining | % Used')
-    lines.push('-'.repeat(80))
-    adsRows.forEach(r => {
-      const remaining = r.budget > 0 ? r.budget - r.cost : 0
-      const pct = r.budget > 0 ? `${((r.cost / r.budget) * 100).toFixed(1)}%` : '—'
-      lines.push([r.accountName, fmt(r.budget), fmt(r.cost), fmtCurrency(remaining), pct].join(' | '))
-    })
-    lines.push('')
-  }
-
-  if (guaranteeRows.length > 0) {
-    lines.push('GOOGLE GUARANTEE — BUDGET REPORT')
-    lines.push('Account Name | Budget | Period Spend | Remaining | % Used')
-    lines.push('-'.repeat(70))
-    guaranteeRows.forEach(r => {
-      const remaining = r.budget > 0 ? r.budget - r.cost : 0
-      const pct = r.budget > 0 ? `${((r.cost / r.budget) * 100).toFixed(1)}%` : '—'
-      lines.push([r.accountName, fmt(r.budget), fmt(r.cost), fmtCurrency(remaining), pct].join(' | '))
-    })
-  }
-
-  return lines.join('\n')
 }
 
 const WEEKLY_TABLE_HEADERS = ['Status', 'Account Name', 'Budget', 'Period Spend', 'Remaining', '% Used']
@@ -866,65 +829,18 @@ function weeklyRowsToTable(rows: PdfWeeklyRow[]): string[][] {
   })
 }
 
-function buildMonthlyText(monthLabel: string, rows: PdfMonthlyRow[]): string {
-  const lines: string[] = []
-  const fmt = (n: number) => n > 0 ? fmtCurrency(n) : '—'
+const OPENAI_TABLE_HEADERS = ['Client', 'Campaign', 'Status', 'Budget', 'Spend', 'CPC', 'Impressions']
 
-  lines.push(`Monthly Budget Report — ${monthLabel}`)
-  lines.push('')
-  lines.push('Client | ID | Platform | Budget | Spend | Remaining | Credits Refunded | Paid With')
-  lines.push('-'.repeat(110))
-
-  rows.forEach(r => {
-    const remaining = r.budget > 0 ? r.budget - r.spend : 0
-    lines.push([
-      r.accountName,
-      r.accountId ?? '—',
-      r.platform ?? '—',
-      fmt(r.budget),
-      fmt(r.spend),
-      r.budget > 0 ? fmtCurrency(remaining) : '—',
-      fmt(r.refunded ?? 0),
-      r.paidWith || '—',
-    ].join(' | '))
-  })
-
-  const totalBudget = rows.reduce((s, r) => s + r.budget, 0)
-  const totalSpend = rows.reduce((s, r) => s + r.spend, 0)
-  const totalRefunded = rows.reduce((s, r) => s + (r.refunded ?? 0), 0)
-  lines.push('')
-  lines.push(`Totals | Budget: ${fmt(totalBudget)} | Spend: ${fmt(totalSpend)} | Remaining: ${totalBudget > 0 ? fmtCurrency(totalBudget - totalSpend) : '—'} | Credits Refunded: ${fmt(totalRefunded)}`)
-
-  return lines.join('\n')
-}
-
-function buildOpenAiText(dateLabel: string, rows: PdfOpenAiRow[]): string {
-  const lines: string[] = []
-  const fmt = (n: number) => n > 0 ? fmtCurrency(n) : '—'
-
-  lines.push(`OpenAI Ads Report — ${dateLabel}`)
-  lines.push('')
-  lines.push('Client | Campaign | Status | Budget | Spend | CPC | Impressions')
-  lines.push('-'.repeat(100))
-
-  rows.forEach(r => {
-    lines.push([
-      r.clientName,
-      r.campaignName,
-      r.status === 'active' ? 'Active' : 'Paused',
-      fmt(r.budget),
-      fmt(r.spend),
-      r.cpc > 0 ? fmtCurrency(r.cpc) : '—',
-      r.impressions > 0 ? r.impressions.toLocaleString('en-US') : '—',
-    ].join(' | '))
-  })
-
-  const totalBudget = rows.reduce((s, r) => s + r.budget, 0)
-  const totalSpend = rows.reduce((s, r) => s + r.spend, 0)
-  lines.push('')
-  lines.push(`Totals | Budget: ${fmt(totalBudget)} | Spend: ${fmt(totalSpend)}`)
-
-  return lines.join('\n')
+function openaiRowsToTable(rows: PdfOpenAiRow[]): string[][] {
+  return rows.map(r => [
+    r.clientName,
+    r.campaignName,
+    r.status === 'active' ? 'Active' : 'Paused',
+    r.budget > 0 ? fmtCurrency(r.budget) : '—',
+    r.spend > 0 ? fmtCurrency(r.spend) : '—',
+    r.cpc > 0 ? fmtCurrency(r.cpc) : '—',
+    r.impressions > 0 ? r.impressions.toLocaleString('en-US') : '—',
+  ])
 }
 
 // The wording adapts to the report period — "reporte mensual" for a whole
@@ -936,47 +852,36 @@ function buildEmailBodyTemplate(payload: EmailReportPayload): string {
   if (payload.kind === 'monthly') {
     return `${intro}\n\nLes comparto el reporte de presupuesto mensual correspondiente a ${payload.monthLabel}. ${closing}`
   }
-  if (payload.kind === 'weekly') {
-    return `${intro}\n\nLes comparto el reporte de presupuesto semanal correspondiente al periodo ${payload.dateLabel}. ${closing}`
-  }
-  return `${intro}\n\nLes comparto el reporte de OpenAI Ads correspondiente al periodo ${payload.dateLabel}. ${closing}`
+  return `${intro}\n\nLes comparto el reporte de presupuesto semanal correspondiente al periodo ${payload.dateLabel}. ${closing}`
 }
 
 function buildEmailTitle(payload: EmailReportPayload): string {
   if (payload.kind === 'monthly') return `Reporte de Presupuesto Mensual — ${payload.monthLabel}`
-  if (payload.kind === 'weekly') return `Reporte de Presupuesto Semanal — ${payload.dateLabel}`
-  return `Reporte de OpenAI Ads — ${payload.dateLabel}`
+  return `Reporte de Presupuesto Semanal — ${payload.dateLabel}`
 }
 
 function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | null; onClose: () => void }) {
   const [email, setEmail]         = useState('')
-  const [scheduled, setScheduled] = useState('')
-  const [note, setNote]           = useState('')
   const [bodyDraft, setBodyDraft] = useState('')
   const [sent, setSent]           = useState(false)
   const [sending, setSending]     = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
 
   useEffect(() => {
-    setEmail(''); setScheduled(''); setNote(''); setSent(false); setSendError(null); setSending(false)
+    setEmail(''); setSent(false); setSendError(null); setSending(false)
     if (payload) setBodyDraft(buildEmailBodyTemplate(payload))
   }, [payload])
 
   if (!payload) return null
 
-  const isRealSend = payload.kind === 'monthly' || payload.kind === 'weekly'
-
-  const reportText = payload.kind === 'monthly'
-    ? buildMonthlyText(payload.monthLabel, payload.rows)
-    : payload.kind === 'openai'
-      ? buildOpenAiText(payload.dateLabel, payload.rows)
-      : buildWeeklyText(payload.dateLabel, payload.adsRows, payload.guaranteeRows)
   const label = payload.kind === 'monthly' ? payload.monthLabel : payload.dateLabel
-  const subjectPrefix = payload.kind === 'monthly' ? 'Monthly Budget Report' : payload.kind === 'openai' ? 'OpenAI Ads Report' : 'Budget Report'
+  const subjectPrefix = payload.kind === 'monthly' ? 'Monthly Budget Report' : 'Weekly Budget Report'
   const subject = `${subjectPrefix} — ${label}`
+  const attachedNote = payload.kind === 'monthly'
+    ? 'Google Ads + Google Guarantee budget tables (embedded as images below the message) and the Monthly Budget PDF.'
+    : `Google Ads + Google Guarantee${payload.openaiRows.length > 0 ? ' + OpenAI Ads' : ''} budget tables (embedded as images below the message) and the Weekly Budget PDF.`
 
-  const handleSendReal = async () => {
-    if (payload.kind !== 'monthly' && payload.kind !== 'weekly') return
+  const handleSend = async () => {
     setSending(true)
     setSendError(null)
     try {
@@ -1011,17 +916,6 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
     }
   }
 
-  const handleSendMailto = () => {
-    const subjectWithSchedule = scheduled
-      ? `${subject} (scheduled ${new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`
-      : subject
-    const body = [reportText, note ? `\n\nNote:\n${note}` : ''].join('')
-    window.open(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subjectWithSchedule)}&body=${encodeURIComponent(body)}`)
-    setSent(true)
-  }
-
-  const handleSend = isRealSend ? handleSendReal : handleSendMailto
-
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border border-stroke bg-white p-6 shadow-2xl dark:border-strokedark dark:bg-boxdark">
@@ -1052,25 +946,11 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
             </div>
-            {isRealSend ? (
-              <>
-                <p className="text-sm font-semibold text-[#15803d] dark:text-[#4ade80]">Email sent</p>
-                <p className="mt-1 text-xs text-body dark:text-bodydark">Sent to {email} from eva@xperienceusa.com.</p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-[#15803d] dark:text-[#4ade80]">Email client opened</p>
-                <p className="mt-1 text-xs text-body dark:text-bodydark">The report was pre-filled in your email client. Review and send.</p>
-                {scheduled && (
-                  <p className="mt-2 text-[11px] text-body/70 dark:text-bodydark/70">
-                    Reminder set for {new Date(scheduled).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                )}
-              </>
-            )}
+            <p className="text-sm font-semibold text-[#15803d] dark:text-[#4ade80]">Email sent</p>
+            <p className="mt-1 text-xs text-body dark:text-bodydark">Sent to {email} from eva@xperienceusa.com.</p>
             <button onClick={onClose} className="mt-4 rounded-lg bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#15803d] transition-colors">Done</button>
           </div>
-        ) : isRealSend ? (
+        ) : (
           <div className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-black dark:text-[#E2E5E9]">Recipient Email <span className="text-red-400">*</span></label>
@@ -1084,7 +964,7 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
             </div>
             <div className="rounded-lg border border-stroke bg-gray-2 px-3.5 py-3 dark:border-strokedark dark:bg-meta-4">
               <p className="text-[11px] text-body dark:text-bodydark">
-                <span className="font-semibold text-black dark:text-[#E2E5E9]">Attached:</span> Google Ads + Google Guarantee budget tables (embedded as images below the message) and the Monthly Budget PDF.
+                <span className="font-semibold text-black dark:text-[#E2E5E9]">Attached:</span> {attachedNote}
               </p>
             </div>
             {sendError && (
@@ -1098,51 +978,6 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
                 </svg>
                 {sending ? 'Sending…' : 'Send Email'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-[#E2E5E9]">Recipient Email <span className="text-red-400">*</span></label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@example.com"
-                className="w-full rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-[#E2E5E9] dark:focus:border-[#16a34a]" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-[#E2E5E9]">
-                Schedule Date & Time <span className="font-normal text-body dark:text-bodydark">(optional)</span>
-              </label>
-              <input type="datetime-local" value={scheduled} onChange={e => setScheduled(e.target.value)}
-                className="w-full rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-[#E2E5E9] dark:focus:border-[#16a34a]" />
-              {scheduled && (
-                <p className="mt-1.5 flex items-center gap-1 text-[11px] text-[#16a34a]">
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Scheduled — the date will appear in the email subject
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-black dark:text-[#E2E5E9]">
-                Note <span className="font-normal text-body dark:text-bodydark">(optional)</span>
-              </label>
-              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Any message to add to the email…"
-                className="w-full resize-none rounded-lg border border-stroke bg-transparent px-3.5 py-2.5 text-sm text-black outline-none transition focus:border-[#16a34a] dark:border-strokedark dark:text-[#E2E5E9] dark:focus:border-[#16a34a]" />
-            </div>
-            <div className="rounded-lg border border-stroke bg-gray-2 px-3.5 py-3 dark:border-strokedark dark:bg-meta-4">
-              <p className="text-[11px] text-body dark:text-bodydark">
-                <span className="font-semibold text-black dark:text-[#E2E5E9]">Report included:</span> the table data will be pasted in the email body, ready to send from your email client.
-              </p>
-            </div>
-            <div className="flex items-center justify-end gap-3 pt-1">
-              <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-body hover:text-black dark:text-bodydark dark:hover:text-white transition-colors">Cancel</button>
-              <button onClick={handleSend} disabled={!email.includes('@')}
-                className="flex items-center gap-2 rounded-lg bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#15803d] disabled:opacity-50 disabled:cursor-not-allowed">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                </svg>
-                {scheduled ? 'Schedule & Open Email' : 'Open in Email Client'}
               </button>
             </div>
           </div>
@@ -1362,49 +1197,15 @@ interface OpenAiClientResult {
   insightsError?: string | null
 }
 
-function OpenAiAdsReport() {
-  const { from: defaultFrom, to: defaultTo } = getCurrentWeekRange()
-  const [fromDate, setFromDate] = useState(defaultFrom)
-  const [toDate, setToDate]     = useState(defaultTo)
-  const [results, setResults]   = useState<OpenAiClientResult[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
-  const [exporting, setExporting]       = useState(false)
-  const [emailPayload, setEmailPayload] = useState<EmailReportPayload | null>(null)
-
-  const load = useCallback(async (from: string, to: string) => {
-    setLoading(true); setError(null)
-    try {
-      const { data: secrets } = await supabase
-        .from('client_ad_secrets')
-        .select('client_id')
-        .eq('provider', 'openai_ads')
-      const ids = (secrets ?? []).map(s => s.client_id)
-      if (ids.length === 0) { setResults([]); return }
-
-      const { data: clients } = await supabase.from('clients').select('id, name').in('id', ids)
-      const nameById = new Map((clients ?? []).map(c => [c.id, c.name]))
-
-      const startTime = Math.floor(new Date(from + 'T00:00:00').getTime() / 1000)
-      const endTime   = Math.floor(new Date(to + 'T23:59:59').getTime() / 1000)
-
-      const out = await Promise.all(ids.map(async (id): Promise<OpenAiClientResult> => {
-        try {
-          const res = await edgeFetch(`${OPENAI_ADS_API}/campaigns?clientId=${encodeURIComponent(id)}&startTime=${startTime}&endTime=${endTime}`)
-          const json = await res.json()
-          if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`)
-          return { clientId: id, clientName: nameById.get(id) ?? id, campaigns: json.campaigns ?? [], insightsError: json.insightsError }
-        } catch (e) {
-          return { clientId: id, clientName: nameById.get(id) ?? id, campaigns: [], error: e instanceof Error ? e.message : String(e) }
-        }
-      }))
-      setResults(out)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load(fromDate, toDate) }, [fromDate, toDate, load])
+function OpenAiAdsReport({
+  dateLabel, results, loading, error,
+}: {
+  dateLabel: string
+  results: OpenAiClientResult[]
+  loading: boolean
+  error: string | null
+}) {
+  const [exporting, setExporting] = useState(false)
 
   const allCampaigns = results.flatMap(r => r.campaigns)
   const totals = {
@@ -1414,7 +1215,6 @@ function OpenAiAdsReport() {
     impressions: allCampaigns.reduce((s, c) => s + c.impressions, 0),
   }
 
-  const dateLabel = `Week ${weekLabel(fromDate, toDate)}`
   const buildOpenAiRows = (): PdfOpenAiRow[] => results.flatMap(r => r.campaigns.map(c => ({
     clientName: r.clientName,
     campaignName: c.name,
@@ -1433,33 +1233,20 @@ function OpenAiAdsReport() {
 
   return (
     <div>
-      <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <WeekPicker from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t) }} />
-          {loading && (
-            <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setEmailPayload({ kind: 'openai', dateLabel, rows: buildOpenAiRows() })}
-            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a]
-                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            <Mail className="h-4 w-4" />
-            Send by Email
-          </button>
-          <button onClick={handleExport} disabled={exporting}
-            className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                       transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
-                       dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            <Download className="h-4 w-4" />
-            {exporting ? 'Exporting…' : 'Export PDF'}
-          </button>
-        </div>
+      <div className="mb-6 flex flex-wrap items-center justify-end gap-3">
+        {loading && (
+          <svg className="h-4 w-4 animate-spin text-[#16a34a]" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        )}
+        <button onClick={handleExport} disabled={exporting}
+          className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                     transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
+                     dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+          <Download className="h-4 w-4" />
+          {exporting ? 'Exporting…' : 'Export PDF'}
+        </button>
       </div>
 
       {error && (
@@ -1654,6 +1441,47 @@ export function SEMReportes() {
 
   useEffect(() => { if (ggAccounts.length) fetchGgPeriod(weekFrom, weekTo) }, [ggAccounts, weekFrom, weekTo, fetchGgPeriod])
 
+  // OpenAI shares the same week range as Ads/Guarantee so all three can be
+  // combined into a single weekly report, the same way the Ads+Guarantee
+  // combine already works.
+  const [openaiResults, setOpenaiResults] = useState<OpenAiClientResult[]>([])
+  const [loadingOpenai, setLoadingOpenai] = useState(true)
+  const [openaiError, setOpenaiError]     = useState<string | null>(null)
+
+  const fetchOpenAi = useCallback(async (from: string, to: string) => {
+    setLoadingOpenai(true); setOpenaiError(null)
+    try {
+      const { data: secrets } = await supabase
+        .from('client_ad_secrets')
+        .select('client_id')
+        .eq('provider', 'openai_ads')
+      const ids = (secrets ?? []).map(s => s.client_id)
+      if (ids.length === 0) { setOpenaiResults([]); return }
+
+      const { data: clients } = await supabase.from('clients').select('id, name').in('id', ids)
+      const nameById = new Map((clients ?? []).map(c => [c.id, c.name]))
+
+      const startTime = Math.floor(new Date(from + 'T00:00:00').getTime() / 1000)
+      const endTime   = Math.floor(new Date(to + 'T23:59:59').getTime() / 1000)
+
+      const out = await Promise.all(ids.map(async (id): Promise<OpenAiClientResult> => {
+        try {
+          const res = await edgeFetch(`${OPENAI_ADS_API}/campaigns?clientId=${encodeURIComponent(id)}&startTime=${startTime}&endTime=${endTime}`)
+          const json = await res.json()
+          if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`)
+          return { clientId: id, clientName: nameById.get(id) ?? id, campaigns: json.campaigns ?? [], insightsError: json.insightsError }
+        } catch (e) {
+          return { clientId: id, clientName: nameById.get(id) ?? id, campaigns: [], error: e instanceof Error ? e.message : String(e) }
+        }
+      }))
+      setOpenaiResults(out)
+    } catch (e) {
+      setOpenaiError(e instanceof Error ? e.message : String(e))
+    } finally { setLoadingOpenai(false) }
+  }, [])
+
+  useEffect(() => { fetchOpenAi(weekFrom, weekTo) }, [weekFrom, weekTo, fetchOpenAi])
+
   const weekDateLabel = `Week ${weekLabel(weekFrom, weekTo)}`
 
   const weeklyAdsRows: PdfWeeklyRow[] = adsAccounts.map(a => ({
@@ -1670,25 +1498,41 @@ export function SEMReportes() {
     cost: ggPeriod[a.id]?.spend ?? 0,
   }))
 
+  const weeklyOpenaiRows: PdfOpenAiRow[] = openaiResults.flatMap(r => r.campaigns.map(c => ({
+    clientName: r.clientName,
+    campaignName: c.name,
+    status: c.status,
+    budget: c.budget,
+    spend: c.spend,
+    cpc: c.cpc,
+    impressions: c.impressions,
+  })))
+
   const [preparingWeeklyEmail, setPreparingWeeklyEmail] = useState(false)
   const [weeklyEmailPayload, setWeeklyEmailPayload]     = useState<EmailReportPayload | null>(null)
 
   async function handleOpenWeeklyEmailModal() {
     setPreparingWeeklyEmail(true)
     try {
-      const [adsImage, guaranteeImage, pdf] = await Promise.all([
+      const hasOpenai = weeklyOpenaiRows.length > 0
+      const [adsImage, guaranteeImage, openaiImage, pdf] = await Promise.all([
         captureTableAsImage({ title: 'Google Ads Budget Report', headers: WEEKLY_TABLE_HEADERS, rows: weeklyRowsToTable(weeklyAdsRows) }),
         captureTableAsImage({ title: 'Google Guarantee Budget Report', headers: WEEKLY_TABLE_HEADERS, rows: weeklyRowsToTable(weeklyGuaranteeRows) }),
-        generateWeeklyBudgetPdfBytes({ dateLabel: weekDateLabel, adsRows: weeklyAdsRows, guaranteeRows: weeklyGuaranteeRows }),
+        hasOpenai
+          ? captureTableAsImage({ title: 'OpenAI Ads Report', headers: OPENAI_TABLE_HEADERS, rows: openaiRowsToTable(weeklyOpenaiRows) })
+          : Promise.resolve(null),
+        generateWeeklyBudgetPdfBytes({ dateLabel: weekDateLabel, adsRows: weeklyAdsRows, guaranteeRows: weeklyGuaranteeRows, openaiRows: weeklyOpenaiRows }),
       ])
       setWeeklyEmailPayload({
         kind: 'weekly',
         dateLabel: weekDateLabel,
         adsRows: weeklyAdsRows,
         guaranteeRows: weeklyGuaranteeRows,
+        openaiRows: weeklyOpenaiRows,
         images: [
           { label: 'Google Ads Budget Report', ...adsImage },
           { label: 'Google Guarantee Budget Report', ...guaranteeImage },
+          ...(openaiImage ? [{ label: 'OpenAI Ads Report', ...openaiImage }] : []),
         ],
         pdfBase64: uint8ToBase64(pdf.bytes),
         pdfFilename: pdf.filename,
@@ -1755,18 +1599,16 @@ export function SEMReportes() {
               ))}
             </div>
 
-            {activeTab !== 'openai' && (
-              <div className="flex items-center gap-3">
-                <WeekPicker from={weekFrom} to={weekTo} onChange={(f, t) => { setWeekFrom(f); setWeekTo(t) }} />
-                <button onClick={handleOpenWeeklyEmailModal} disabled={preparingWeeklyEmail}
-                  className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
-                             transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
-                             dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-                  <Mail className="h-4 w-4" />
-                  {preparingWeeklyEmail ? 'Preparing…' : 'Send by Email'}
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              <WeekPicker from={weekFrom} to={weekTo} onChange={(f, t) => { setWeekFrom(f); setWeekTo(t) }} />
+              <button onClick={handleOpenWeeklyEmailModal} disabled={preparingWeeklyEmail}
+                className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-4 py-2 text-sm font-medium text-black shadow-card
+                           transition-colors hover:border-[#16a34a] hover:text-[#16a34a] disabled:opacity-60
+                           dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
+                <Mail className="h-4 w-4" />
+                {preparingWeeklyEmail ? 'Preparing…' : 'Send by Email'}
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -1799,7 +1641,14 @@ export function SEMReportes() {
                   loadingPeriod={loadingGgPeriod}
                 />
               )}
-              {activeTab === 'openai'    && <OpenAiAdsReport />}
+              {activeTab === 'openai' && (
+                <OpenAiAdsReport
+                  dateLabel={weekDateLabel}
+                  results={openaiResults}
+                  loading={loadingOpenai}
+                  error={openaiError}
+                />
+              )}
             </>
           )}
         </>

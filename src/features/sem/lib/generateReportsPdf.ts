@@ -483,26 +483,41 @@ function weeklySummaryBoxes(rows: PdfWeeklyRow[], accent: [number, number, numbe
   ]
 }
 
+function openaiSummaryBoxes(rows: PdfOpenAiRow[], accent: [number, number, number]) {
+  const budget = rows.reduce((s, r) => s + r.budget, 0)
+  const spend  = rows.reduce((s, r) => s + r.spend, 0)
+  const impressions = rows.reduce((s, r) => s + r.impressions, 0)
+  return [
+    { label: 'Total budget', value: fc(budget), color: accent },
+    { label: 'Period spend', value: fc(spend), color: C.red },
+    { label: 'Impressions', value: impressions.toLocaleString('en-US'), color: accent },
+  ]
+}
+
 const TITLE_WEEKLY = 'Weekly Budget Report'
 
 async function buildWeeklyBudgetPdfDoc(params: {
   dateLabel: string
   adsRows: PdfWeeklyRow[]
   guaranteeRows: PdfWeeklyRow[]
+  openaiRows?: PdfOpenAiRow[]
 }): Promise<{ doc: jsPDF; filename: string }> {
-  const { dateLabel, adsRows, guaranteeRows } = params
+  const { dateLabel, adsRows, guaranteeRows, openaiRows = [] } = params
   const logoDataUrl = await loadXmsLogoDataUrl()
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
   const allRows = [...adsRows, ...guaranteeRows]
+  const subtitle = openaiRows.length > 0
+    ? 'Google Ads + Google Guarantee + OpenAI Ads'
+    : 'Google Ads + Google Guarantee'
   drawCoverPage(doc, {
     title: TITLE_WEEKLY,
-    subtitle: 'Google Ads + Google Guarantee',
+    subtitle,
     dateLabel,
     logoDataUrl,
     stats: [
-      { label: 'Total budget', value: fc(allRows.reduce((s, r) => s + r.budget, 0)) },
-      { label: 'Period spend', value: fc(allRows.reduce((s, r) => s + r.cost, 0)) },
+      { label: 'Total budget', value: fc(allRows.reduce((s, r) => s + r.budget, 0) + openaiRows.reduce((s, r) => s + r.budget, 0)) },
+      { label: 'Period spend', value: fc(allRows.reduce((s, r) => s + r.cost, 0) + openaiRows.reduce((s, r) => s + r.spend, 0)) },
       { label: 'Accounts', value: String(allRows.length) },
     ],
   })
@@ -545,10 +560,34 @@ async function buildWeeklyBudgetPdfDoc(params: {
     drawWeeklyTableHeader(doc, y, C.blue)
     y += HDR_H
     y = drawWeeklyRows(doc, guaranteeRows, y, false)
-    drawWeeklyTotals(doc, guaranteeRows, y, false)
+    y = drawWeeklyTotals(doc, guaranteeRows, y, false)
   }
 
-  if (adsRows.length === 0 && guaranteeRows.length === 0) {
+  if (openaiRows.length > 0) {
+    const openaiHeight = 21 + HDR_H + openaiRows.length * ROW_H + 22
+    if (adsRows.length === 0 && guaranteeRows.length === 0) {
+      y = drawSummaryStrip(doc, y, openaiSummaryBoxes(openaiRows, C.green))
+      y += 6
+    } else if (PAGE_H - y - 14 < openaiHeight) {
+      doc.addPage()
+      drawPageHeader(doc, TITLE_WEEKLY, dateLabel, logoDataUrl, doc.getNumberOfPages())
+      y = 32
+      y = drawSummaryStrip(doc, y, openaiSummaryBoxes(openaiRows, C.green))
+      y += 6
+    } else {
+      y += 8
+      y = drawSummaryStrip(doc, y, openaiSummaryBoxes(openaiRows, C.green))
+      y += 6
+    }
+
+    drawSectionLabel(doc, 'OPENAI ADS', `Period: ${dateLabel} · OpenAI Ads API`, y, 'ads')
+    y += 11
+    drawOpenAiTableHeader(doc, y)
+    y += HDR_H
+    y = drawOpenAiRows(doc, openaiRows, y, TITLE_WEEKLY, dateLabel, logoDataUrl)
+  }
+
+  if (adsRows.length === 0 && guaranteeRows.length === 0 && openaiRows.length === 0) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(10)
     setColor(doc, C.muted, 'text')
@@ -565,6 +604,7 @@ export async function generateWeeklyBudgetPdf(params: {
   dateLabel: string
   adsRows: PdfWeeklyRow[]
   guaranteeRows: PdfWeeklyRow[]
+  openaiRows?: PdfOpenAiRow[]
 }): Promise<void> {
   const { doc, filename } = await buildWeeklyBudgetPdfDoc(params)
   doc.save(filename)
@@ -575,6 +615,7 @@ export async function generateWeeklyBudgetPdfBytes(params: {
   dateLabel: string
   adsRows: PdfWeeklyRow[]
   guaranteeRows: PdfWeeklyRow[]
+  openaiRows?: PdfOpenAiRow[]
 }): Promise<{ bytes: Uint8Array; filename: string }> {
   const { doc, filename } = await buildWeeklyBudgetPdfDoc(params)
   return { bytes: new Uint8Array(doc.output('arraybuffer')), filename }
@@ -759,56 +800,14 @@ function drawOpenAiTableHeader(doc: jsPDF, y: number) {
   })
 }
 
-export async function generateOpenAiAdsPdf(params: {
-  dateLabel: string
-  rows: PdfOpenAiRow[]
-}): Promise<void> {
-  const { dateLabel, rows } = params
-  const logoDataUrl = await loadXmsLogoDataUrl()
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-
-  drawCoverPage(doc, {
-    title: TITLE_OPENAI,
-    subtitle: 'OpenAI Ads API',
-    dateLabel,
-    logoDataUrl,
-    stats: [
-      { label: 'Total budget', value: fc(rows.reduce((s, r) => s + r.budget, 0)) },
-      { label: 'Total spend', value: fc(rows.reduce((s, r) => s + r.spend, 0)) },
-      { label: 'Campaigns', value: String(rows.length) },
-    ],
-  })
-  doc.addPage()
-
-  drawPageHeader(doc, TITLE_OPENAI, dateLabel, logoDataUrl)
-  let y = 32
-
-  const totalBudget = rows.reduce((s, r) => s + r.budget, 0)
-  const totalSpend  = rows.reduce((s, r) => s + r.spend, 0)
-  const totalImpr   = rows.reduce((s, r) => s + r.impressions, 0)
-  y = drawSummaryStrip(doc, y, [
-    { label: 'Total budget', value: fc(totalBudget), color: C.green },
-    { label: 'Total spend', value: fc(totalSpend), color: C.red },
-    { label: 'Impressions', value: totalImpr.toLocaleString('en-US'), color: C.green },
-  ])
-  y += 6
-
-  drawSectionLabel(doc, 'OPENAI ADS', `Period: ${dateLabel} · OpenAI Ads API`, y, 'ads')
-  y += 11
-  drawOpenAiTableHeader(doc, y)
-  y += HDR_H
-
-  if (rows.length === 0) {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    setColor(doc, C.muted, 'text')
-    doc.text('No campaigns to report for this period.', ML, y + 10)
-  }
-
+// Row loop shared between the standalone OpenAI PDF and the OpenAI section
+// inside the combined weekly PDF — page breaks re-draw the same page header.
+function drawOpenAiRows(doc: jsPDF, rows: PdfOpenAiRow[], startY: number, title: string, dateLabel: string, logoDataUrl: string | null): number {
+  let y = startY
   rows.forEach((row, ri) => {
     if (y + ROW_H > PAGE_H - 14) {
       doc.addPage()
-      drawPageHeader(doc, TITLE_OPENAI, dateLabel, logoDataUrl, doc.getNumberOfPages())
+      drawPageHeader(doc, title, dateLabel, logoDataUrl, doc.getNumberOfPages())
       y = 32
       drawOpenAiTableHeader(doc, y)
       y += HDR_H
@@ -836,6 +835,49 @@ export async function generateOpenAiAdsPdf(params: {
     doc.line(ML, y + ROW_H, ML + USABLE, y + ROW_H)
     y += ROW_H
   })
+  return y
+}
+
+export async function generateOpenAiAdsPdf(params: {
+  dateLabel: string
+  rows: PdfOpenAiRow[]
+}): Promise<void> {
+  const { dateLabel, rows } = params
+  const logoDataUrl = await loadXmsLogoDataUrl()
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+  drawCoverPage(doc, {
+    title: TITLE_OPENAI,
+    subtitle: 'OpenAI Ads API',
+    dateLabel,
+    logoDataUrl,
+    stats: [
+      { label: 'Total budget', value: fc(rows.reduce((s, r) => s + r.budget, 0)) },
+      { label: 'Total spend', value: fc(rows.reduce((s, r) => s + r.spend, 0)) },
+      { label: 'Campaigns', value: String(rows.length) },
+    ],
+  })
+  doc.addPage()
+
+  drawPageHeader(doc, TITLE_OPENAI, dateLabel, logoDataUrl)
+  let y = 32
+
+  y = drawSummaryStrip(doc, y, openaiSummaryBoxes(rows, C.green))
+  y += 6
+
+  drawSectionLabel(doc, 'OPENAI ADS', `Period: ${dateLabel} · OpenAI Ads API`, y, 'ads')
+  y += 11
+  drawOpenAiTableHeader(doc, y)
+  y += HDR_H
+
+  if (rows.length === 0) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    setColor(doc, C.muted, 'text')
+    doc.text('No campaigns to report for this period.', ML, y + 10)
+  }
+
+  drawOpenAiRows(doc, rows, y, TITLE_OPENAI, dateLabel, logoDataUrl)
 
   drawFooters(doc, 2)
 
