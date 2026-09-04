@@ -1,9 +1,9 @@
 /**
  * server/googleAuth.js
- * Google OAuth reconnect flow for PRODUCTION (server.js).
- * Same behavior as the dev flow in vite.config.ts: only GOOGLE_REQUIRED_EMAIL
- * may connect; the resulting token.json feeds every server-side Google call
- * (GSC, GA4, Ads, GBP) for all dashboard viewers.
+ * Google OAuth reconnect flow, shared by production (server.js, Express)
+ * and the Vite dev middleware (vite.config.ts, raw http). Only
+ * GOOGLE_REQUIRED_EMAIL may connect; the resulting token.json feeds every
+ * server-side Google call (GSC, GA4, Ads, GBP) for all dashboard viewers.
  *
  * Requires in production env:
  *   PUBLIC_BASE_URL        e.g. https://dashboard.xperienceusa.com
@@ -36,7 +36,16 @@ function isSafeReturnPath(v) {
   return typeof v === "string" && v.startsWith("/") && !v.startsWith("//")
 }
 
-function appendAuthResult(returnPath, authResult) {
+export function decodeAuthReturnPath(stateParam) {
+  try {
+    const decoded = JSON.parse(Buffer.from(String(stateParam ?? ""), "base64url").toString())
+    return isSafeReturnPath(decoded.returnPath) ? decoded.returnPath : "/settings"
+  } catch {
+    return "/settings"
+  }
+}
+
+export function appendAuthResult(returnPath, authResult) {
   const separator = returnPath.includes("?") ? "&" : "?"
   return `${returnPath}${separator}auth=${authResult}`
 }
@@ -93,7 +102,7 @@ async function refreshGoogleAccessToken(refreshToken, clientId, clientSecret) {
 const TOKEN_STATUS_CACHE_TTL_MS = 30_000
 let tokenStatusCache = null
 
-async function readTokenStatus(requiredEmail, force = false) {
+export async function getGoogleAuthStatus(requiredEmail, force = false) {
   if (!force && tokenStatusCache && Date.now() - tokenStatusCache.at < TOKEN_STATUS_CACHE_TTL_MS) {
     return tokenStatusCache.status
   }
@@ -132,6 +141,59 @@ async function readTokenStatus(requiredEmail, force = false) {
   }
 }
 
+export function buildGoogleAuthStartUrl({ redirectUri, returnPath }) {
+  const { client_id } = getClientCreds()
+  const safeReturn = isSafeReturnPath(returnPath) ? returnPath : "/settings"
+  const state = Buffer.from(JSON.stringify({ returnPath: safeReturn })).toString("base64url")
+
+  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
+  authUrl.searchParams.set("client_id", client_id)
+  authUrl.searchParams.set("redirect_uri", redirectUri)
+  authUrl.searchParams.set("response_type", "code")
+  authUrl.searchParams.set("scope", [...GOOGLE_API_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
+  authUrl.searchParams.set("access_type", "offline")
+  authUrl.searchParams.set("prompt", "consent")
+  authUrl.searchParams.set("state", state)
+  return authUrl.toString()
+}
+
+export async function completeGoogleAuthExchange({ code, redirectUri, requiredEmail }) {
+  const { client_id, client_secret } = getClientCreds()
+
+  const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: redirectUri, grant_type: "authorization_code" }).toString(),
+  })
+  const tokenData = await tokenResp.json()
+
+  if (tokenData.error) {
+    console.error("[google-auth] token exchange error:", tokenData)
+    return { ok: false, reason: "error" }
+  }
+
+  const email = await fetchGoogleAccountEmail(tokenData.access_token ?? "")
+  if (!email || normalizeGoogleEmail(email) !== requiredEmail) {
+    console.warn("[google-auth] rejected account:", email ?? "unknown")
+    return { ok: false, reason: "wrong-account", email }
+  }
+
+  const tokenJson = {
+    token: tokenData.access_token,
+    refresh_token: tokenData.refresh_token,
+    token_uri: "https://oauth2.googleapis.com/token",
+    client_id,
+    client_secret,
+    scopes: GOOGLE_API_SCOPES,
+    _connected_email: email,
+  }
+  fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokenJson, null, 2))
+  tokenStatusCache = null
+  console.log("[google-auth] token.json saved for", email)
+
+  return { ok: true, email }
+}
+
 // ─── GBP-only token (separate Google account that owns the Business Profiles) ─
 // Uses credentials-gbp.json if present (e.g. Steven's GCP client with approved
 // GBP API quota), else falls back to the main credentials.json.
@@ -147,41 +209,86 @@ function getGbpClientCreds() {
   return { client_id: data.client_id, client_secret: data.client_secret }
 }
 
+export function getGbpAuthStatus(requiredEmail) {
+  try {
+    const tokenJson = JSON.parse(fs.readFileSync(GBP_TOKEN_PATH, "utf-8"))
+    return {
+      connected: !!tokenJson.refresh_token,
+      email: tokenJson._connected_email ?? null,
+      requiredEmail,
+      allowed: (tokenJson._connected_email ?? "").toLowerCase() === requiredEmail,
+    }
+  } catch {
+    return { connected: false, email: null, requiredEmail, allowed: false }
+  }
+}
+
+export function buildGbpAuthStartUrl({ redirectUri, returnPath }) {
+  const { client_id } = getGbpClientCreds()
+  const safeReturn = isSafeReturnPath(returnPath) ? returnPath : "/settings"
+  const state = Buffer.from(JSON.stringify({ returnPath: safeReturn })).toString("base64url")
+
+  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
+  authUrl.searchParams.set("client_id", client_id)
+  authUrl.searchParams.set("redirect_uri", redirectUri)
+  authUrl.searchParams.set("response_type", "code")
+  authUrl.searchParams.set("scope", [...GBP_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
+  authUrl.searchParams.set("access_type", "offline")
+  authUrl.searchParams.set("prompt", "consent")
+  authUrl.searchParams.set("state", state)
+  return authUrl.toString()
+}
+
+export async function completeGbpAuthExchange({ code, redirectUri, requiredEmail }) {
+  const { client_id, client_secret } = getGbpClientCreds()
+
+  const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: redirectUri, grant_type: "authorization_code" }).toString(),
+  })
+  const tokenData = await tokenResp.json()
+
+  if (tokenData.error) {
+    console.error("[gbp-auth] token exchange error:", tokenData)
+    return { ok: false, reason: "error" }
+  }
+
+  const email = await fetchGoogleAccountEmail(tokenData.access_token ?? "")
+  if (!email || email.toLowerCase() !== requiredEmail) {
+    console.warn("[gbp-auth] rejected account:", email ?? "unknown")
+    return { ok: false, reason: "wrong-account", email }
+  }
+
+  fs.writeFileSync(GBP_TOKEN_PATH, JSON.stringify({
+    token: tokenData.access_token,
+    refresh_token: tokenData.refresh_token,
+    token_uri: "https://oauth2.googleapis.com/token",
+    client_id,
+    client_secret,
+    scopes: GBP_SCOPES,
+    _connected_email: email,
+  }, null, 2))
+  console.log("[gbp-auth] token-gbp.json saved for", email)
+
+  return { ok: true, email }
+}
+
+// ─── Express route registration (production server.js) ──────────────────────
+
 export function registerGbpAuthRoutes(app) {
   const requiredEmail = (process.env.GBP_REQUIRED_EMAIL ?? "xperiencemarketingsolutions@gmail.com").trim().toLowerCase()
   const baseUrl = (process.env.PUBLIC_BASE_URL ?? "http://localhost:3000").replace(/\/+$/, "")
   const redirectUri = `${baseUrl}/api/auth/gbp/callback`
 
-  app.get("/api/auth/gbp/status", async (_req, res) => {
-    try {
-      const tokenJson = JSON.parse(fs.readFileSync(GBP_TOKEN_PATH, "utf-8"))
-      res.json({
-        connected: !!tokenJson.refresh_token,
-        email: tokenJson._connected_email ?? null,
-        requiredEmail,
-        allowed: (tokenJson._connected_email ?? "").toLowerCase() === requiredEmail,
-      })
-    } catch {
-      res.json({ connected: false, email: null, requiredEmail, allowed: false })
-    }
+  app.get("/api/auth/gbp/status", (_req, res) => {
+    res.json(getGbpAuthStatus(requiredEmail))
   })
 
   app.get("/api/auth/gbp/start", (req, res) => {
     try {
-      const { client_id } = getGbpClientCreds()
-      const rawReturn = typeof req.query.return === "string" ? req.query.return : "/settings"
-      const returnPath = isSafeReturnPath(rawReturn) ? rawReturn : "/settings"
-      const state = Buffer.from(JSON.stringify({ returnPath })).toString("base64url")
-
-      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
-      authUrl.searchParams.set("client_id", client_id)
-      authUrl.searchParams.set("redirect_uri", redirectUri)
-      authUrl.searchParams.set("response_type", "code")
-      authUrl.searchParams.set("scope", [...GBP_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
-      authUrl.searchParams.set("access_type", "offline")
-      authUrl.searchParams.set("prompt", "consent")
-      authUrl.searchParams.set("state", state)
-      res.redirect(authUrl.toString())
+      const returnPath = typeof req.query.return === "string" ? req.query.return : "/settings"
+      res.redirect(buildGbpAuthStartUrl({ redirectUri, returnPath }))
     } catch (err) {
       console.error("[gbp-auth] start error:", err instanceof Error ? err.message : err)
       res.status(500).json({ error: "credentials file missing or invalid" })
@@ -190,11 +297,7 @@ export function registerGbpAuthRoutes(app) {
 
   app.get("/api/auth/gbp/callback", async (req, res) => {
     const code = typeof req.query.code === "string" ? req.query.code : ""
-    let returnPath = "/settings"
-    try {
-      const decoded = JSON.parse(Buffer.from(String(req.query.state ?? ""), "base64url").toString())
-      if (isSafeReturnPath(decoded.returnPath)) returnPath = decoded.returnPath
-    } catch { /* use default */ }
+    const returnPath = decodeAuthReturnPath(req.query.state)
 
     if (req.query.error || !code) {
       console.error("[gbp-auth] callback error:", req.query.error)
@@ -202,38 +305,8 @@ export function registerGbpAuthRoutes(app) {
     }
 
     try {
-      const { client_id, client_secret } = getGbpClientCreds()
-
-      const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: redirectUri, grant_type: "authorization_code" }).toString(),
-      })
-      const tokenData = await tokenResp.json()
-
-      if (tokenData.error) {
-        console.error("[gbp-auth] token exchange error:", tokenData)
-        return res.redirect(appendAuthResult(returnPath, "error"))
-      }
-
-      const email = await fetchGoogleAccountEmail(tokenData.access_token ?? "")
-      if (!email || email.toLowerCase() !== requiredEmail) {
-        console.warn("[gbp-auth] rejected account:", email ?? "unknown")
-        return res.redirect(appendAuthResult(returnPath, "wrong-account"))
-      }
-
-      fs.writeFileSync(GBP_TOKEN_PATH, JSON.stringify({
-        token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        token_uri: "https://oauth2.googleapis.com/token",
-        client_id,
-        client_secret,
-        scopes: GBP_SCOPES,
-        _connected_email: email,
-      }, null, 2))
-      console.log("[gbp-auth] token-gbp.json saved for", email)
-
-      res.redirect(appendAuthResult(returnPath, "success"))
+      const result = await completeGbpAuthExchange({ code, redirectUri, requiredEmail })
+      res.redirect(appendAuthResult(returnPath, result.ok ? "success" : result.reason))
     } catch (err) {
       console.error("[gbp-auth]", err)
       res.redirect(appendAuthResult(returnPath, "error"))
@@ -247,25 +320,13 @@ export function registerGoogleAuthRoutes(app) {
   const redirectUri = `${baseUrl}/api/auth/google/callback`
 
   app.get("/api/auth/google/status", async (_req, res) => {
-    res.json(await readTokenStatus(requiredEmail, true))
+    res.json(await getGoogleAuthStatus(requiredEmail, true))
   })
 
   app.get("/api/auth/google/start", (req, res) => {
     try {
-      const { client_id } = getClientCreds()
-      const rawReturn = typeof req.query.return === "string" ? req.query.return : "/settings"
-      const returnPath = isSafeReturnPath(rawReturn) ? rawReturn : "/settings"
-      const state = Buffer.from(JSON.stringify({ returnPath })).toString("base64url")
-
-      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
-      authUrl.searchParams.set("client_id", client_id)
-      authUrl.searchParams.set("redirect_uri", redirectUri)
-      authUrl.searchParams.set("response_type", "code")
-      authUrl.searchParams.set("scope", [...GOOGLE_API_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
-      authUrl.searchParams.set("access_type", "offline")
-      authUrl.searchParams.set("prompt", "consent")
-      authUrl.searchParams.set("state", state)
-      res.redirect(authUrl.toString())
+      const returnPath = typeof req.query.return === "string" ? req.query.return : "/settings"
+      res.redirect(buildGoogleAuthStartUrl({ redirectUri, returnPath }))
     } catch (err) {
       console.error("[google-auth] start error:", err instanceof Error ? err.message : err)
       res.status(500).json({ error: "credentials.json missing or invalid" })
@@ -274,53 +335,16 @@ export function registerGoogleAuthRoutes(app) {
 
   app.get("/api/auth/google/callback", async (req, res) => {
     const code = typeof req.query.code === "string" ? req.query.code : ""
-    const oauthError = req.query.error
-    let returnPath = "/settings"
-    try {
-      const decoded = JSON.parse(Buffer.from(String(req.query.state ?? ""), "base64url").toString())
-      if (isSafeReturnPath(decoded.returnPath)) returnPath = decoded.returnPath
-    } catch { /* use default */ }
+    const returnPath = decodeAuthReturnPath(req.query.state)
 
-    if (oauthError || !code) {
-      console.error("[google-auth] callback error:", oauthError)
+    if (req.query.error || !code) {
+      console.error("[google-auth] callback error:", req.query.error)
       return res.redirect(appendAuthResult(returnPath, "error"))
     }
 
     try {
-      const { client_id, client_secret } = getClientCreds()
-
-      const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: redirectUri, grant_type: "authorization_code" }).toString(),
-      })
-      const tokenData = await tokenResp.json()
-
-      if (tokenData.error) {
-        console.error("[google-auth] token exchange error:", tokenData)
-        return res.redirect(appendAuthResult(returnPath, "error"))
-      }
-
-      const email = await fetchGoogleAccountEmail(tokenData.access_token ?? "")
-      if (!email || normalizeGoogleEmail(email) !== requiredEmail) {
-        console.warn("[google-auth] rejected account:", email ?? "unknown")
-        return res.redirect(appendAuthResult(returnPath, "wrong-account"))
-      }
-
-      const tokenJson = {
-        token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        token_uri: "https://oauth2.googleapis.com/token",
-        client_id,
-        client_secret,
-        scopes: GOOGLE_API_SCOPES,
-        _connected_email: email,
-      }
-      fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokenJson, null, 2))
-      tokenStatusCache = null
-      console.log("[google-auth] token.json saved for", email)
-
-      res.redirect(appendAuthResult(returnPath, "success"))
+      const result = await completeGoogleAuthExchange({ code, redirectUri, requiredEmail })
+      res.redirect(appendAuthResult(returnPath, result.ok ? "success" : result.reason))
     } catch (err) {
       console.error("[google-auth]", err)
       res.redirect(appendAuthResult(returnPath, "error"))

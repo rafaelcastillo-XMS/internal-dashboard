@@ -1,15 +1,20 @@
-import ReactApexChart from 'react-apexcharts'
-import type { ApexOptions } from 'apexcharts'
+import { useId } from 'react'
+import { Area, AreaChart } from 'recharts'
 
 function Sparkline({ data, color }: { data: number[]; color: string }) {
-  const options: ApexOptions = {
-    chart: { type: 'area', sparkline: { enabled: true }, animations: { enabled: true, speed: 600 } },
-    stroke: { curve: 'smooth', width: 1.5 },
-    fill: { type: 'gradient', gradient: { opacityFrom: 0.35, opacityTo: 0 } },
-    colors: [color],
-    tooltip: { enabled: false },
-  }
-  return <ReactApexChart options={options} series={[{ data }]} type="area" height={40} width={80} />
+  const gradId = `spark-${useId().replace(/:/g, '')}`
+  const chartData = data.map((value, i) => ({ i, value }))
+  return (
+    <AreaChart width={80} height={40} data={chartData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <Area type="monotone" dataKey="value" stroke={color} strokeWidth={1.5} fill={`url(#${gradId})`} dot={false} isAnimationActive />
+    </AreaChart>
+  )
 }
 
 function DeltaBadge({ delta, invertScale = false }: { delta: number | null; invertScale?: boolean }) {

@@ -2,10 +2,6 @@ import express from "express"
 import { fileURLToPath } from "url"
 import path from "path"
 import fs from "fs"
-import os from "os"
-import { execFile } from "child_process"
-import { promisify } from "util"
-import Anthropic from "@anthropic-ai/sdk"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { optimizePromptWithOpenAI } from "./server/openaiPromptOptimizer.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
@@ -13,8 +9,9 @@ import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 import { MetaApiError, getAdCampaigns, getCampaignInsightsSeries, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
 import { handleNotionClientSyncRequest, queryRelatedNotionData, queryNotionClientCovers, syncClientFromNotion } from "./server/notionSync.js"
-
-const execFileAsync = promisify(execFile)
+import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail } from "./server/mondayTasks.js"
+import { askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
+import { sanitizePdfFilename, exportPdfBuffer } from "./server/pdfExport.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SEO_AUDIT_PROMPT_PATH = path.join(__dirname, 'prompts', 'seo-audit-history.md')
@@ -29,44 +26,6 @@ app.use((_req, res, next) => {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin")
   next()
 })
-
-// ─── Monday.com cache (5-min TTL per user) ────────────────────────────────────
-const mondayTaskCache = new Map()
-const MONDAY_CACHE_TTL_MS = 5 * 60 * 1000
-
-function normalizeMondayLabel(label) {
-  return (label ?? "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .trim()
-    .toLowerCase()
-}
-
-function buildEmailMap() {
-  const raw = process.env.MONDAY_EMAIL_MAP ?? ""
-  return Object.fromEntries(
-    raw.split(",").filter(s => s.includes(":")).map(s => {
-      const [k, v] = s.split(":").map(e => e.trim())
-      return [k, v]
-    })
-  )
-}
-
-async function mondayGraphQL(token, query, variables = {}) {
-  const resp = await fetch("https://api.monday.com/v2", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: token,
-      "API-Version": "2024-01",
-    },
-    body: JSON.stringify({ query, variables }),
-  })
-  if (!resp.ok) throw new Error(`Monday API HTTP ${resp.status}`)
-  const json = await resp.json()
-  if (json.errors?.length) throw new Error(json.errors.map(e => e.message).join("; "))
-  return json.data
-}
 
 // ─── Supabase Edge Function proxy ────────────────────────────────────────────
 
@@ -179,53 +138,18 @@ app.get("/api/sem/search-terms", async (req, res) => {
 // ─── GET /api/monday/tasks/:taskId ───────────────────────────────────────────
 app.get("/api/monday/tasks/:taskId", async (req, res) => {
   const mondayToken = process.env.MONDAY_API_TOKEN ?? ""
-  if (!mondayToken) return res.status(503).json({ error: "MONDAY_API_TOKEN is not configured" })
-  const { taskId } = req.params
-  if (!/^\d+$/.test(taskId)) return res.status(400).json({ error: "Invalid task ID" })
   try {
-    const data = await mondayGraphQL(mondayToken, `
-      query GetItemDetail($ids: [ID!]) {
-        me { account { slug } }
-        items(ids: $ids, newest_first: true) {
-          id name
-          board { id name }
-          updates(limit: 5) {
-            id body created_at
-            creator { name photo_thumb_small }
-          }
-        }
-      }
-    `, { ids: [taskId] })
-    const item = data?.items?.[0] ?? null
-    if (!item) return res.status(404).json({ error: "Task not found" })
-    const accountSlug = data?.me?.account?.slug ?? null
-    const mondayUrl = accountSlug && item.board?.id
-      ? `https://${accountSlug}.monday.com/boards/${item.board.id}/pulses/${item.id}`
-      : null
-    res.json({
-      id: item.id,
-      boardId: item.board?.id ?? null,
-      boardName: item.board?.name ?? "Unknown Board",
-      mondayUrl,
-      updates: (item.updates ?? []).map(u => ({
-        id: u.id, body: u.body, createdAt: u.created_at,
-        creatorName: u.creator?.name ?? "Unknown",
-        creatorAvatar: u.creator?.photo_thumb_small ?? null,
-      })),
-    })
+    res.json(await fetchMondayTaskDetail({ mondayToken, taskId: req.params.taskId }))
   } catch (err) {
     const message = err instanceof Error ? err.message : "Monday API error"
     console.error("[monday-detail]", message)
-    res.status(500).json({ error: message })
+    res.status(err?.statusCode ?? 500).json({ error: message })
   }
 })
 
 // ─── GET /api/monday/tasks?email=... ─────────────────────────────────────────
 app.get("/api/monday/tasks", async (req, res) => {
   const mondayToken = process.env.MONDAY_API_TOKEN ?? ""
-  if (!mondayToken) {
-    return res.status(503).json({ error: "MONDAY_API_TOKEN is not configured" })
-  }
 
   // Only enforce secret when INTERNAL_API_SECRET is configured
   const internalSecret = process.env.INTERNAL_API_SECRET ?? ""
@@ -234,150 +158,28 @@ app.get("/api/monday/tasks", async (req, res) => {
     return res.status(401).json({ error: "Unauthorized" })
   }
 
-  const emailMap = buildEmailMap()
+  const emailMap = buildMondayEmailMap(process.env.MONDAY_EMAIL_MAP)
   const sessionEmail = req.query.email ?? ""
   const mondayEmail = emailMap[sessionEmail] ?? sessionEmail
   const bust = req.query.bust === "1"
 
   try {
-    const usersData = await mondayGraphQL(mondayToken, `
-      query GetUsers($emails: [String]) {
-        users(emails: $emails, limit: 1) {
-          id name email photo_thumb_small
-        }
-      }
-    `, { emails: mondayEmail ? [mondayEmail] : [] })
-
-    const user = usersData?.users?.[0] ?? null
-    if (!user) return res.json({ user: null, tasks: [] })
-
-    // Serve from cache if fresh (skip cache when client requests a bust)
-    if (bust) mondayTaskCache.delete(user.id)
-    const cached = mondayTaskCache.get(user.id)
-    if (cached && Date.now() - cached.at < MONDAY_CACHE_TTL_MS) {
-      return res.json(cached.payload)
-    }
-
-    // Monday returns items in board order unless an explicit order is given.
-    // Request the latest page first so newer assignments are not hidden beyond
-    // the page limit before we apply the per-user filter below.
-    const itemsData = await mondayGraphQL(mondayToken, `
-      query GetBoardItems {
-        boards(limit: 100, state: active) {
-          id name
-          items_page(
-            limit: 100
-            query_params: {
-              order_by: [{ column_id: "__last_updated__", direction: desc }]
-            }
-          ) {
-            items {
-              id name state updated_at
-              column_values {
-                id text type
-                column { title }
-                ... on StatusValue { label index }
-                ... on DateValue { date }
-                ... on PeopleValue { persons_and_teams { id kind } }
-              }
-            }
-          }
-        }
-      }
-    `)
-
-    const SUBITEMS_PREFIXES = ["subitems of", "subelementos de"]
-    const isSubitemsBoard = name =>
-      SUBITEMS_PREFIXES.some(p => name.toLowerCase().startsWith(p))
-
-    const rawItems = (itemsData?.boards ?? [])
-      .filter(board => !isSubitemsBoard(board.name))
-      .flatMap(board =>
-        (board.items_page?.items ?? [])
-          .filter(item =>
-            item.state !== "deleted" &&
-            item.column_values.some(col =>
-              col.type === "people" &&
-              col.persons_and_teams?.some(
-                p => p.kind === "person" && String(p.id) === String(user.id)
-              )
-            )
-          )
-          .map(item => ({ ...item, board: { id: board.id, name: board.name } }))
-      )
-
-    rawItems.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-
-    const tasks = rawItems.map(item => {
-      const byId = id => item.column_values.find(c => c.id === id)
-      const byType = type => item.column_values.find(c => c.type === type)
-      // Monday reuses the "status" column type for status, priority, and plain
-      // category tags (department, service, etc.), and the "status" column id
-      // is only a convention some boards follow — several boards here rename
-      // or repurpose it. The column *title* is the one thing a human keeps
-      // meaningful, so match on that instead of id/type.
-      const byTitle = titles => item.column_values.find(c => titles.includes(normalizeMondayLabel(c.column?.title ?? "")))
-      const statusCol = byTitle(["status", "estado"]) ?? byId("status") ?? byType("status")
-      const priorityCol = byTitle(["priority", "priori", "prioridad"]) ?? byId("priority")
-      const dueDateCol = byId("due_date") ?? byId("date") ?? byType("date")
-      return {
-        id: item.id,
-        name: item.name,
-        board: item.board?.name ?? "Unknown Board",
-        status: statusCol?.label ?? statusCol?.text ?? "—",
-        statusIndex: statusCol?.index ?? null,
-        priority: priorityCol?.label ?? priorityCol?.text ?? null,
-        priorityIndex: priorityCol?.index ?? null,
-        dueDate: dueDateCol?.date ?? dueDateCol?.text ?? null,
-        updatedAt: item.updated_at,
-      }
-    }).filter(task => ![
-      "done", "complete", "completed", "hecho", "hecha",
-      "completado", "completada", "finalizado", "finalizada",
-      "terminado", "terminada", "listo", "lista",
-    ].includes(normalizeMondayLabel(task.status))).slice(0, 20)
-
-    const payload = {
-      user: { id: user.id, name: user.name, email: user.email, avatar: user.photo_thumb_small },
-      tasks,
-    }
-    mondayTaskCache.set(user.id, { at: Date.now(), payload })
-    res.json(payload)
+    res.json(await fetchMondayTasksForUser({ mondayToken, sessionEmail: mondayEmail, bust }))
   } catch (err) {
     const message = err instanceof Error ? err.message : "Monday API error"
     console.error("[monday-api]", message)
-    res.status(500).json({ error: message })
+    res.status(err?.statusCode ?? 500).json({ error: message })
   }
 })
 
 // ─── POST /api/ai/ask ─────────────────────────────────────────────────────────
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 app.post("/api/ai/ask", async (req, res) => {
-  const { query, context } = req.body ?? {}
-  if (!query?.trim()) return res.status(400).json({ error: "query is required" })
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: "AI not configured" })
-
-  const contextBlock = context ? `\n\nDashboard context:\n${JSON.stringify(context, null, 2)}` : ""
-
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: `You are XMS AI, an assistant embedded in a marketing agency dashboard called XMS (Xperience Marketing Suite).
-You help the team with tasks, campaigns, clients, SEM/SEO performance, and scheduling.
-Respond in the same language the user writes in (Spanish or English).
-Be concise and actionable — 2–4 sentences max unless a longer answer is clearly needed.
-If you have dashboard context, use it to give specific answers. Never make up data you don't have.${contextBlock}`,
-      messages: [{ role: "user", content: query }],
-    })
-
-    const text = message.content.find(b => b.type === "text")?.text ?? ""
-    res.json({ response: text })
+    res.json(await askDashboardAi(req.body ?? {}))
   } catch (err) {
     const message = err instanceof Error ? err.message : "AI error"
     console.error("[ai-ask]", message)
-    res.status(500).json({ error: message })
+    res.status(err?.statusCode ?? 500).json({ error: message })
   }
 })
 
@@ -398,210 +200,45 @@ app.post("/api/ai/prompt-optimize", async (req, res) => {
 
 // ─── POST /api/ai/task-insight ───────────────────────────────────────────────
 app.post("/api/ai/task-insight", async (req, res) => {
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: "AI not configured" })
-  const { task, updates } = req.body ?? {}
-  if (!task?.name) return res.status(400).json({ error: "task is required" })
-
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric",
-  })
-  const updatesText = updates?.length
-    ? updates.map(u =>
-        `[${new Date(u.createdAt).toLocaleDateString()}] ${u.creatorName}: ${u.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()}`
-      ).join("\n")
-    : "No updates yet."
-
-  const userPrompt = `Task: "${task.name}"
-Status: ${task.status}
-Priority: ${task.priority ?? "Not set"}
-Due date: ${task.dueDate ?? "Not set"}
-Board: ${task.board}
-Today: ${today}
-
-Recent updates/comments:
-${updatesText}
-
-Based on this task context, what should I do RIGHT NOW to move this forward? Give me 2–4 immediate next steps.`
-
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 512,
-      system: `You are XMS AI, embedded in a marketing agency dashboard. You analyze task details and give concise, actionable next-step recommendations.
-Respond in the same language as the task content (Spanish or English).
-Format: 2–4 bullet points using "·" as the bullet character. Each point = one clear immediate action.
-No intro sentence, no conclusion. Just the actions. Keep each bullet under 20 words.`,
-      messages: [{ role: "user", content: userPrompt }],
-    })
-    const text = message.content.find(b => b.type === "text")?.text ?? ""
-    res.json({ insight: text })
+    res.json(await getTaskInsight(req.body ?? {}))
   } catch (err) {
     const message = err instanceof Error ? err.message : "AI error"
     console.error("[ai-task-insight]", message)
-    res.status(500).json({ error: message })
+    res.status(err?.statusCode ?? 500).json({ error: message })
   }
 })
 
 // ─── POST /api/ai/sem-insights ───────────────────────────────────────────────
 app.post("/api/ai/sem-insights", async (req, res) => {
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: "AI not configured" })
-  const { accountName, summary, campaigns } = req.body ?? {}
-  if (!accountName) return res.status(400).json({ error: "accountName is required" })
-
-  const campaignText = (campaigns ?? []).slice(0, 8).map(c =>
-    `• ${c.name}: ${Number(c.impressions).toLocaleString()} impressions, ${c.clicks} clicks, ${Number(c.ctr).toFixed(2)}% CTR, $${Number(c.avg_cpc).toFixed(2)} CPC, $${Number(c.cost).toFixed(2)} spend, ${c.conversions} conversions`
-  ).join("\n") || "No campaign data available"
-
-  const userPrompt = `Account: ${accountName}
-
-Performance Summary:
-• Impressions: ${Number(summary?.impressions ?? 0).toLocaleString()}
-• Clicks: ${Number(summary?.clicks ?? 0).toLocaleString()}
-• CTR: ${Number(summary?.ctr ?? 0).toFixed(2)}%
-• Avg CPC: $${Number(summary?.avg_cpc ?? 0).toFixed(2)}
-• Total Spend: $${Number(summary?.cost ?? 0).toFixed(2)}
-• Conversions: ${summary?.conversions ?? 0}
-• Cost per Conversion: ${summary?.conversions > 0 ? "$" + Number(summary.cost_per_conversion).toFixed(2) : "N/A"}
-
-Top Campaigns by Spend:
-${campaignText}
-
-Provide 2-3 specific, data-driven action items per timeframe. Reference actual numbers from the data. Return ONLY valid JSON (no markdown, no explanation):
-{
-  "short_term": [{"action": "...", "impact": "high|medium|low"}],
-  "medium_term": [{"action": "...", "impact": "high|medium|low"}],
-  "long_term": [{"action": "...", "impact": "high|medium|low"}]
-}`
-
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: `You are a senior Google Ads strategist with 10+ years of agency experience. Analyze SEM performance data and provide specific, data-driven action items for each timeframe:
-SHORT-TERM (7-14 days): immediate bid adjustments, budget reallocation, pausing underperformers.
-MEDIUM-TERM (30-60 days): A/B tests, audience refinements, ad copy experiments, keyword expansion.
-LONG-TERM (3-6 months): account restructuring, automation setup, campaign type diversification.
-Each action must cite specific metrics from the provided data. Always respond in English.
-Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
-      messages: [{ role: "user", content: userPrompt }],
-    })
-    const text = message.content.find(b => b.type === "text")?.text ?? "{}"
-    const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
-    const insights = JSON.parse(clean)
-    res.json(insights)
+    res.json(await getSemInsights(req.body ?? {}))
   } catch (err) {
-    console.error("[ai-sem-insights]", err)
-    res.status(500).json({ error: err instanceof Error ? err.message : "AI error" })
+    const message = err instanceof Error ? err.message : "AI error"
+    console.error("[ai-sem-insights]", message)
+    res.status(err?.statusCode ?? 500).json({ error: message })
   }
 })
 
 // ─── POST /api/ai/seo-insights ───────────────────────────────────────────────
 app.post("/api/ai/seo-insights", async (req, res) => {
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: "AI not configured" })
-  const { clientName, gscSite, gsc, ga4, psiScore } = req.body ?? {}
-  if (!gscSite) return res.status(400).json({ error: "gscSite is required" })
-
-  const displayName = clientName || gscSite.replace(/^https?:\/\//, "").replace(/\/$/, "")
-  const topQueries = (gsc?.queries ?? []).slice(0, 8).map(q =>
-    `• "${q.query}": ${q.clicks} clicks, ${q.impressions} impr, pos ${Number(q.position).toFixed(1)}, ${Number(q.ctr * 100).toFixed(1)}% CTR`
-  ).join("\n") || "No query data"
-  const topPages = (ga4?.topPages ?? []).slice(0, 5).map(p =>
-    `• ${p.page}${p.sessions ? `: ${p.sessions} sessions` : ""}`
-  ).join("\n") || "No page data"
-
-  const userPrompt = `Website: ${displayName} (${gscSite})
-
-Google Search Console (selected period):
-• Total Clicks: ${Number(gsc?.totalClicks ?? 0).toLocaleString()}
-• Total Impressions: ${Number(gsc?.totalImpressions ?? 0).toLocaleString()}
-• Avg. Position: ${Number(gsc?.avgPosition ?? 0).toFixed(1)}
-• Click-through Rate: ${gsc?.totalImpressions > 0 ? ((gsc.totalClicks / gsc.totalImpressions) * 100).toFixed(2) : "0.00"}%
-
-Top Queries:
-${topQueries}
-
-Google Analytics 4:
-• Engaged Sessions: ${Number(ga4?.engagedSessions ?? 0).toLocaleString()}
-• Conversion Rate: ${Number(ga4?.conversionRate ?? 0).toFixed(2)}%
-
-Top Pages:
-${topPages}
-
-${psiScore != null ? `PageSpeed Score (mobile): ${psiScore}/100` : ""}
-
-Provide 2-3 specific, data-driven SEO action items per timeframe. Reference actual numbers from the data. Return ONLY valid JSON (no markdown, no explanation):
-{"short_term":[{"action":"...","impact":"high|medium|low"}],"medium_term":[{"action":"...","impact":"high|medium|low"}],"long_term":[{"action":"...","impact":"high|medium|low"}]}`
-
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: `You are a senior SEO strategist with 10+ years of agency experience. Analyze organic search performance data and provide specific, data-driven action items for each timeframe:
-SHORT-TERM (7-14 days): quick wins — meta descriptions for high-impression/low-CTR queries, internal linking, fixing crawl issues.
-MEDIUM-TERM (30-60 days): content optimization for near-first-page keywords, structured data, page speed fixes, content gaps.
-LONG-TERM (3-6 months): authority building, content cluster strategy, technical architecture, Core Web Vitals.
-Each action must cite specific numbers or query names from the data. Always respond in English.
-Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
-      messages: [{ role: "user", content: userPrompt }],
-    })
-    const text = message.content.find(b => b.type === "text")?.text ?? "{}"
-    const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
-    res.json(JSON.parse(clean))
+    res.json(await getSeoInsights(req.body ?? {}))
   } catch (err) {
-    console.error("[ai-seo-insights]", err)
-    res.status(500).json({ error: err instanceof Error ? err.message : "AI error" })
+    const message = err instanceof Error ? err.message : "AI error"
+    console.error("[ai-seo-insights]", message)
+    res.status(err?.statusCode ?? 500).json({ error: message })
   }
 })
 
 // ─── POST /api/ai/social-insights ────────────────────────────────────────────
 app.post("/api/ai/social-insights", async (req, res) => {
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: "AI not configured" })
-  const { accountName, platforms, metrics, posts } = req.body ?? {}
-  if (!platforms?.length) return res.status(400).json({ error: "platforms is required" })
-
-  const platformList = platforms.join(", ")
-  const engagementRate = metrics?.impresiones > 0
-    ? ((metrics.interacciones / metrics.impresiones) * 100).toFixed(2)
-    : "0.00"
-
-  const topPosts = (posts ?? []).slice(0, 8).map(p =>
-    `• [${p.platform}] ${p.type} — "${p.title}": ${Number(p.impresiones).toLocaleString()} impr, ${Number(p.alcance).toLocaleString()} reach, ${p.interacciones} interactions`
-  ).join("\n") || "No post data available"
-
-  const userPrompt = `Account: ${accountName || "Social Media Account"}
-Active platforms: ${platformList}
-
-Aggregated metrics:
-• Followers: ${Number(metrics?.seguidores ?? 0).toLocaleString()}
-• Impressions: ${Number(metrics?.impresiones ?? 0).toLocaleString()}
-• Reach: ${Number(metrics?.alcance ?? 0).toLocaleString()}
-• Interactions: ${Number(metrics?.interacciones ?? 0).toLocaleString()}
-• Engagement Rate: ${engagementRate}%
-• Profile Visits: ${Number(metrics?.visitasPerfil ?? 0).toLocaleString()}
-
-Top performing posts:
-${topPosts}
-
-Return ONLY valid JSON: {"short_term":[{"action":"...","impact":"high|medium|low"}],"medium_term":[...],"long_term":[]}`
-
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: `You are a senior social media strategist with 10+ years of agency experience. Analyze social media performance data and provide specific, data-driven action items for each timeframe:
-SHORT-TERM (7-14 days): posting frequency adjustments, content format optimization, best time to post, engagement tactics.
-MEDIUM-TERM (30-60 days): content calendar strategy, A/B testing formats, cross-platform repurposing, hashtag strategy.
-LONG-TERM (3-6 months): audience growth strategy, brand voice consistency, influencer collaborations, platform-specific growth.
-Each action must cite specific numbers or platform names from the data. Always respond in English.
-Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
-      messages: [{ role: "user", content: userPrompt }],
-    })
-    const text = message.content.find(b => b.type === "text")?.text ?? "{}"
-    const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
-    res.json(JSON.parse(clean))
+    res.json(await getSocialInsights(req.body ?? {}))
   } catch (err) {
-    console.error("[ai-social-insights]", err)
-    res.status(500).json({ error: err instanceof Error ? err.message : "AI error" })
+    const message = err instanceof Error ? err.message : "AI error"
+    console.error("[ai-social-insights]", message)
+    res.status(err?.statusCode ?? 500).json({ error: message })
   }
 })
 
@@ -799,27 +436,15 @@ app.post('/api/export/pdf', async (req, res) => {
   const { filename, payload } = req.body ?? {}
   if (!payload) return res.status(400).json({ error: 'payload is required' })
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), '.pdf-export-'))
-  const inputPath = path.join(tmpDir, 'payload.json')
-  const outputPath = path.join(tmpDir, 'report.pdf')
   try {
-    fs.writeFileSync(inputPath, JSON.stringify(payload))
-    await execFileAsync('python3', [path.join(__dirname, 'tools', 'pdf_export.py'), '--input', inputPath, '--output', outputPath], {
-      cwd: __dirname,
-      timeout: 60_000,
-    })
-    const pdfBuffer = fs.readFileSync(outputPath)
-    const safeFilename = String(filename ?? 'xms-report.pdf')
-      .replace(/["\r\n\\]/g, '').replace(/[^a-zA-Z0-9._\- ]/g, '_') || 'report.pdf'
+    const pdfBuffer = await exportPdfBuffer(payload)
     res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`)
+    res.setHeader('Content-Disposition', `attachment; filename="${sanitizePdfFilename(filename)}"`)
     res.end(pdfBuffer)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'PDF export error'
     console.error('[pdf-export]', message)
     res.status(500).json({ error: message })
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })
 

@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
-import ReactApexChart from 'react-apexcharts'
-import type { ApexOptions } from 'apexcharts'
+import { Area, AreaChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { exportQuarterlySeoReport } from '@/features/seo/lib/exportQuarterlySeoReport'
 
@@ -109,81 +108,150 @@ const SAMPLE: GBPData = {
 
 const TEXT = (d: boolean) => d ? '#AEB7C0' : '#64748B'
 const GRID = (d: boolean) => d ? '#2E3A47' : '#E2E8F0'
+const MULTI_COLORS = ['#1d9bf0', '#4285F4', '#34A853', '#FBBC05', '#334155', '#EA4335']
 
-function areaOpts(labels: string[], color: string, isDark: boolean): ApexOptions {
+function tooltipStyle(isDark: boolean) {
   return {
-    chart:      { type: 'area', background: 'transparent', toolbar: { show: false }, zoom: { enabled: false }, animations: { enabled: true, speed: 600 } },
-    colors:     [color],
-    stroke:     { curve: 'smooth', width: 2.5 },
-    fill:       { type: 'gradient', gradient: { shade: isDark ? 'dark' : 'light', type: 'vertical', shadeIntensity: 0.3, opacityFrom: 0.2, opacityTo: 0, stops: [0, 100] } },
-    xaxis:      { categories: labels, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: TEXT(isDark), fontSize: '11px' } } },
-    yaxis:      { labels: { style: { colors: TEXT(isDark), fontSize: '11px' } } },
-    grid:       { borderColor: GRID(isDark), strokeDashArray: 4, xaxis: { lines: { show: false } } },
-    dataLabels: { enabled: false },
-    tooltip:    { theme: isDark ? 'dark' : 'light' },
-    markers:    { size: 4, strokeWidth: 2, strokeColors: [color], fillColors: ['#fff'], hover: { size: 6 } } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    backgroundColor: isDark ? '#1F2937' : '#fff',
+    border: `1px solid ${isDark ? '#374151' : '#E2E8F0'}`,
+    borderRadius: 8,
+    fontSize: 12,
+    color: isDark ? '#E2E5E9' : '#0F172A',
   }
 }
 
-function multiLineOpts(labels: string[], isDark: boolean): ApexOptions {
-  return {
-    chart:      { type: 'line', background: 'transparent', toolbar: { show: false }, zoom: { enabled: false } },
-    colors:     ['#1d9bf0', '#4285F4', '#34A853', '#FBBC05', '#334155', '#EA4335'],
-    stroke:     { curve: 'smooth', width: 2, dashArray: [6, 0, 0, 0, 0, 0] },
-    xaxis:      { categories: labels, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: TEXT(isDark), fontSize: '11px' } } },
-    yaxis:      { labels: { style: { colors: TEXT(isDark), fontSize: '11px' }, formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(Math.round(v)) } },
-    grid:       { borderColor: GRID(isDark), strokeDashArray: 4, xaxis: { lines: { show: false } } },
-    legend:     { position: 'bottom', horizontalAlign: 'center', labels: { colors: TEXT(isDark) }, markers: { size: 5 }, itemMargin: { horizontal: 10, vertical: 4 } },
-    dataLabels: { enabled: false },
-    tooltip:    { theme: isDark ? 'dark' : 'light', shared: true, intersect: false },
-    markers:    { size: 3, hover: { size: 5 } } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-  }
+function legendStyle(isDark: boolean) {
+  return { color: TEXT(isDark), fontSize: 12 }
 }
 
-function summaryLineOpts(labels: string[], isDark: boolean): ApexOptions {
-  return {
-    chart:      { type: 'line', background: 'transparent', toolbar: { show: false }, zoom: { enabled: false } },
-    colors:     ['#4285F4', '#94A3B8'],
-    stroke:     { curve: 'smooth', width: [2.5, 1.5], dashArray: [0, 5] },
-    xaxis:      { categories: labels, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: TEXT(isDark), fontSize: '10px' } } },
-    yaxis:      { labels: { style: { colors: TEXT(isDark), fontSize: '10px' }, formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(Math.round(v)) } },
-    grid:       { borderColor: GRID(isDark), strokeDashArray: 4, xaxis: { lines: { show: false } } },
-    legend:     { position: 'bottom', horizontalAlign: 'center', labels: { colors: TEXT(isDark) }, markers: { size: 5 } },
-    dataLabels: { enabled: false },
-    tooltip:    { theme: isDark ? 'dark' : 'light', shared: true, intersect: false },
-    markers:    { size: 3, hover: { size: 5 } } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-  }
+function formatK(v: number, decimals = 0) {
+  return v >= 1000 ? `${(v / 1000).toFixed(decimals)}K` : String(Math.round(v))
 }
 
-function donutOpts(breakdown: GBPData['profileViews']['breakdown'], isDark: boolean): ApexOptions {
-  return {
-    chart:       { type: 'donut', background: 'transparent', animations: { enabled: false } },
-    colors:      breakdown.map(v => v.color),
-    labels:      breakdown.map(v => v.label),
-    legend:      { show: false },
-    dataLabels:  { enabled: false },
-    stroke:      { width: 2 },
-    tooltip:     { theme: isDark ? 'dark' : 'light' },
-    plotOptions: { pie: { donut: { size: '65%' } } },
-  }
+function AreaMetricChart({ labels, values, color, isDark, height = 220 }: {
+  labels: string[]; values: number[]; color: string; isDark: boolean; height?: number
+}) {
+  const data = labels.map((label, i) => ({ label, value: values[i] }))
+  const gradId = `gbp-area-${color.replace('#', '')}`
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <AreaChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.2} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={GRID(isDark)} strokeDasharray="4 4" vertical={false} />
+        <XAxis dataKey="label" tick={{ fill: TEXT(isDark), fontSize: 11 }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fill: TEXT(isDark), fontSize: 11 }} axisLine={false} tickLine={false} />
+        <Tooltip contentStyle={tooltipStyle(isDark)} />
+        <Area
+          type="monotone"
+          dataKey="value"
+          stroke={color}
+          strokeWidth={2.5}
+          fill={`url(#${gradId})`}
+          dot={{ r: 4, strokeWidth: 2, stroke: color, fill: '#fff' }}
+          activeDot={{ r: 6 }}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  )
 }
 
-function gscOpts(labels: string[], isDark: boolean): ApexOptions {
-  return {
-    chart:      { type: 'line', background: 'transparent', toolbar: { show: false }, zoom: { enabled: false } },
-    colors:     ['#7C3AED', '#F47C20'],
-    stroke:     { curve: 'smooth', width: [2, 2] },
-    xaxis:      { categories: labels, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: TEXT(isDark), fontSize: '10px' } } },
-    yaxis:      [
-      { title: { text: 'Impressions', style: { color: '#7C3AED', fontWeight: 600, fontSize: '11px' } }, labels: { style: { colors: TEXT(isDark), fontSize: '10px' } } },
-      { opposite: true, title: { text: 'Position', style: { color: '#F47C20', fontWeight: 600, fontSize: '11px' } }, min: 0, max: 15, reversed: true, labels: { style: { colors: TEXT(isDark), fontSize: '10px' } } },
-    ],
-    grid:       { borderColor: GRID(isDark), strokeDashArray: 4, xaxis: { lines: { show: false } } },
-    legend:     { position: 'bottom', horizontalAlign: 'center', labels: { colors: TEXT(isDark) }, markers: { size: 5 } },
-    dataLabels: { enabled: false },
-    tooltip:    { theme: isDark ? 'dark' : 'light', shared: true, intersect: false },
-    markers:    { size: 3, hover: { size: 5 } } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-  }
+function MultiLineChart({ labels, series, isDark, height = 280 }: {
+  labels: string[]; series: { name: string; data: number[] }[]; isDark: boolean; height?: number
+}) {
+  const data = labels.map((label, i) => {
+    const row: Record<string, string | number> = { label }
+    series.forEach(s => { row[s.name] = s.data[i] })
+    return row
+  })
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke={GRID(isDark)} strokeDasharray="4 4" vertical={false} />
+        <XAxis dataKey="label" tick={{ fill: TEXT(isDark), fontSize: 11 }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fill: TEXT(isDark), fontSize: 11 }} tickFormatter={formatK} axisLine={false} tickLine={false} />
+        <Tooltip contentStyle={tooltipStyle(isDark)} />
+        <Legend verticalAlign="bottom" align="center" wrapperStyle={legendStyle(isDark)} iconType="circle" />
+        {series.map((s, i) => (
+          <Line
+            key={s.name}
+            type="monotone"
+            dataKey={s.name}
+            stroke={MULTI_COLORS[i % MULTI_COLORS.length]}
+            strokeWidth={2}
+            dot={{ r: 3 }}
+            activeDot={{ r: 5 }}
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+function SummaryLineChart({ labels, current, preceding, isDark, height = 220 }: {
+  labels: string[]; current: number[]; preceding: number[]; isDark: boolean; height?: number
+}) {
+  const data = labels.map((label, i) => ({ label, current: current[i], preceding: preceding[i] }))
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke={GRID(isDark)} strokeDasharray="4 4" vertical={false} />
+        <XAxis dataKey="label" tick={{ fill: TEXT(isDark), fontSize: 10 }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fill: TEXT(isDark), fontSize: 10 }} tickFormatter={formatK} axisLine={false} tickLine={false} />
+        <Tooltip contentStyle={tooltipStyle(isDark)} />
+        <Legend verticalAlign="bottom" align="center" wrapperStyle={legendStyle(isDark)} iconType="circle" />
+        <Line type="monotone" dataKey="current" name="Last 90 days" stroke="#4285F4" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+        <Line type="monotone" dataKey="preceding" name="Preceding period" stroke="#94A3B8" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 3 }} activeDot={{ r: 5 }} />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+function DonutChart({ breakdown, isDark, size = 120 }: {
+  breakdown: GBPData['profileViews']['breakdown']; isDark: boolean; size?: number
+}) {
+  const outerRadius = size / 2
+  return (
+    <PieChart width={size} height={size}>
+      <Tooltip contentStyle={tooltipStyle(isDark)} />
+      <Pie
+        data={breakdown}
+        dataKey="value"
+        nameKey="label"
+        innerRadius={outerRadius * 0.65}
+        outerRadius={outerRadius}
+        stroke={isDark ? '#1F2937' : '#fff'}
+        strokeWidth={2}
+        isAnimationActive={false}
+      >
+        {breakdown.map((b, i) => <Cell key={i} fill={b.color} />)}
+      </Pie>
+    </PieChart>
+  )
+}
+
+function GscChart({ labels, impressionSeries, positionSeries, isDark, height = 260 }: {
+  labels: string[]; impressionSeries: number[]; positionSeries: number[]; isDark: boolean; height?: number
+}) {
+  const data = labels.map((label, i) => ({ label, impressions: impressionSeries[i], position: positionSeries[i] }))
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke={GRID(isDark)} strokeDasharray="4 4" vertical={false} />
+        <XAxis dataKey="label" tick={{ fill: TEXT(isDark), fontSize: 10 }} axisLine={false} tickLine={false} />
+        <YAxis yAxisId="impressions" tick={{ fill: TEXT(isDark), fontSize: 10 }} axisLine={false} tickLine={false} />
+        <YAxis yAxisId="position" orientation="right" domain={[15, 0]} tick={{ fill: TEXT(isDark), fontSize: 10 }} axisLine={false} tickLine={false} />
+        <Tooltip contentStyle={tooltipStyle(isDark)} />
+        <Legend verticalAlign="bottom" align="center" wrapperStyle={legendStyle(isDark)} iconType="circle" />
+        <Line yAxisId="impressions" type="monotone" dataKey="impressions" name="Impressions" stroke="#7C3AED" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+        <Line yAxisId="position" type="monotone" dataKey="position" name="Position" stroke="#F47C20" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+      </LineChart>
+    </ResponsiveContainer>
+  )
 }
 
 // ─── Section header ───────────────────────────────────────────────────────────
@@ -401,12 +469,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             </p>
             <p className="mt-1 text-sm text-body dark:text-bodydark">Business Profile interactions</p>
           </div>
-          <ReactApexChart
-            options={areaOpts(d.interactions.labels, '#4285F4', isDark)}
-            series={[{ name: 'Interactions', data: d.interactions.values }]}
-            type="area"
-            height={220}
-          />
+          <AreaMetricChart labels={d.interactions.labels} values={d.interactions.values} color="#4285F4" isDark={isDark} height={220} />
         </div>
 
         {/* People Viewed + Searches */}
@@ -433,13 +496,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             </p>
             <div className="flex items-center gap-4">
               <div className="shrink-0" style={{ width: 120, height: 120 }}>
-                <ReactApexChart
-                  options={donutOpts(d.profileViews.breakdown, isDark)}
-                  series={d.profileViews.breakdown.map(v => v.value)}
-                  type="donut"
-                  width={120}
-                  height={120}
-                />
+                <DonutChart breakdown={d.profileViews.breakdown} isDark={isDark} size={120} />
               </div>
               <div className="space-y-2 flex-1 min-w-0">
                 {d.profileViews.breakdown.map((item, i) => (
@@ -558,13 +615,11 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             ))}
           </div>
           <div className="px-2 py-4">
-            <ReactApexChart
-              options={summaryLineOpts(d.ga4Summary.labels, isDark)}
-              series={[
-                { name: 'Last 90 days',    data: d.ga4Summary.last90 },
-                { name: 'Preceding period', data: d.ga4Summary.preceding },
-              ]}
-              type="line"
+            <SummaryLineChart
+              labels={d.ga4Summary.labels}
+              current={d.ga4Summary.last90}
+              preceding={d.ga4Summary.preceding}
+              isDark={isDark}
               height={220}
             />
           </div>
@@ -577,12 +632,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             <span className="shrink-0 ml-3 rounded border border-stroke dark:border-strokedark px-2 py-1 text-xs text-body dark:text-bodydark">Month</span>
           </div>
           <div className="px-2 py-4">
-            <ReactApexChart
-              options={multiLineOpts(d.eventsByName.labels, isDark)}
-              series={d.eventsByName.series}
-              type="line"
-              height={280}
-            />
+            <MultiLineChart labels={d.eventsByName.labels} series={d.eventsByName.series} isDark={isDark} height={280} />
           </div>
         </div>
 
@@ -605,12 +655,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             ))}
           </div>
           <div className="px-2 py-4">
-            <ReactApexChart
-              options={areaOpts(d.leadsOverview.labels, '#4285F4', isDark)}
-              series={[{ name: 'New users', data: d.leadsOverview.values }]}
-              type="area"
-              height={220}
-            />
+            <AreaMetricChart labels={d.leadsOverview.labels} values={d.leadsOverview.values} color="#4285F4" isDark={isDark} height={220} />
           </div>
         </div>
 
@@ -623,12 +668,7 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             <span className="shrink-0 ml-3 rounded border border-stroke dark:border-strokedark px-2 py-1 text-xs text-body dark:text-bodydark">Month</span>
           </div>
           <div className="px-2 py-4">
-            <ReactApexChart
-              options={multiLineOpts(d.usersByChannel.labels, isDark)}
-              series={d.usersByChannel.series}
-              type="line"
-              height={280}
-            />
+            <MultiLineChart labels={d.usersByChannel.labels} series={d.usersByChannel.series} isDark={isDark} height={280} />
           </div>
         </div>
 
@@ -658,13 +698,11 @@ export const GBPReport = forwardRef<GBPReportHandle, GBPReportProps>(function GB
             ))}
           </div>
           <div className="px-2 py-4">
-            <ReactApexChart
-              options={gscOpts(d.gsc.labels, isDark)}
-              series={[
-                { name: 'Impressions', data: d.gsc.impressionSeries },
-                { name: 'Position',    data: d.gsc.positionSeries },
-              ]}
-              type="line"
+            <GscChart
+              labels={d.gsc.labels}
+              impressionSeries={d.gsc.impressionSeries}
+              positionSeries={d.gsc.positionSeries}
+              isDark={isDark}
               height={260}
             />
           </div>

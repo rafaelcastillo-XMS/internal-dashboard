@@ -1,12 +1,10 @@
 import path from "path"
 import fs from "fs"
-import os from "os"
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "child_process"
 import { promisify } from "util"
 import { config as loadDotenv } from "dotenv"
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import Anthropic from "@anthropic-ai/sdk"
 import type { IncomingMessage, ServerResponse } from "http"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { optimizePromptWithOpenAI } from "./server/openaiPromptOptimizer.js"
@@ -14,6 +12,14 @@ import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 import { MetaApiError, getAdCampaigns, getCampaignInsightsSeries, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { handleNotionClientSyncRequest } from "./server/notionSync.js"
+import {
+  getGoogleAuthStatus, buildGoogleAuthStartUrl, completeGoogleAuthExchange,
+  getGbpAuthStatus, buildGbpAuthStartUrl, completeGbpAuthExchange,
+  decodeAuthReturnPath, appendAuthResult,
+} from "./server/googleAuth.js"
+import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail } from "./server/mondayTasks.js"
+import { askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
+import { sanitizePdfFilename, exportPdfBuffer } from "./server/pdfExport.js"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
 const localEnvPath = path.resolve(__dirname, ".env.local")
@@ -138,10 +144,9 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown) {
 }
 
 function sendPdf(res: ServerResponse, filename: string, payload: Buffer) {
-  const safeFilename = filename.replace(/["\r\n\\]/g, "").replace(/[^a-zA-Z0-9._\- ]/g, "_") || "report.pdf"
   res.statusCode = 200
   res.setHeader("Content-Type", "application/pdf")
-  res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`)
+  res.setHeader("Content-Disposition", `attachment; filename="${sanitizePdfFilename(filename)}"`)
   res.end(payload)
 }
 
@@ -150,168 +155,22 @@ const NUMERIC_RE = /^\d+$/
 
 function isValidDate(v: string) { return DATE_RE.test(v) }
 function isNumericId(v: string) { return NUMERIC_RE.test(v) }
-function isSafeReturnPath(v: string) { return v.startsWith("/") && !v.startsWith("//") }
 
-type GoogleTokenStatus = {
-  connected: boolean
-  email: string | null
-  requiredEmail: string
-  allowed: boolean
-}
-
-const GOOGLE_API_SCOPES = [
-  "https://www.googleapis.com/auth/webmasters.readonly",
-  "https://www.googleapis.com/auth/analytics.readonly",
-  "https://www.googleapis.com/auth/adwords",
-  "https://www.googleapis.com/auth/business.manage",
-]
 const GOOGLE_REDIRECT_URI = "http://localhost:5173/api/auth/google/callback"
-const GOOGLE_TOKEN_PATH = path.resolve(__dirname, "token.json")
-const GOOGLE_CREDS_PATH = path.resolve(__dirname, "credentials.json")
-const GBP_TOKEN_PATH = path.resolve(__dirname, "token-gbp.json")
-const GBP_CREDS_PATH = path.resolve(__dirname, "credentials-gbp.json")
 const GBP_REDIRECT_URI = "http://localhost:5173/api/auth/gbp/callback"
-const GBP_REQUIRED_EMAIL = normalizeGoogleEmail(process.env.GBP_REQUIRED_EMAIL ?? "xperiencemarketingsolutions@gmail.com")
-const GBP_SCOPES = ["https://www.googleapis.com/auth/business.manage"]
 function normalizeGoogleEmail(input: string) {
   const email = input.trim().toLowerCase()
   return email.endsWith("@xperienceusa") ? `${email}.com` : email
 }
 
+const GBP_REQUIRED_EMAIL = normalizeGoogleEmail(process.env.GBP_REQUIRED_EMAIL ?? "xperiencemarketingsolutions@gmail.com")
 const REQUIRED_GOOGLE_EMAIL = normalizeGoogleEmail(process.env.GOOGLE_REQUIRED_EMAIL ?? "")
-const TOKEN_STATUS_CACHE_TTL_MS = 30_000
-let tokenStatusCache: { at: number; status: GoogleTokenStatus } | null = null
-
-function appendAuthResult(returnPath: string, authResult: string) {
-  const separator = returnPath.includes("?") ? "&" : "?"
-  return `${returnPath}${separator}auth=${authResult}`
-}
-
-function getClientCreds(path: string = GOOGLE_CREDS_PATH) {
-  const raw = JSON.parse(fs.readFileSync(path, "utf-8"))
-  const data = raw.installed || raw.web
-  return { client_id: data.client_id as string, client_secret: data.client_secret as string }
-}
-
-function getGbpClientCreds() {
-  return getClientCreds(fs.existsSync(GBP_CREDS_PATH) ? GBP_CREDS_PATH : GOOGLE_CREDS_PATH)
-}
-
-function readStoredToken(): Record<string, unknown> | null {
-  try {
-    return JSON.parse(fs.readFileSync(GOOGLE_TOKEN_PATH, "utf-8")) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
-function writeStoredToken(token: Record<string, unknown>) {
-  fs.writeFileSync(GOOGLE_TOKEN_PATH, JSON.stringify(token, null, 2))
-}
-
-async function fetchGoogleAccountEmail(accessToken: string): Promise<string | null> {
-  if (!accessToken) return null
-  try {
-    const response = await fetch("https://www.googleapis.com/oauth2/v1/userinfo", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (!response.ok) return null
-    const info = await response.json() as { email?: string }
-    return typeof info.email === "string" ? info.email : null
-  } catch {
-    return null
-  }
-}
-
-async function refreshGoogleAccessToken(refreshToken: string, clientId: string, clientSecret: string) {
-  if (!refreshToken) return null
-  try {
-    const response = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }).toString(),
-    })
-    if (!response.ok) return null
-    const tokenData = await response.json() as { access_token?: string }
-    return tokenData.access_token ?? null
-  } catch {
-    return null
-  }
-}
-
-async function resolveTokenEmail(tokenJson: Record<string, unknown>) {
-  const savedEmail = typeof tokenJson._connected_email === "string" ? tokenJson._connected_email : null
-  if (savedEmail) return savedEmail
-
-  const currentAccessToken = typeof tokenJson.token === "string" ? tokenJson.token : ""
-  const currentTokenEmail = await fetchGoogleAccountEmail(currentAccessToken)
-  if (currentTokenEmail) return currentTokenEmail
-
-  const refreshToken = typeof tokenJson.refresh_token === "string" ? tokenJson.refresh_token : ""
-  if (!refreshToken) return null
-
-  const fallbackCreds = getClientCreds()
-  const clientId = typeof tokenJson.client_id === "string" ? tokenJson.client_id : fallbackCreds.client_id
-  const clientSecret = typeof tokenJson.client_secret === "string" ? tokenJson.client_secret : fallbackCreds.client_secret
-  const refreshedAccessToken = await refreshGoogleAccessToken(refreshToken, clientId, clientSecret)
-  return refreshedAccessToken ? fetchGoogleAccountEmail(refreshedAccessToken) : null
-}
-
-async function readTokenStatus(force = false): Promise<GoogleTokenStatus> {
-  if (!force && tokenStatusCache && Date.now() - tokenStatusCache.at < TOKEN_STATUS_CACHE_TTL_MS) {
-    return tokenStatusCache.status
-  }
-
-  const disconnectedStatus: GoogleTokenStatus = {
-    connected: false,
-    email: null,
-    requiredEmail: REQUIRED_GOOGLE_EMAIL,
-    allowed: false,
-  }
-
-  try {
-    const tokenJson = readStoredToken()
-    if (!tokenJson) {
-      tokenStatusCache = { at: Date.now(), status: disconnectedStatus }
-      return disconnectedStatus
-    }
-
-    const refreshToken = typeof tokenJson.refresh_token === "string" ? tokenJson.refresh_token : ""
-    if (!refreshToken) {
-      tokenStatusCache = { at: Date.now(), status: disconnectedStatus }
-      return disconnectedStatus
-    }
-
-    const email = await resolveTokenEmail(tokenJson)
-    if (email && tokenJson._connected_email !== email) {
-      tokenJson._connected_email = email
-      writeStoredToken(tokenJson)
-    }
-
-    const status: GoogleTokenStatus = {
-      connected: true,
-      email,
-      requiredEmail: REQUIRED_GOOGLE_EMAIL,
-      allowed: !!email && normalizeGoogleEmail(email) === REQUIRED_GOOGLE_EMAIL,
-    }
-    tokenStatusCache = { at: Date.now(), status }
-    return status
-  } catch {
-    tokenStatusCache = { at: Date.now(), status: disconnectedStatus }
-    return disconnectedStatus
-  }
-}
 
 async function enforceRequiredGoogleAccount(
   res: ServerResponse,
   source: "SEO" | "SEM" | "Monday",
 ) {
-  const status = await readTokenStatus()
+  const status = await getGoogleAuthStatus(REQUIRED_GOOGLE_EMAIL)
   if (status.allowed) return true
 
   const detail = status.email
@@ -421,46 +280,20 @@ function googleAuthPlugin() {
 
         // ── Dedicated Google Business Profile OAuth account ───────────────
         if (url.pathname === "/api/auth/gbp/status") {
-          try {
-            const token = JSON.parse(fs.readFileSync(GBP_TOKEN_PATH, "utf-8")) as Record<string, string>
-            const email = token._connected_email ?? null
-            sendJson(res, 200, {
-              connected: !!token.refresh_token,
-              email,
-              requiredEmail: GBP_REQUIRED_EMAIL,
-              allowed: !!token.refresh_token && normalizeGoogleEmail(email ?? "") === GBP_REQUIRED_EMAIL,
-            })
-          } catch {
-            sendJson(res, 200, { connected: false, email: null, requiredEmail: GBP_REQUIRED_EMAIL, allowed: false })
-          }
+          sendJson(res, 200, getGbpAuthStatus(GBP_REQUIRED_EMAIL))
           return
         }
 
         if (url.pathname === "/api/auth/gbp/start") {
-          const { client_id } = getGbpClientCreds()
           const rawReturn = url.searchParams.get("return") || "/settings"
-          const returnPath = isSafeReturnPath(rawReturn) ? rawReturn : "/settings"
-          const state = Buffer.from(JSON.stringify({ returnPath })).toString("base64url")
-          const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
-          authUrl.searchParams.set("client_id", client_id)
-          authUrl.searchParams.set("redirect_uri", GBP_REDIRECT_URI)
-          authUrl.searchParams.set("response_type", "code")
-          authUrl.searchParams.set("scope", [...GBP_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
-          authUrl.searchParams.set("access_type", "offline")
-          authUrl.searchParams.set("prompt", "consent")
-          authUrl.searchParams.set("state", state)
-          res.writeHead(302, { Location: authUrl.toString() })
+          res.writeHead(302, { Location: buildGbpAuthStartUrl({ redirectUri: GBP_REDIRECT_URI, returnPath: rawReturn }) })
           res.end()
           return
         }
 
         if (url.pathname === "/api/auth/gbp/callback") {
           const code = url.searchParams.get("code")
-          let returnPath = "/settings"
-          try {
-            const decoded = JSON.parse(Buffer.from(url.searchParams.get("state") || "", "base64url").toString())
-            if (typeof decoded.returnPath === "string" && isSafeReturnPath(decoded.returnPath)) returnPath = decoded.returnPath
-          } catch { /* use default */ }
+          const returnPath = decodeAuthReturnPath(url.searchParams.get("state"))
 
           if (url.searchParams.get("error") || !code) {
             res.writeHead(302, { Location: appendAuthResult(returnPath, "error") })
@@ -469,29 +302,8 @@ function googleAuthPlugin() {
           }
 
           try {
-            const { client_id, client_secret } = getGbpClientCreds()
-            const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: GBP_REDIRECT_URI, grant_type: "authorization_code" }).toString(),
-            })
-            const tokenData = await tokenResp.json() as Record<string, string>
-            const email = await fetchGoogleAccountEmail(tokenData.access_token ?? "")
-            if (tokenData.error || !email || normalizeGoogleEmail(email) !== GBP_REQUIRED_EMAIL) {
-              res.writeHead(302, { Location: appendAuthResult(returnPath, email ? "wrong-account" : "error") })
-              res.end()
-              return
-            }
-            fs.writeFileSync(GBP_TOKEN_PATH, JSON.stringify({
-              token: tokenData.access_token,
-              refresh_token: tokenData.refresh_token,
-              token_uri: "https://oauth2.googleapis.com/token",
-              client_id,
-              client_secret,
-              scopes: GBP_SCOPES,
-              _connected_email: email,
-            }, null, 2))
-            res.writeHead(302, { Location: appendAuthResult(returnPath, "success") })
+            const result = await completeGbpAuthExchange({ code, redirectUri: GBP_REDIRECT_URI, requiredEmail: GBP_REQUIRED_EMAIL })
+            res.writeHead(302, { Location: appendAuthResult(returnPath, result.ok ? "success" : result.reason) })
             res.end()
           } catch (error) {
             console.error("[gbp-auth]", error)
@@ -503,26 +315,15 @@ function googleAuthPlugin() {
 
         // ── Status ──────────────────────────────────────────────────────────
         if (url.pathname === "/api/auth/google/status") {
-          sendJson(res, 200, await readTokenStatus(true))
+          sendJson(res, 200, await getGoogleAuthStatus(REQUIRED_GOOGLE_EMAIL, true))
           return
         }
 
         // ── Start OAuth flow ─────────────────────────────────────────────────
         if (url.pathname === "/api/auth/google/start") {
-          const { client_id } = getClientCreds()
           // Encode return URL in the OAuth state param so callback knows where to redirect
           const rawReturn = url.searchParams.get("return") || "/settings"
-          const returnPath = isSafeReturnPath(rawReturn) ? rawReturn : "/settings"
-          const state = Buffer.from(JSON.stringify({ returnPath })).toString("base64url")
-          const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
-          authUrl.searchParams.set("client_id", client_id)
-          authUrl.searchParams.set("redirect_uri", GOOGLE_REDIRECT_URI)
-          authUrl.searchParams.set("response_type", "code")
-          authUrl.searchParams.set("scope", [...GOOGLE_API_SCOPES, "https://www.googleapis.com/auth/userinfo.email"].join(" "))
-          authUrl.searchParams.set("access_type", "offline")
-          authUrl.searchParams.set("prompt", "consent")
-          authUrl.searchParams.set("state", state)
-          res.writeHead(302, { Location: authUrl.toString() })
+          res.writeHead(302, { Location: buildGoogleAuthStartUrl({ redirectUri: GOOGLE_REDIRECT_URI, returnPath: rawReturn }) })
           res.end()
           return
         }
@@ -531,14 +332,7 @@ function googleAuthPlugin() {
         if (url.pathname === "/api/auth/google/callback") {
           const code = url.searchParams.get("code")
           const oauthError = url.searchParams.get("error")
-          const stateParam = url.searchParams.get("state") || ""
-          let returnPath = "/settings"
-          try {
-            const decoded = JSON.parse(Buffer.from(stateParam, "base64url").toString())
-            if (typeof decoded.returnPath === "string" && isSafeReturnPath(decoded.returnPath)) {
-              returnPath = decoded.returnPath
-            }
-          } catch { /* use default */ }
+          const returnPath = decodeAuthReturnPath(url.searchParams.get("state"))
 
           if (oauthError || !code) {
             console.error("[google-auth] callback error:", oauthError)
@@ -548,48 +342,8 @@ function googleAuthPlugin() {
           }
 
           try {
-            const { client_id, client_secret } = getClientCreds()
-
-            // Exchange code → tokens
-            const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({ code, client_id, client_secret, redirect_uri: GOOGLE_REDIRECT_URI, grant_type: "authorization_code" }).toString(),
-            })
-            const tokenData = await tokenResp.json() as Record<string, string>
-
-            if (tokenData.error) {
-              console.error("[google-auth] token exchange error:", tokenData)
-              res.writeHead(302, { Location: appendAuthResult(returnPath, "error") })
-              res.end()
-              return
-            }
-
-            // Fetch connected account email
-            const email = await fetchGoogleAccountEmail(tokenData.access_token ?? "")
-            if (!email || normalizeGoogleEmail(email) !== REQUIRED_GOOGLE_EMAIL) {
-              console.warn("[google-auth] rejected account:", email ?? "unknown")
-              res.writeHead(302, { Location: appendAuthResult(returnPath, "wrong-account") })
-              res.end()
-              return
-            }
-
-            // Save token.json in google-auth (Python) format
-            const tokenJson: Record<string, unknown> = {
-              token: tokenData.access_token,
-              refresh_token: tokenData.refresh_token,
-              token_uri: "https://oauth2.googleapis.com/token",
-              client_id,
-              client_secret,
-              scopes: GOOGLE_API_SCOPES,
-            }
-            if (email) tokenJson._connected_email = email
-
-            writeStoredToken(tokenJson)
-            tokenStatusCache = null
-            console.log("[google-auth] ✓ token.json saved for", email ?? "unknown user")
-
-            res.writeHead(302, { Location: appendAuthResult(returnPath, "success") })
+            const result = await completeGoogleAuthExchange({ code, redirectUri: GOOGLE_REDIRECT_URI, requiredEmail: REQUIRED_GOOGLE_EMAIL })
+            res.writeHead(302, { Location: appendAuthResult(returnPath, result.ok ? "success" : result.reason) })
             res.end()
           } catch (err) {
             console.error("[google-auth]", err)
@@ -1033,23 +787,8 @@ function pdfExportDevPlugin() {
             return
           }
 
-          const toolsDir = path.resolve(__dirname, "tools")
-          const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), ".pdf-export-"))
-          const inputPath = path.join(tmpDir, "payload.json")
-          const outputPath = path.join(tmpDir, "report.pdf")
-          try {
-            fs.writeFileSync(inputPath, JSON.stringify(body.payload, null, 2))
-
-            await execFileAsync("python3", [path.join(toolsDir, "pdf_export.py"), "--input", inputPath, "--output", outputPath], {
-              cwd: __dirname,
-              timeout: 60_000,
-            })
-
-            const pdfBuffer = fs.readFileSync(outputPath)
-            sendPdf(res, body.filename || "xms-report.pdf", pdfBuffer)
-          } finally {
-            fs.rmSync(tmpDir, { recursive: true, force: true })
-          }
+          const pdfBuffer = await exportPdfBuffer(body.payload)
+          sendPdf(res, body.filename || "xms-report.pdf", pdfBuffer)
         } catch (error) {
           const message = error instanceof Error ? error.message : "PDF export error"
           console.error("[pdf-export]", message)
@@ -1089,18 +828,6 @@ function companySkillsPlugin() {
   }
 }
 
-// ─── Monday.com tasks cache (5-minute TTL per user) ──────────────────────────
-const mondayTaskCache = new Map<string, { at: number; payload: unknown }>()
-const MONDAY_CACHE_TTL_MS = 5 * 60 * 1000
-
-function normalizeMondayLabel(label: string | null | undefined): string {
-  return (label ?? "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .trim()
-    .toLowerCase()
-}
-
 // ─── Monday.com tasks plugin ──────────────────────────────────────────────────
 function mondayPlugin() {
   return {
@@ -1121,167 +848,17 @@ function mondayPlugin() {
 
         // GET /api/monday/tasks?email=...
         if (url.pathname === "/api/monday/tasks" && req.method === "GET") {
-          // Build email mapping (MONDAY_EMAIL_MAP=supabase@x.com:monday@x.com,...)
-          const emailMapRaw = process.env.MONDAY_EMAIL_MAP ?? ""
-          const emailMap: Record<string, string> = Object.fromEntries(
-            emailMapRaw.split(",").filter(s => s.includes(":")).map(s => {
-              const [k, v] = s.split(":").map(e => e.trim())
-              return [k, v]
-            })
-          )
+          const emailMap = buildMondayEmailMap(process.env.MONDAY_EMAIL_MAP)
           const sessionEmail = url.searchParams.get("email") ?? ""
           const mondayEmail = emailMap[sessionEmail] ?? sessionEmail
           const bust = url.searchParams.get("bust") === "1"
 
-          async function mondayGraphQL(query: string, variables: Record<string, unknown> = {}) {
-            const resp = await fetch("https://api.monday.com/v2", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: mondayToken,
-                "API-Version": "2024-01",
-              },
-              body: JSON.stringify({ query, variables }),
-            })
-            if (!resp.ok) throw new Error(`Monday API HTTP ${resp.status}`)
-            const json = await resp.json() as { data?: unknown; errors?: { message: string }[] }
-            if (json.errors?.length) throw new Error(json.errors.map(e => e.message).join("; "))
-            return json.data
-          }
-
           try {
-            // 1. Find the Monday user by (possibly remapped) email
-            const usersData = await mondayGraphQL(`
-              query GetUsers($emails: [String]) {
-                users(emails: $emails, limit: 1) {
-                  id name email photo_thumb_small
-                }
-              }
-            `, { emails: mondayEmail ? [mondayEmail] : [] }) as { users?: { id: string; name: string; email: string; photo_thumb_small: string }[] }
-
-            const user = usersData?.users?.[0] ?? null
-            if (!user) {
-              sendJson(res, 200, { user: null, tasks: [] })
-              return
-            }
-
-            // Serve from cache if fresh (5 min TTL); skip when client requests a bust
-            if (bust) mondayTaskCache.delete(user.id)
-            const cached = mondayTaskCache.get(user.id)
-            if (cached && Date.now() - cached.at < MONDAY_CACHE_TTL_MS) {
-              sendJson(res, 200, cached.payload)
-              return
-            }
-
-            // 2. Fetch the most recently updated items from task boards (skip
-            //    subitems boards). items_page's default order follows the board,
-            //    so sorting only after the fetch can leave newer tasks outside
-            //    the returned page and make the dashboard look frozen.
-            const itemsData = await mondayGraphQL(`
-              query GetBoardItems {
-                boards(limit: 100, state: active) {
-                  id
-                  name
-                  items_page(
-                    limit: 100
-                    query_params: {
-                      order_by: [{ column_id: "__last_updated__", direction: desc }]
-                    }
-                  ) {
-                    items {
-                      id
-                      name
-                      state
-                      updated_at
-                      column_values {
-                        id
-                        text
-                        type
-                        column { title }
-                        ... on StatusValue { label index }
-                        ... on DateValue { date }
-                        ... on PeopleValue { persons_and_teams { id kind } }
-                      }
-                    }
-                  }
-                }
-              }
-            `) as {
-              boards?: {
-                id: string
-                name: string
-                items_page: {
-                  items: {
-                    id: string
-                    name: string
-                    state: string
-                    updated_at: string
-                    column_values: { id: string; text: string; type: string; column?: { title: string }; label?: string; index?: number; date?: string; persons_and_teams?: { id: string; kind: string }[] }[]
-                  }[]
-                }
-              }[]
-            }
-
-            const SUBITEMS_PREFIXES = ["subitems of", "subelementos de"]
-            const isSubitemsBoard = (name: string) =>
-              SUBITEMS_PREFIXES.some(p => name.toLowerCase().startsWith(p))
-
-            const rawItems = (itemsData?.boards ?? [])
-              .filter(board => !isSubitemsBoard(board.name))
-              .flatMap(board =>
-                (board.items_page?.items ?? [])
-                  .filter(item =>
-                    item.state !== "deleted" &&
-                    item.column_values.some(col =>
-                      col.type === "people" &&
-                      col.persons_and_teams?.some(
-                        p => p.kind === "person" && String(p.id) === String(user.id),
-                      ),
-                    ),
-                  )
-                  .map(item => ({ ...item, board: { id: board.id, name: board.name } }))
-              )
-
-            // Sort by most recently updated, keep top 20
-            rawItems.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-
-            const tasks = rawItems.map(item => {
-              const byId = (id: string) => item.column_values.find(c => c.id === id)
-              const byType = (type: string) => item.column_values.find(c => c.type === type)
-              // Monday reuses the "status" column type for status, priority, and
-              // plain category tags, and the "status" id is only a convention —
-              // several boards rename or repurpose it. Match on the column
-              // title instead, since that's the one thing a human keeps meaningful.
-              const byTitle = (titles: string[]) => item.column_values.find(c => titles.includes(normalizeMondayLabel(c.column?.title)))
-
-              const statusCol = byTitle(["status", "estado"]) ?? byId("status") ?? byType("status")
-              const priorityCol = byTitle(["priority", "priori", "prioridad"]) ?? byId("priority")
-              const dueDateCol = byId("due_date") ?? byId("date") ?? byType("date")
-
-              return {
-                id: item.id,
-                name: item.name,
-                board: item.board?.name ?? "Unknown Board",
-                status: (statusCol as { label?: string })?.label ?? statusCol?.text ?? "—",
-                statusIndex: (statusCol as { index?: number })?.index ?? null,
-                priority: (priorityCol as { label?: string })?.label ?? priorityCol?.text ?? null,
-                priorityIndex: (priorityCol as { index?: number })?.index ?? null,
-                dueDate: (dueDateCol as { date?: string })?.date ?? dueDateCol?.text ?? null,
-                updatedAt: item.updated_at,
-              }
-            }).filter(task => ![
-              "done", "complete", "completed", "hecho", "hecha",
-              "completado", "completada", "finalizado", "finalizada",
-              "terminado", "terminada", "listo", "lista",
-            ].includes(normalizeMondayLabel(task.status))).slice(0, 20)
-
-            const payload = { user: { id: user.id, name: user.name, email: user.email, avatar: user.photo_thumb_small }, tasks }
-            mondayTaskCache.set(user.id, { at: Date.now(), payload })
-            sendJson(res, 200, payload)
+            sendJson(res, 200, await fetchMondayTasksForUser({ mondayToken, sessionEmail: mondayEmail, bust }))
           } catch (err) {
             const message = err instanceof Error ? err.message : "Monday API error"
             console.error("[monday-api]", message)
-            sendJson(res, 500, { error: message })
+            sendJson(res, (err as { statusCode?: number })?.statusCode ?? 500, { error: message })
           }
           return
         }
@@ -1289,60 +866,12 @@ function mondayPlugin() {
         // GET /api/monday/tasks/:taskId — item detail + updates
         if (/^\/api\/monday\/tasks\/\d+$/.test(url.pathname) && req.method === "GET") {
           const taskId = url.pathname.split("/").pop()!
-          const mGQL = async (query: string, variables: Record<string, unknown> = {}) => {
-            const r = await fetch("https://api.monday.com/v2", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: mondayToken, "API-Version": "2024-01" },
-              body: JSON.stringify({ query, variables }),
-            })
-            if (!r.ok) throw new Error(`Monday API HTTP ${r.status}`)
-            const j = await r.json() as { data?: unknown; errors?: { message: string }[] }
-            if (j.errors?.length) throw new Error(j.errors.map((e: { message: string }) => e.message).join("; "))
-            return j.data
-          }
           try {
-            const data = await mGQL(`
-              query GetItemDetail($ids: [ID!]) {
-                me { account { slug } }
-                items(ids: $ids, newest_first: true) {
-                  id name
-                  board { id name }
-                  updates(limit: 5) {
-                    id body created_at
-                    creator { name photo_thumb_small }
-                  }
-                }
-              }
-            `, { ids: [taskId] }) as {
-              me?: { account?: { slug?: string } }
-              items?: {
-                id: string; name: string;
-                board: { id: string; name: string };
-                updates: { id: string; body: string; created_at: string; creator: { name: string; photo_thumb_small: string } }[]
-              }[]
-            }
-            const item = data?.items?.[0] ?? null
-            if (!item) { sendJson(res, 404, { error: "Task not found" }); return }
-            const accountSlug = data?.me?.account?.slug ?? null
-            const boardId = item.board?.id ?? null
-            const mondayUrl = accountSlug && boardId
-              ? `https://${accountSlug}.monday.com/boards/${boardId}/pulses/${item.id}`
-              : null
-            sendJson(res, 200, {
-              id: item.id,
-              boardId,
-              boardName: item.board?.name ?? "Unknown Board",
-              mondayUrl,
-              updates: (item.updates ?? []).map(u => ({
-                id: u.id, body: u.body, createdAt: u.created_at,
-                creatorName: u.creator?.name ?? "Unknown",
-                creatorAvatar: u.creator?.photo_thumb_small ?? null,
-              })),
-            })
+            sendJson(res, 200, await fetchMondayTaskDetail({ mondayToken, taskId }))
           } catch (err) {
             const message = err instanceof Error ? err.message : "Monday API error"
             console.error("[monday-detail]", message)
-            sendJson(res, 500, { error: message })
+            sendJson(res, (err as { statusCode?: number })?.statusCode ?? 500, { error: message })
           }
           return
         }
@@ -1354,8 +883,6 @@ function mondayPlugin() {
 }
 
 function aiPlugin() {
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
   return {
     name: "ai-api",
     configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
@@ -1383,250 +910,20 @@ function aiPlugin() {
           return
         }
 
-        if (!process.env.ANTHROPIC_API_KEY) {
-          sendJson(res, 503, { error: "ANTHROPIC_API_KEY not configured in .env" })
-          return
-        }
+        const body = await readJsonBody(req) as Record<string, unknown>
+        let tag = "ai-ask"
+        let run: () => Promise<unknown> = () => askDashboardAi(body as never)
+        if (isInsight)       { tag = "ai-task-insight";    run = () => getTaskInsight(body as never) }
+        else if (isSemInsight)    { tag = "ai-sem-insights";    run = () => getSemInsights(body as never) }
+        else if (isSocialInsight) { tag = "ai-social-insights"; run = () => getSocialInsights(body as never) }
+        else if (isSeoInsight)    { tag = "ai-seo-insights";    run = () => getSeoInsights(body as never) }
 
         try {
-          const body = await readJsonBody(req) as Record<string, unknown>
-
-          // ── /api/ai/task-insight ──────────────────────────────────────────
-          if (isInsight) {
-            const task    = body.task    as Record<string, string> | undefined
-            const updates = body.updates as Array<Record<string, string>> | undefined
-            if (!task?.name) { sendJson(res, 400, { error: "task is required" }); return }
-
-            const today = new Date().toLocaleDateString("en-US", {
-              weekday: "long", year: "numeric", month: "long", day: "numeric",
-            })
-            const updatesText = updates?.length
-              ? updates.map(u =>
-                  `[${new Date(u.createdAt).toLocaleDateString()}] ${u.creatorName}: ${u.body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()}`
-                ).join("\n")
-              : "No updates yet."
-
-            const userPrompt = `Task: "${task.name}"
-Status: ${task.status}
-Priority: ${task.priority ?? "Not set"}
-Due date: ${task.dueDate ?? "Not set"}
-Board: ${task.board}
-Today: ${today}
-
-Recent updates/comments:
-${updatesText}
-
-Based on this task context, what should I do RIGHT NOW to move this forward? Give me 2–4 immediate next steps.`
-
-            const msg = await anthropic.messages.create({
-              model: "claude-sonnet-4-6",
-              max_tokens: 512,
-              system: `You are XMS AI, embedded in a marketing agency dashboard. Analyze task details and give concise, actionable next-step recommendations.
-Respond in the same language as the task content (Spanish or English).
-Format: 2–4 bullet points using "·" as the bullet character. Each point = one clear immediate action.
-No intro sentence, no conclusion. Just the actions. Keep each bullet under 20 words.`,
-              messages: [{ role: "user", content: userPrompt }],
-            })
-            const text = msg.content.find(b => b.type === "text")?.text ?? ""
-            sendJson(res, 200, { insight: text })
-            return
-          }
-
-          // ── /api/ai/sem-insights ─────────────────────────────────────────
-          if (isSemInsight) {
-            const { accountName, summary, campaigns } = body as {
-              accountName?: string
-              summary?: Record<string, number>
-              campaigns?: Record<string, unknown>[]
-            }
-            if (!accountName) { sendJson(res, 400, { error: "accountName is required" }); return }
-
-            const campaignText = (campaigns ?? []).slice(0, 8).map(c =>
-              `• ${c.name}: ${Number(c.impressions).toLocaleString()} impr, ${c.clicks} clicks, ${Number(c.ctr).toFixed(2)}% CTR, $${Number(c.avg_cpc).toFixed(2)} CPC, $${Number(c.cost).toFixed(2)} spend, ${c.conversions} conv`
-            ).join("\n") || "No campaign data available"
-
-            const userPrompt = `Account: ${accountName}
-
-Performance Summary:
-• Impressions: ${Number(summary?.impressions ?? 0).toLocaleString()}
-• Clicks: ${Number(summary?.clicks ?? 0).toLocaleString()}
-• CTR: ${Number(summary?.ctr ?? 0).toFixed(2)}%
-• Avg CPC: $${Number(summary?.avg_cpc ?? 0).toFixed(2)}
-• Total Spend: $${Number(summary?.cost ?? 0).toFixed(2)}
-• Conversions: ${summary?.conversions ?? 0}
-• Cost per Conversion: ${(summary?.conversions ?? 0) > 0 ? "$" + Number(summary?.cost_per_conversion ?? 0).toFixed(2) : "N/A"}
-
-Top Campaigns by Spend:
-${campaignText}
-
-Provide 2-3 specific, data-driven action items per timeframe. Reference actual numbers from the data. Return ONLY valid JSON (no markdown, no explanation):
-{"short_term":[{"action":"...","impact":"high|medium|low"}],"medium_term":[{"action":"...","impact":"high|medium|low"}],"long_term":[{"action":"...","impact":"high|medium|low"}]}`
-
-            const semMsg = await anthropic.messages.create({
-              model: "claude-sonnet-4-6",
-              max_tokens: 1024,
-              system: `You are a senior Google Ads strategist with 10+ years of agency experience. Analyze SEM performance data and provide specific, data-driven action items for each timeframe:
-SHORT-TERM (7-14 days): immediate bid adjustments, budget reallocation, pausing underperformers.
-MEDIUM-TERM (30-60 days): A/B tests, audience refinements, ad copy experiments, keyword expansion.
-LONG-TERM (3-6 months): account restructuring, automation setup, campaign type diversification.
-Each action must cite specific metrics from the provided data. Always respond in English.
-Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
-              messages: [{ role: "user", content: userPrompt }],
-            })
-            const semText = semMsg.content.find(b => b.type === "text")?.text ?? "{}"
-            const cleaned = semText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
-            sendJson(res, 200, JSON.parse(cleaned))
-            return
-          }
-
-          // ── /api/ai/social-insights ──────────────────────────────────────
-          if (isSocialInsight) {
-            const { accountName, platforms, metrics, posts } = body as {
-              accountName?: string; platforms?: string[]
-              metrics?: Record<string, number>; posts?: Record<string, unknown>[]
-            }
-            if (!platforms?.length) { sendJson(res, 400, { error: "platforms is required" }); return }
-
-            const engagementRate = (metrics?.impresiones ?? 0) > 0
-              ? (((metrics?.interacciones ?? 0) / (metrics?.impresiones ?? 1)) * 100).toFixed(2)
-              : "0.00"
-            const topPosts = (posts ?? []).slice(0, 8).map(p =>
-              `• [${p.platform}] ${p.type} — "${p.title}": ${Number(p.impresiones).toLocaleString()} impr, ${p.interacciones} interactions`
-            ).join("\n") || "No post data"
-
-            const socialPrompt = `Account: ${accountName || "Social Media Account"}
-Active platforms: ${platforms.join(", ")}
-Followers: ${Number(metrics?.seguidores ?? 0).toLocaleString()}
-Impressions: ${Number(metrics?.impresiones ?? 0).toLocaleString()}
-Reach: ${Number(metrics?.alcance ?? 0).toLocaleString()}
-Interactions: ${Number(metrics?.interacciones ?? 0).toLocaleString()}
-Engagement Rate: ${engagementRate}%
-Profile Visits: ${Number(metrics?.visitasPerfil ?? 0).toLocaleString()}
-
-Top posts:
-${topPosts}
-
-Return ONLY valid JSON: {"short_term":[{"action":"...","impact":"high|medium|low"}],"medium_term":[...],"long_term":[]}`
-
-            const socialMsg = await anthropic.messages.create({
-              model: "claude-sonnet-4-6",
-              max_tokens: 1024,
-              system: `You are a senior social media strategist. Analyze performance data and provide 2-3 specific, data-driven action items per timeframe:
-SHORT-TERM (7-14 days): posting frequency, content format optimization, best times to post, engagement tactics.
-MEDIUM-TERM (30-60 days): content calendar, A/B testing, cross-platform repurposing, hashtag strategy.
-LONG-TERM (3-6 months): audience growth, brand voice, influencer collabs, platform-specific strategy.
-Cite specific numbers and platform names. Always respond in English.
-Return ONLY the JSON object. No markdown, no code fences.`,
-              messages: [{ role: "user", content: socialPrompt }],
-            })
-            const socialText = socialMsg.content.find(b => b.type === "text")?.text ?? "{}"
-            const socialClean = socialText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
-            sendJson(res, 200, JSON.parse(socialClean))
-            return
-          }
-
-          // ── /api/ai/seo-insights ─────────────────────────────────────────
-          if (isSeoInsight) {
-            const { clientName, gscSite, gsc, ga4, psiScore } = body as {
-              clientName?: string; gscSite?: string
-              gsc?: Record<string, unknown>; ga4?: Record<string, unknown>; psiScore?: number | null
-            }
-            if (!gscSite) { sendJson(res, 400, { error: "gscSite is required" }); return }
-
-            const displayName = clientName || String(gscSite).replace(/^https?:\/\//, "").replace(/\/$/, "")
-            const queries = (gsc?.queries as Record<string, unknown>[] | undefined ?? []).slice(0, 8)
-            const topQueries = queries.map(q =>
-              `• "${q.query}": ${q.clicks} clicks, ${q.impressions} impr, pos ${Number(q.position).toFixed(1)}, ${Number(Number(q.ctr) * 100).toFixed(1)}% CTR`
-            ).join("\n") || "No query data"
-            const pages = (ga4?.topPages as Record<string, unknown>[] | undefined ?? []).slice(0, 5)
-            const topPages = pages.map(p => `• ${p.page}${p.sessions ? `: ${p.sessions} sessions` : ""}`).join("\n") || "No page data"
-
-            const userPrompt = `Website: ${displayName} (${gscSite})
-
-Google Search Console:
-• Total Clicks: ${Number(gsc?.totalClicks ?? 0).toLocaleString()}
-• Total Impressions: ${Number(gsc?.totalImpressions ?? 0).toLocaleString()}
-• Avg. Position: ${Number(gsc?.avgPosition ?? 0).toFixed(1)}
-
-Top Queries:
-${topQueries}
-
-Google Analytics 4:
-• Engaged Sessions: ${Number(ga4?.engagedSessions ?? 0).toLocaleString()}
-• Conversion Rate: ${Number(ga4?.conversionRate ?? 0).toFixed(2)}%
-
-Top Pages:
-${topPages}
-
-${psiScore != null ? `PageSpeed Score (mobile): ${psiScore}/100` : ""}
-
-Return ONLY valid JSON: {"short_term":[{"action":"...","impact":"high|medium|low"}],"medium_term":[...],"long_term":[]}`
-
-            const seoMsg = await anthropic.messages.create({
-              model: "claude-sonnet-4-6",
-              max_tokens: 1024,
-              system: `You are a senior SEO strategist. Analyze organic search data and provide 2-3 specific, data-driven action items per timeframe:
-SHORT-TERM (7-14 days): meta descriptions for high-impression/low-CTR queries, internal linking, quick fixes.
-MEDIUM-TERM (30-60 days): content for near-first-page keywords, structured data, page speed.
-LONG-TERM (3-6 months): authority building, content clusters, Core Web Vitals, site architecture.
-Cite specific query names and numbers. Always respond in English.
-Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
-              messages: [{ role: "user", content: userPrompt }],
-            })
-            const seoText = seoMsg.content.find(b => b.type === "text")?.text ?? "{}"
-            const seoClean = seoText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
-            sendJson(res, 200, JSON.parse(seoClean))
-            return
-          }
-
-          // ── /api/ai/ask ───────────────────────────────────────────────────
-          const { query, context } = body as { query?: string; context?: unknown }
-          if (!query?.trim()) {
-            sendJson(res, 400, { error: "query is required" })
-            return
-          }
-
-          let contextBlock = ""
-          if (context) {
-            const ctx = context as Record<string, unknown>
-            const parts: string[] = []
-            if (ctx.today) parts.push(`Today is: ${ctx.today}`)
-            if (ctx.currentPage) parts.push(`User is currently on page: ${ctx.currentPage}`)
-            if (Array.isArray(ctx.tasks) && ctx.tasks.length > 0) {
-              const taskLines = ctx.tasks.map((t: Record<string, unknown>) =>
-                `- [${t.status ?? "—"}] ${t.name} (board: ${t.board}, priority: ${t.priority ?? "none"}, due: ${t.dueDate ?? "no date"})`
-              ).join("\n")
-              parts.push(`User's current tasks from Monday.com:\n${taskLines}`)
-            } else if (Array.isArray(ctx.tasks)) {
-              parts.push("User has no tasks assigned in Monday.com right now.")
-            }
-            if (parts.length) contextBlock = `\n\n---\n${parts.join("\n\n")}\n---`
-          }
-
-          const message = await anthropic.messages.create({
-            model: "claude-sonnet-4-6",
-            max_tokens: 1024,
-            system: `You are XMS AI, an assistant embedded in a marketing agency dashboard called XMS (Xperience Marketing Suite).
-You help the team with tasks, campaigns, clients, SEM/SEO performance, and scheduling.
-Respond in the same language the user writes in (Spanish or English).
-
-Formatting rules (strictly follow these):
-- Never use markdown tables, headers (###), or horizontal rules.
-- Use plain short sentences or simple bullet points with "·" as the bullet character.
-- Keep responses to 3–6 lines max. Be direct and conversational.
-- If listing tasks, write each on its own line like: "· Task name — due May 13"
-- No bold overuse — only bold 1–2 key words at most per response.
-
-Use the dashboard context below to give specific, data-driven answers. Never invent data you don't have.${contextBlock}`,
-            messages: [{ role: "user", content: query }],
-          })
-
-          const text = message.content.find(b => b.type === "text")?.text ?? ""
-          sendJson(res, 200, { response: text })
+          sendJson(res, 200, await run())
         } catch (err) {
           const message = err instanceof Error ? err.message : "AI error"
-          console.error("[ai-ask]", message)
-          sendJson(res, 500, { error: message })
+          console.error(`[${tag}]`, message)
+          sendJson(res, (err as { statusCode?: number })?.statusCode ?? 500, { error: message })
         }
       })
     },

@@ -1,102 +1,30 @@
-import ReactApexChart from 'react-apexcharts'
-import type { ApexOptions } from 'apexcharts'
+import { Area, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
-function buildOptions(labels: string[], isDark: boolean): ApexOptions {
-  const textColor = isDark ? '#AEB7C0' : '#64748B'
-  const gridColor = isDark ? '#2E3A47' : '#E2E8F0'
+function formatK(v: number, decimals = 0) {
+  return v >= 1000 ? `${(v / 1000).toFixed(decimals)}k` : String(v)
+}
 
-  return {
-    chart: {
-      type: 'area',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      background: 'transparent',
-      toolbar: { show: false },
-      zoom: { enabled: false },
-      animations: { enabled: true, speed: 700 },
-    },
-    colors: ['#3B82F6', '#10B981'],
-    stroke: { curve: 'smooth', width: [2.5, 2] },
-    fill: {
-      type: 'gradient',
-      gradient: {
-        shade: isDark ? 'dark' : 'light',
-        type: 'vertical',
-        shadeIntensity: 0.3,
-        opacityFrom: 0.25,
-        opacityTo: 0.0,
-        stops: [0, 100],
-      },
-    },
-    yaxis: [
-      {
-        seriesName: 'Impressions',
-        title: {
-          text: 'Impressions',
-          style: { color: '#3B82F6', fontWeight: 600, fontSize: '11px' },
-        },
-        labels: {
-          style: { colors: textColor, fontSize: '11px' },
-          formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v),
-        },
-      },
-      {
-        seriesName: 'Clicks',
-        opposite: true,
-        title: {
-          text: 'Clicks',
-          style: { color: '#10B981', fontWeight: 600, fontSize: '11px' },
-        },
-        labels: {
-          style: { colors: textColor, fontSize: '11px' },
-          formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v),
-        },
-      },
-    ],
-    xaxis: {
-      categories: labels,
-      type: 'category',
-      axisBorder: { show: false },
-      axisTicks: { show: false },
-      labels: {
-        style: { colors: textColor, fontSize: '11px' },
-        formatter: (val: string) => {
-          if (!val) return ''
-          const date = new Date(val)
-          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        },
-      },
-    },
-    grid: {
-      borderColor: gridColor,
-      strokeDashArray: 4,
-      xaxis: { lines: { show: false } },
-      yaxis: { lines: { show: true } },
-    },
-    legend: {
-      position: 'top',
-      horizontalAlign: 'right',
-      markers: { size: 6 },
-      labels: { colors: textColor },
-      itemMargin: { horizontal: 12 },
-    },
-    dataLabels: { enabled: false },
-    tooltip: {
-      theme: isDark ? 'dark' : 'light',
-      shared: true,
-      intersect: false,
-      y: [
-        { formatter: (v: number) => `${v?.toLocaleString()} impressions` },
-        { formatter: (v: number) => `${v?.toLocaleString()} clicks` },
-      ],
-    },
-    markers: ({
-      size: 4,
-      strokeWidth: 2,
-      strokeColors: ['#3B82F6', '#10B981'],
-      fillColors: ['#fff', '#fff'],
-      hover: { size: 6 },
-    } as unknown) as ApexOptions['markers'],
-  }
+function formatDate(val: string) {
+  if (!val) return ''
+  return new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function VisibilityTooltip({ active, payload, label }: {
+  active?: boolean
+  payload?: { value: number; dataKey: string }[]
+  label?: string
+}) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-lg border border-stroke bg-white px-3 py-2 text-xs shadow-lg dark:border-strokedark dark:bg-boxdark">
+      <p className="mb-1 font-medium text-black dark:text-[#E2E5E9]">{formatDate(label ?? '')}</p>
+      {payload.map(p => (
+        <p key={p.dataKey} className="text-body dark:text-bodydark">
+          {p.value?.toLocaleString()} {p.dataKey === 'impressions' ? 'impressions' : 'clicks'}
+        </p>
+      ))}
+    </div>
+  )
 }
 
 interface ChartVisibilityProps {
@@ -114,10 +42,13 @@ export function ChartVisibility({
   isDark = false,
   dateRangeLabel = 'Last 30 Days',
 }: ChartVisibilityProps) {
-  const series = [
-    { name: 'Impressions', data: impressions },
-    { name: 'Clicks', data: clicks },
-  ]
+  const chartData = labels.map((date, i) => ({
+    date,
+    impressions: impressions[i],
+    clicks: clicks[i],
+  }))
+  const textColor = isDark ? '#AEB7C0' : '#64748B'
+  const gridColor = isDark ? '#2E3A47' : '#E2E8F0'
 
   return (
     <div className="col-span-12 rounded-xl border border-stroke bg-white
@@ -146,12 +77,64 @@ export function ChartVisibility({
 
       <div className="px-2 py-4">
         {labels.length > 0 ? (
-          <ReactApexChart
-            options={buildOptions(labels, isDark)}
-            series={series}
-            type="area"
-            height={320}
-          />
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="visImpressions" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="visClicks" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10B981" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#10B981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={gridColor} strokeDasharray="4 4" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickFormatter={formatDate}
+                tick={{ fill: textColor, fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                yAxisId="impressions"
+                tick={{ fill: textColor, fontSize: 11 }}
+                tickFormatter={(v: number) => formatK(v)}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                yAxisId="clicks"
+                orientation="right"
+                tick={{ fill: textColor, fontSize: 11 }}
+                tickFormatter={(v: number) => formatK(v, 1)}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip content={<VisibilityTooltip />} />
+              <Area
+                yAxisId="impressions"
+                type="monotone"
+                dataKey="impressions"
+                stroke="#3B82F6"
+                strokeWidth={2.5}
+                fill="url(#visImpressions)"
+                dot={{ r: 4, strokeWidth: 2, stroke: '#3B82F6', fill: '#fff' }}
+                activeDot={{ r: 6 }}
+              />
+              <Area
+                yAxisId="clicks"
+                type="monotone"
+                dataKey="clicks"
+                stroke="#10B981"
+                strokeWidth={2}
+                fill="url(#visClicks)"
+                dot={{ r: 4, strokeWidth: 2, stroke: '#10B981', fill: '#fff' }}
+                activeDot={{ r: 6 }}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
         ) : (
           <div className="flex h-[320px] items-center justify-center">
             <div className="text-center">
