@@ -5,6 +5,7 @@ import fs from "fs"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { optimizePromptWithOpenAI } from "./server/openaiPromptOptimizer.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
+import { getQuarterlyReportData } from "./server/quarterlyReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 import { MetaApiError, getAdCampaigns, getCampaignInsightsSeries, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
@@ -427,6 +428,23 @@ app.get('/api/seo/gbp', async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'GBP report failed'
     console.error('[seo/gbp]', message)
+    res.status(500).json({ error: message })
+  }
+})
+
+// ── SEO: Quarterly client report data (GSC + GA4 comparisons) ───────────────
+app.get('/api/seo/quarterly-report', async (req, res) => {
+  try {
+    const data = await getQuarterlyReportData({
+      site: req.query.site,
+      ga4: req.query.ga4,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+    })
+    res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Quarterly report failed'
+    console.error('[seo/quarterly-report]', message)
     res.status(500).json({ error: message })
   }
 })

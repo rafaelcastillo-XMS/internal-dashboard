@@ -35,6 +35,7 @@ const SEOInitialAnalysis = lazy(() => import("./pages/seo/SEOOnPageAudit").then(
 const SEOAuditHistory = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOAuditHistory })))
 const SEOComparativeAudit = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOComparativeAudit })))
 const SEOReports = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOReports })))
+const SEOClientReports = lazy(() => import("./pages/seo/SEOClientReports").then(module => ({ default: module.SEOClientReports })))
 
 // SEM Intelligence
 const SEMLayout = lazy(() => import("./features/sem/layout/SEMLayout").then(module => ({ default: module.SEMLayout })))
@@ -136,6 +137,7 @@ function App() {
                                 <Route path="/seo/audit/history" element={<SEOAuditHistory />} />
                                 <Route path="/seo/audit/comparative" element={<SEOComparativeAudit />} />
                                 <Route path="/seo/reports" element={<SEOReports />} />
+                                <Route path="/seo/client-reports" element={<SEOClientReports />} />
                             </Route>
                             <Route element={<SEMProtectedLayout session={session} />}>
                                 <Route path="/sem" element={<SEMDashboard />} />

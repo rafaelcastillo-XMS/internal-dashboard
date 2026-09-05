@@ -64,7 +64,7 @@ async function getGbpAccessToken() {
 }
 
 // GA4 / GSC calls: always the main (eva@) token
-async function getAccessToken() {
+export async function getAccessToken() {
   return refreshFromFile(MAIN_TOKEN_PATH)
 }
 
@@ -128,7 +128,7 @@ async function findLocationById(accountName, locationName) {
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
-function fmtK(n) {
+export function fmtK(n) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 10_000) return `${Math.round(n / 1000)}K`
   if (n >= 1000) return `${(n / 1000).toFixed(2)}K`
@@ -143,7 +143,7 @@ function dayLabel(d) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
 }
 
-function pctDelta(cur, prev) {
+export function pctDelta(cur, prev) {
   if (!prev) return 0
   return Math.round(((cur - prev) / prev) * 1000) / 10
 }
@@ -284,7 +284,7 @@ async function fetchGbpSections(location, startDate, endDate) {
 
 // ─── GA4 sections ─────────────────────────────────────────────────────────────
 
-async function ga4Report(propertyId, body) {
+export async function ga4Report(propertyId, body) {
   const token = await getAccessToken()
   const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
     method: "POST",

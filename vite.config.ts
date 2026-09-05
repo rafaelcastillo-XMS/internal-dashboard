@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from "http"
 import { getCompanySkillsCatalog } from "./server/companySkills.js"
 import { optimizePromptWithOpenAI } from "./server/openaiPromptOptimizer.js"
 import { getGbpReport, listGbpLocations } from "./server/gbpReport.js"
+import { getQuarterlyReportData } from "./server/quarterlyReport.js"
 import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 import { MetaApiError, getAdCampaigns, getCampaignInsightsSeries, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { handleNotionClientSyncRequest } from "./server/notionSync.js"
@@ -435,6 +436,25 @@ function seoDevPlugin() {
             const status = error instanceof AhrefsApiError ? error.upstreamStatus : 500
             console.error("[seo-api/ahrefs]", status, message)
             sendJson(res, status >= 400 && status < 600 ? status : 502, { error: message })
+          }
+          return
+        }
+
+        // Quarterly client report — GSC/GA4 comparisons (uses the same OAuth token as GBP, no service-account gate)
+        if (req.url.startsWith("/api/seo/quarterly-report") && req.method === "GET") {
+          const { searchParams: sp } = new URL(req.url, "http://localhost")
+          try {
+            const data = await getQuarterlyReportData({
+              site: sp.get("site") ?? "",
+              ga4: sp.get("ga4") ?? "",
+              startDate: sp.get("startDate") ?? "",
+              endDate: sp.get("endDate") ?? "",
+            })
+            sendJson(res, 200, data)
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Quarterly report failed"
+            console.error("[seo-api/quarterly-report]", message)
+            sendJson(res, 500, { error: message })
           }
           return
         }

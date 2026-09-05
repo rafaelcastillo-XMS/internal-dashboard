@@ -13,16 +13,16 @@ interface QuarterlySeoReportOptions {
   xmsLogoUrl?: string
 }
 
-type RGB = [number, number, number]
+export type RGB = [number, number, number]
 
-const BLUE: RGB = [0, 113, 188]
-const BLUE_DARK: RGB = [0, 61, 139]
-const CYAN: RGB = [0, 174, 239]
-const INK: RGB = [20, 28, 40]
-const MUTED: RGB = [82, 96, 115]
-const LIGHT: RGB = [232, 240, 249]
+export const BLUE: RGB = [0, 113, 188]
+export const BLUE_DARK: RGB = [0, 61, 139]
+export const CYAN: RGB = [0, 174, 239]
+export const INK: RGB = [20, 28, 40]
+export const MUTED: RGB = [82, 96, 115]
+export const LIGHT: RGB = [232, 240, 249]
 
-function clean(value: string) {
+export function clean(value: string) {
   return value
     .replace(/[\u2010-\u2015]/g, '-')
     .replace(/\u2026/g, '...')
@@ -31,14 +31,14 @@ function clean(value: string) {
     .replace(/[^\x09\x0A\x0D\x20-\x7E\u00C0-\u00FF]/g, '')
 }
 
-function formatPeriod(startDate: string, endDate: string) {
+export function formatPeriod(startDate: string, endDate: string) {
   const options: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric', timeZone: 'UTC' }
   const start = new Date(`${startDate}T00:00:00Z`).toLocaleDateString('en-US', options)
   const end = new Date(`${endDate}T00:00:00Z`).toLocaleDateString('en-US', options)
   return `${start} to ${end}`
 }
 
-function safeDomain(site: string) {
+export function safeDomain(site: string) {
   return site.replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/\/$/, '')
 }
 
@@ -76,7 +76,7 @@ function bodyChrome(pdf: Pdf, period: string, pageNumber: number) {
   pdf.text(String(pageNumber), w - 10, h - 4.5, { align: 'right' })
 }
 
-function heading(pdf: Pdf, title: string, y = 43) {
+export function heading(pdf: Pdf, title: string, y = 43) {
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(25)
   pdf.setTextColor(...BLUE)
@@ -85,7 +85,7 @@ function heading(pdf: Pdf, title: string, y = 43) {
   return y + lines.length * 10 + 4
 }
 
-function paragraph(pdf: Pdf, text: string, y: number, width = 168, size = 11, lineHeight = 1.45) {
+export function paragraph(pdf: Pdf, text: string, y: number, width = 168, size = 11, lineHeight = 1.45) {
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(size)
   pdf.setTextColor(...INK)
@@ -95,7 +95,7 @@ function paragraph(pdf: Pdf, text: string, y: number, width = 168, size = 11, li
   return y + lines.length * size * 0.52 * lineHeight
 }
 
-function metricCard(pdf: Pdf, x: number, y: number, width: number, label: string, value: string, accent: RGB = BLUE) {
+export function metricCard(pdf: Pdf, x: number, y: number, width: number, label: string, value: string, accent: RGB = BLUE) {
   pdf.setFillColor(247, 250, 253)
   pdf.setDrawColor(218, 228, 239)
   pdf.roundedRect(x, y, width, 27, 3, 3, 'FD')
@@ -111,7 +111,7 @@ function metricCard(pdf: Pdf, x: number, y: number, width: number, label: string
   pdf.text(pdf.splitTextToSize(clean(label), width - 13), x + 8, y + 19)
 }
 
-function drawLineChart(
+export function drawLineChart(
   pdf: Pdf,
   values: number[],
   labels: string[],
@@ -162,7 +162,7 @@ function drawLineChart(
   })
 }
 
-function addImageContained(pdf: Pdf, dataUrl: string | undefined, x: number, y: number, maxW: number, maxH: number) {
+export function addImageContained(pdf: Pdf, dataUrl: string | undefined, x: number, y: number, maxW: number, maxH: number) {
   if (!dataUrl) return false
   try {
     const props = pdf.getImageProperties(dataUrl)
@@ -419,7 +419,7 @@ export function buildQuarterlySeoPdf(
   return pdf
 }
 
-async function imageToDataUrl(url?: string) {
+export async function imageToDataUrl(url?: string) {
   if (!url) return undefined
   try {
     const response = await fetch(url)
