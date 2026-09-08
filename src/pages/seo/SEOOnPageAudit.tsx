@@ -15,6 +15,8 @@ import {
   PlayCircle,
   RefreshCw,
   Search,
+  Trash2,
+  X,
   XCircle,
 } from 'lucide-react'
 import DOMPurify from 'dompurify'
@@ -31,6 +33,10 @@ const STATUS = { idle: 'idle', loading: 'loading', ready: 'ready', error: 'error
 type StatusKey = typeof STATUS[keyof typeof STATUS]
 
 type TabKey = 'run-audit' | 'initial-status' | 'audit-history' | 'comparative' | 'download-reports'
+
+function daysBetween(from: string, to: string) {
+  return Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000))
+}
 
 const POLL_INTERVAL = 5000
 const POLL_TIMEOUT  = 10 * 60 * 1000
@@ -106,6 +112,9 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
   const [client, setClient]         = useState('')
   const [audits, setAudits]         = useState<OnPageAuditRow[]>([])
   const [viewingId, setViewingId]   = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [compareIds, setCompareIds] = useState<number[]>([])
+  const [showComparison, setShowComparison] = useState(false)
   const [historyQuery, setHistoryQuery] = useState('')
   const [historyStatus, setHistoryStatus] = useState('all')
   const [historyRange, setHistoryRange] = useState('all')
@@ -137,6 +146,29 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
     const { data } = await query
     if (data) setAudits(data as OnPageAuditRow[])
   }, [seoState.clientName])
+
+  async function deleteAudit(audit: OnPageAuditRow) {
+    if (!window.confirm(`Delete the audit for ${audit.landing_page_url}? This action cannot be undone.`)) return
+    setDeletingId(audit.id)
+    const { error } = await supabase.from('seo_onpage_audits').delete().eq('id', audit.id)
+    setDeletingId(null)
+    if (error) {
+      window.alert(`Could not delete the audit: ${error.message}`)
+      return
+    }
+    setAudits(current => current.filter(row => row.id !== audit.id))
+    setCompareIds(current => current.filter(id => id !== audit.id))
+  }
+
+  const MAX_COMPARE = 3
+
+  function toggleCompare(auditId: number) {
+    setCompareIds(current => {
+      if (current.includes(auditId)) return current.filter(id => id !== auditId)
+      if (current.length >= MAX_COMPARE) return current
+      return [...current, auditId]
+    })
+  }
 
   useEffect(() => () => stopPolling(), [])
 
@@ -405,6 +437,22 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
       return matchesQuery && matchesStatus && matchesRange
     })
   }, [audits, historyQuery, historyRange, historyStatus])
+
+  // Date 1/2/3 follow the timeline, not the order they were ticked
+  const compareRows = useMemo(
+    () => audits
+      .filter(audit => compareIds.includes(audit.id))
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    [audits, compareIds],
+  )
+  const compareIndex = useMemo(
+    () => new Map(compareRows.map((audit, position) => [audit.id, position + 1])),
+    [compareRows],
+  )
+
+  useEffect(() => {
+    if (compareRows.length < 2) setShowComparison(false)
+  }, [compareRows.length])
 
   const historyPageSize = 8
   const historyPageCount = Math.max(1, Math.ceil(filteredAudits.length / historyPageSize))
@@ -972,7 +1020,7 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
               <table className="w-full min-w-[780px]">
                 <thead>
                   <tr className="border-b border-stroke bg-gray-50/60 dark:border-strokedark dark:bg-black/10">
-                    {['Date & Time', 'Client', 'Website', 'Status', 'Completed', 'Action'].map(col => (
+                    {['Compare', 'Date & Time', 'Client', 'Website', 'Status', 'Completed', 'Action'].map(col => (
                       <th key={col} className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-body dark:text-bodydark whitespace-nowrap">{col}</th>
                     ))}
                   </tr>
@@ -980,7 +1028,7 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
                 <tbody className="divide-y divide-stroke dark:divide-strokedark">
                   {paginatedAudits.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-14 text-center">
+                      <td colSpan={7} className="px-6 py-14 text-center">
                         <FileSearch className="mx-auto h-7 w-7 text-body/50" />
                         <p className="mt-3 text-sm font-semibold text-black dark:text-[#E2E5E9]">No audits found</p>
                         <p className="mt-1 text-xs text-body dark:text-bodydark">Try a different filter or run the first audit for this client.</p>
@@ -988,8 +1036,33 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
                     </tr>
                   ) : paginatedAudits.map(audit => {
                     const date = new Date(audit.created_at)
+                    const comparePosition = compareIndex.get(audit.id)
+                    const selectable = audit.status === 'completed'
+                    const selectionFull = compareIds.length >= MAX_COMPARE && !comparePosition
                     return (
-                      <tr key={audit.id} className="transition-colors hover:bg-gray-50/60 dark:hover:bg-white/[0.025]">
+                      <tr key={audit.id} className={`transition-colors hover:bg-gray-50/60 dark:hover:bg-white/[0.025] ${comparePosition ? 'bg-[#1A72D9]/[0.04] dark:bg-[#1A72D9]/[0.07]' : ''}`}>
+                        <td className="px-5 py-4">
+                          <button
+                            type="button"
+                            onClick={() => toggleCompare(audit.id)}
+                            disabled={!selectable || selectionFull}
+                            aria-pressed={Boolean(comparePosition)}
+                            title={
+                              !selectable
+                                ? 'Only completed audits can be compared'
+                                : selectionFull
+                                  ? `Pick up to ${MAX_COMPARE} dates`
+                                  : comparePosition ? 'Remove from comparison' : 'Add to comparison'
+                            }
+                            className={`inline-flex h-6 min-w-[3.9rem] items-center justify-center gap-1 rounded-md border px-1.5 text-[10px] font-semibold transition ${
+                              comparePosition
+                                ? 'border-[#1A72D9] bg-[#1A72D9] text-white'
+                                : 'border-stroke text-body hover:border-[#1A72D9]/50 hover:text-[#1A72D9] disabled:cursor-not-allowed disabled:opacity-35 dark:border-strokedark dark:text-bodydark'
+                            }`}
+                          >
+                            {comparePosition ? `Date ${comparePosition}` : 'Select'}
+                          </button>
+                        </td>
                         <td className="px-5 py-4 whitespace-nowrap">
                           <p className="text-xs font-semibold text-black dark:text-[#E2E5E9]">{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                           <p className="mt-0.5 text-[10px] text-body dark:text-bodydark">{date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
@@ -1017,26 +1090,75 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
                           {audit.completed_at ? new Date(audit.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                         </td>
                         <td className="px-5 py-4 text-right">
-                          {audit.status === 'completed' && audit.screaming_frog_url ? (
+                          <div className="flex items-center justify-end gap-2">
+                            {audit.status === 'completed' && audit.screaming_frog_url ? (
+                              <button
+                                type="button"
+                                onClick={() => viewSavedAudit(audit)}
+                                disabled={viewingId === audit.id}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#1A72D9]/50 px-3 text-[11px] font-semibold text-[#1A72D9] transition hover:bg-[#1A72D9]/5 disabled:opacity-50"
+                              >
+                                <Eye className="h-3.5 w-3.5" /> {viewingId === audit.id ? 'Loading…' : 'View Report'} <ChevronRight className="h-3 w-3" />
+                              </button>
+                            ) : audit.status === 'completed' ? (
+                              <span className="text-[11px] text-body dark:text-bodydark">Ahrefs baseline only</span>
+                            ) : audit.error_message ? (
+                              <span className="inline-block max-w-[170px] truncate text-[10px] text-rose-500" title={audit.error_message}>{audit.error_message}</span>
+                            ) : <span className="text-body">—</span>}
                             <button
                               type="button"
-                              onClick={() => viewSavedAudit(audit)}
-                              disabled={viewingId === audit.id}
-                              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#1A72D9]/50 px-3 text-[11px] font-semibold text-[#1A72D9] transition hover:bg-[#1A72D9]/5 disabled:opacity-50"
+                              onClick={() => deleteAudit(audit)}
+                              disabled={deletingId === audit.id}
+                              title="Delete audit"
+                              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-rose-500/40 px-3 text-[11px] font-semibold text-rose-600 transition hover:bg-rose-500/5 disabled:opacity-50 dark:text-rose-400"
                             >
-                              <Eye className="h-3.5 w-3.5" /> {viewingId === audit.id ? 'Loading…' : 'View Report'} <ChevronRight className="h-3 w-3" />
+                              <Trash2 className="h-3.5 w-3.5" /> {deletingId === audit.id ? 'Deleting…' : 'Delete'}
                             </button>
-                          ) : audit.status === 'completed' ? (
-                            <span className="text-[11px] text-body dark:text-bodydark">Ahrefs baseline only</span>
-                          ) : audit.error_message ? (
-                            <span className="inline-block max-w-[170px] truncate text-[10px] text-rose-500" title={audit.error_message}>{audit.error_message}</span>
-                          ) : <span className="text-body">—</span>}
+                          </div>
                         </td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-stroke bg-gray-50/60 px-5 py-3 dark:border-strokedark dark:bg-black/10 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-body dark:text-bodydark">Compare dates</span>
+                {compareRows.length === 0 ? (
+                  <span className="text-[11px] text-body dark:text-bodydark">Pick up to {MAX_COMPARE} audits from the table (any page) to line them up.</span>
+                ) : compareRows.map((audit, position) => (
+                  <span key={audit.id} className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-[#1A72D9]/40 bg-white px-2.5 py-1 text-[10px] font-semibold text-[#1A72D9] dark:bg-boxdark">
+                    <span className="shrink-0 opacity-70">Date {position + 1}</span>
+                    <span className="truncate">
+                      {new Date(audit.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                    <button type="button" onClick={() => toggleCompare(audit.id)} aria-label={`Remove date ${position + 1}`} className="shrink-0 opacity-60 transition hover:opacity-100">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {compareRows.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCompareIds([])}
+                    className="text-[11px] font-semibold text-body underline-offset-2 transition hover:text-[#1A72D9] hover:underline dark:text-bodydark"
+                  >
+                    Clear
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowComparison(true)}
+                  disabled={compareRows.length < 2}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#1A72D9] px-4 text-xs font-semibold text-white transition hover:bg-[#1A72D9]/90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <GitCompareArrows className="h-3.5 w-3.5" /> Compare {compareRows.length > 1 ? `(${compareRows.length})` : ''}
+                </button>
+              </div>
             </div>
 
             <div className="flex flex-col gap-3 border-t border-stroke px-5 py-3 dark:border-strokedark sm:flex-row sm:items-center sm:justify-between">
@@ -1050,6 +1172,79 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
               </div>
             </div>
           </section>
+
+          {showComparison && compareRows.length >= 2 && (
+            <section className="overflow-hidden rounded-xl border border-[#1A72D9]/30 bg-white shadow-sm dark:border-[#1A72D9]/30 dark:bg-boxdark">
+              <div className="flex items-center justify-between gap-3 border-b border-stroke bg-[#1A72D9]/[0.04] px-5 py-4 dark:border-strokedark dark:bg-[#1A72D9]/[0.07]">
+                <div>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-black dark:text-[#E2E5E9]">
+                    <GitCompareArrows className="h-4 w-4 text-[#1A72D9]" /> Audit Comparison
+                  </h2>
+                  <p className="mt-0.5 text-[11px] text-body dark:text-bodydark">
+                    {compareRows.length} dates spanning {daysBetween(compareRows[0].created_at, compareRows[compareRows.length - 1].created_at)} days
+                  </p>
+                </div>
+                <button type="button" onClick={() => setShowComparison(false)} aria-label="Close comparison" className="flex h-8 w-8 items-center justify-center rounded-lg border border-stroke text-body transition hover:text-[#1A72D9] dark:border-strokedark">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className={`grid gap-px bg-stroke dark:bg-strokedark ${compareRows.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+                {compareRows.map((audit, position) => {
+                  const created = new Date(audit.created_at)
+                  const gap = position === 0 ? null : daysBetween(compareRows[position - 1].created_at, audit.created_at)
+                  return (
+                    <div key={audit.id} className="bg-white p-5 dark:bg-boxdark">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="rounded-md bg-[#1A72D9] px-2 py-1 text-[10px] font-semibold text-white">Date {position + 1}</span>
+                        <span className="text-[10px] text-body dark:text-bodydark">
+                          {gap === null ? 'Baseline' : `+${gap} days`}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm font-semibold text-black dark:text-[#E2E5E9]">
+                        {created.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-body dark:text-bodydark">
+                        {created.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · {audit.client}
+                      </p>
+                      <div className="mt-3 flex items-center gap-2 text-[11px] text-[#1A72D9]">
+                        <Globe2 className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate" title={audit.landing_page_url}>{audit.landing_page_url.replace(/^https?:\/\//, '')}</span>
+                      </div>
+
+                      <dl className="mt-4 space-y-2 border-t border-stroke pt-3 text-[11px] dark:border-strokedark">
+                        {/* ponytail: on-page audits only store the rendered HTML, so there are no metrics to diff yet.
+                            Wire real deltas once the audit run persists structured scores. */}
+                        {['Overall score', 'Issues found', 'Pages crawled'].map(metric => (
+                          <div key={metric} className="flex items-center justify-between gap-2">
+                            <dt className="text-body dark:text-bodydark">{metric}</dt>
+                            <dd className="rounded bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-body dark:bg-white/5 dark:text-bodydark">—</dd>
+                          </div>
+                        ))}
+                      </dl>
+
+                      {audit.screaming_frog_url ? (
+                        <button
+                          type="button"
+                          onClick={() => viewSavedAudit(audit)}
+                          disabled={viewingId === audit.id}
+                          className="mt-4 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[#1A72D9]/50 px-3 text-[11px] font-semibold text-[#1A72D9] transition hover:bg-[#1A72D9]/5 disabled:opacity-50"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> {viewingId === audit.id ? 'Loading…' : 'Open this report'}
+                        </button>
+                      ) : (
+                        <p className="mt-4 text-[10px] text-body dark:text-bodydark">Ahrefs baseline only — no on-page report stored.</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <p className="border-t border-stroke px-5 py-3 text-[10px] text-body dark:border-strokedark dark:text-bodydark">
+                Layout preview: the side-by-side metric deltas stay empty until on-page audits store structured scores instead of only the rendered report.
+              </p>
+            </section>
+          )}
         </div>
       )}
 
