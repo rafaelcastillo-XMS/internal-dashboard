@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { edgeFetch } from '@/lib/edgeFetch'
-import { clients as staticClients } from '@/data/dummy'
-import { supabase } from '@/lib/supabase'
-import { mergeClientWithProfile } from '@/features/clients/profiles'
-import type { ClientProfileRow } from '@/features/clients/profiles'
+import { useClientOptions } from '@/features/clients/useClientOptions'
 import { SEO_API } from '@/features/seo/hooks/useSEODashboardState'
 import { exportPageToPdf } from '@/features/seo/lib/exportPdf'
 
@@ -214,34 +211,14 @@ export function DesignDashboard() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchCount = useRef(0)
+  const { options: designClients } = useClientOptions('design')
 
-  // Load client list: merge dummy clients with Supabase profiles
+  // Client list comes from Supabase: any active client with a website can be
+  // measured, so a client added today shows up here without a deploy.
   useEffect(() => {
-    ;(async () => {
-      try {
-        const { data: profiles } = await supabase.from('client_profiles').select('*')
-        const profileMap = new Map<string, ClientProfileRow>()
-        for (const p of profiles ?? []) profileMap.set(p.client_id, p)
-
-        const merged = staticClients
-          .filter(c => c.status === 'active')
-          .map(c => mergeClientWithProfile(c, profileMap.get(c.id)))
-          .filter(c => c.website)
-          .map(c => ({ id: c.id, name: c.name, website: c.website }))
-
-        setClientOptions(merged)
-        if (!selectedClientId && merged.length > 0) {
-          setSelectedClientId(merged[0].id)
-        }
-      } catch {
-        const fallback = staticClients
-          .filter(c => c.status === 'active' && c.website)
-          .map(c => ({ id: c.id, name: c.name, website: c.website }))
-        setClientOptions(fallback)
-        if (!selectedClientId && fallback.length > 0) setSelectedClientId(fallback[0].id)
-      }
-    })()
-  }, [])
+    setClientOptions(designClients)
+    if (!selectedClientId && designClients.length > 0) setSelectedClientId(designClients[0].id)
+  }, [designClients, selectedClientId])
 
   // Sync URL when client changes
   useEffect(() => {

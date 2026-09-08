@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Download } from 'lucide-react'
-import { ACCOUNT_OPTIONS } from '@/features/social/hooks/useSocialDashboardState'
+import { useClientOptions } from '@/features/clients/useClientOptions'
 
 const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -15,7 +15,8 @@ const selectClass = `w-full appearance-none rounded-lg border border-stroke bg-w
 // pipeline once the report format is decided.
 export function SocialReports() {
     const [month, setMonth] = useState(new Date().getMonth())
-    const [account, setAccount] = useState(ACCOUNT_OPTIONS[0].value)
+    const { options: accounts } = useClientOptions('social')
+    const [account, setAccount] = useState('')
 
     return (
         <div className="mx-auto max-w-screen-2xl">
@@ -41,7 +42,8 @@ export function SocialReports() {
                             Account
                         </label>
                         <select id="report-account" value={account} onChange={e => setAccount(e.target.value)} className={selectClass}>
-                            {ACCOUNT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                            <option value="">Select client</option>
+                            {accounts.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
                         </select>
                     </div>
                 </div>

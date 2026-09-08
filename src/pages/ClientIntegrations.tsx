@@ -450,9 +450,9 @@ export function ClientIntegrations() {
     useTrackPageLoading(loadingGoogle || loadingGbp || profileLoading, `client-integrations:${client.id}`)
 
     return (
-        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-950 custom-scrollbar">
+        <div className="h-full overflow-y-auto custom-scrollbar">
             <div className="mx-auto max-w-screen-2xl space-y-6">
-                <div className="rounded-[28px] border border-slate-200/70 bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.14),_transparent_32%),linear-gradient(135deg,_rgba(255,255,255,0.97),_rgba(241,245,249,0.92))] p-6 shadow-sm dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),_transparent_30%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(15,23,42,0.92))]">
+                <div className="px-6 pt-6">
                     <div className="flex items-center gap-4">
                         <button
                             onClick={() => navigate("/clients")}
@@ -881,6 +881,23 @@ export function ClientIntegrations() {
                                             </select>
                                             <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                         </div>
+                                    </div>
+
+                                    <div className="mt-4 space-y-1.5">
+                                        <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                                            LSA Account <span className="font-medium normal-case tracking-normal text-slate-400">— only if Local Services runs in a separate account</span>
+                                        </label>
+                                        <select
+                                            value={record?.lsa_account_id ?? ""}
+                                            disabled={!record || loadingSemAccounts || !semEnabled}
+                                            onChange={e => void saveRecord({ lsa_account_id: e.target.value || null })}
+                                            className={selectClass}
+                                        >
+                                            <option value="">Same as the Google Ads account above</option>
+                                            {semAccounts.map(account => (
+                                                <option key={account.id} value={account.id}>{account.name}</option>
+                                            ))}
+                                        </select>
                                     </div>
 
                                     <div className="mt-4 space-y-3">

@@ -14,10 +14,6 @@ export const PLATFORMS: { id: SocialPlatform; label: string; color: string; bg: 
   { id: 'linkedin',  label: 'LinkedIn',  color: '#0A66C2', bg: 'bg-[#0A66C2]' },
 ]
 
-export const ACCOUNT_OPTIONS = [
-  { value: 'xms-ai', label: 'XMS Ai' },
-]
-
 export function getDateRange(days: number) {
   const end   = new Date()
   const start = new Date()

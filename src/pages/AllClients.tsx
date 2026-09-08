@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react"
 import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
-import { Users, Settings2 } from "lucide-react"
-import { fetchClientRecords, type ClientRecord } from "@/features/clients/clientsTable"
+import { Users, Settings2, Plus, X } from "lucide-react"
+import { fetchClientRecords, createClientRecord, type ClientRecord } from "@/features/clients/clientsTable"
 import { clientColor } from "@/features/clients/useClientRecord"
+import { hasService } from "@/features/clients/clientServices"
 import { fetchClientProfiles } from "@/features/clients/profiles"
 import { fetchNotionCovers } from "@/features/clients/notionCovers"
 import { supabase } from "@/lib/supabase"
@@ -14,6 +15,10 @@ export function AllClients() {
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState("")
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const loadClients = useCallback(() => {
     setLoading(true)
@@ -31,6 +36,23 @@ export function AllClients() {
   }, [])
 
   useEffect(() => { loadClients() }, [loadClients])
+
+  const addClient = useCallback(async () => {
+    const name = newName.trim()
+    if (!name) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const created = await createClientRecord(name)
+      setAdding(false)
+      setNewName("")
+      navigate(`/clients/${created.id}/integrations`)
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Unable to create client.")
+    } finally {
+      setCreating(false)
+    }
+  }, [navigate, newName])
 
   const cardClass =
     "rounded-xl border border-stroke bg-white shadow-none transition-all duration-200 hover:brightness-90 dark:border-strokedark dark:bg-boxdark"
@@ -57,6 +79,14 @@ export function AllClients() {
                       {clients.length} total · {activeCount} active
                     </p>
                   </div>
+
+                  <button
+                    onClick={() => { setNewName(""); setCreateError(null); setAdding(true) }}
+                    className="ml-auto flex items-center gap-2 rounded-lg border border-stroke bg-white px-3 py-2 text-sm font-medium text-body transition-colors hover:border-[#1A72D9]/25 hover:text-[#1A72D9] disabled:cursor-not-allowed disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-bodydark"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add client
+                  </button>
                 </div>
 
                 {loadError && (
@@ -78,8 +108,8 @@ export function AllClients() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {clients.map((client, i) => {
-                      const hasSEO = !!client.gsc_property || !!client.ga4_property_id
-                      const hasSEM = !!client.sem_account_id
+                      const hasSEO = hasService(client, 'seo')
+                      const hasSEM = hasService(client, 'sem')
 
                       return (
                         <motion.div
@@ -137,6 +167,70 @@ export function AllClients() {
         </div>
       </div>
 
+      {adding && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={() => !creating && setAdding(false)}
+        >
+          <form
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl dark:bg-boxdark"
+            onClick={e => e.stopPropagation()}
+            onSubmit={e => { e.preventDefault(); void addClient() }}
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-black dark:text-[#E2E5E9]">New client</h2>
+                <p className="mt-0.5 text-sm text-body dark:text-bodydark">
+                  You will pick its integrations on the next screen.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdding(false)}
+                disabled={creating}
+                className="text-body transition-colors hover:text-black disabled:opacity-60 dark:text-bodydark dark:hover:text-white"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <label htmlFor="new-client-name" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-body dark:text-bodydark">
+              Client name
+            </label>
+            <input
+              id="new-client-name"
+              autoFocus
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="Acme Roofing LLC"
+              className="w-full rounded-lg border border-stroke bg-white px-3 py-2.5 text-sm text-black outline-none transition-colors focus:border-[#1A72D9] dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]"
+            />
+
+            {createError && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{createError}</p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAdding(false)}
+                disabled={creating}
+                className="rounded-lg border border-stroke px-4 py-2 text-sm font-medium text-body transition-colors hover:text-black disabled:opacity-60 dark:border-strokedark dark:text-bodydark dark:hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creating || !newName.trim()}
+                className="rounded-lg bg-[#1A72D9] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1560bd] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {creating ? "Creating..." : "Create client"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }
