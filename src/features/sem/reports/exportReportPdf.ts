@@ -72,6 +72,31 @@ function truncateTextToWidth(text: string, maxWidth: number, font: string): stri
   return lo === 0 ? ellipsis : text.slice(0, lo).trimEnd() + ellipsis
 }
 
+// Report tables use the browser's automatic table layout, where every column's
+// width is solved from the content of every cell in it. html2canvas re-runs
+// that solve in its own clone, with its own font metrics, so the columns land
+// on widths that no longer match the ones each cell's content was pinned to
+// below — every row reads as shifted, as if the table were plain text. Freezing
+// the live column widths first makes the clone's solve a no-op. (The LSA table
+// already declares `table-fixed` with a colgroup, which is why that one prints
+// straight; this gives every other table the same guarantee.)
+function pinTableColumnWidths(container: HTMLElement) {
+  container.querySelectorAll('table').forEach((table) => {
+    const headerCells = Array.from(table.querySelectorAll<HTMLTableCellElement>('thead th'))
+    if (headerCells.length === 0) return
+
+    // Read every width before writing any, so a pinned column can't shift the
+    // solution for the columns measured after it.
+    const tableWidth = table.getBoundingClientRect().width
+    const widths = headerCells.map((cell) => cell.getBoundingClientRect().width)
+    if (!tableWidth) return
+
+    table.style.tableLayout = 'fixed'
+    table.style.width = `${tableWidth}px`
+    headerCells.forEach((cell, index) => { cell.style.width = `${widths[index]}px` })
+  })
+}
+
 function replaceEditableControlsWithStaticText(container: HTMLElement) {
   const controls = Array.from(container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea'))
 
@@ -102,7 +127,9 @@ function replaceEditableControlsWithStaticText(container: HTMLElement) {
 
     replacement.className = control.className
     replacement.style.width = `${bounds.width}px`
-    replacement.style.height = `${bounds.height}px`
+    // Table cells wrap, so their height has to follow the text; pinning it
+    // would clip the second line.
+    if (!inTableCell) replacement.style.height = `${bounds.height}px`
     replacement.style.minWidth = '0'
     replacement.style.boxSizing = computed.boxSizing
     replacement.style.font = computed.font
@@ -115,18 +142,14 @@ function replaceEditableControlsWithStaticText(container: HTMLElement) {
     replacement.style.borderRadius = computed.borderRadius
     replacement.style.background = computed.background
     if (inTableCell) {
-      const contentBoxWidth = computed.boxSizing === 'content-box'
-        ? bounds.width
-        : bounds.width - parseFloat(computed.paddingLeft) - parseFloat(computed.paddingRight)
-        - parseFloat(computed.borderLeftWidth) - parseFloat(computed.borderRightWidth)
-      // `computed.font` (the shorthand) comes back empty in some engines —
-      // assigning an empty string to canvas `.font` is a silent no-op, which
-      // left it at the 10px default and under-truncated real (larger) text.
-      // Building the font spec from the individual longhands is reliable.
-      const fontSpec = `${computed.fontStyle} ${computed.fontWeight} ${computed.fontSize} ${computed.fontFamily}`
-      replacement.textContent = truncateTextToWidth(value, contentBoxWidth, fontSpec)
-      replacement.style.whiteSpace = 'nowrap'
-      replacement.style.overflow = 'hidden'
+      // Keyword and search-term cells carry data the reader needs in full, so
+      // a long one wraps onto a second line instead of being cut with an
+      // ellipsis. Every cell in a row is top-aligned, so the taller row stays
+      // level; the columns are already pinned by pinTableColumnWidths, so the
+      // extra line can't widen anything either.
+      replacement.textContent = value
+      replacement.style.whiteSpace = 'normal'
+      replacement.style.overflow = 'visible'
     } else {
       replacement.textContent = value
       // Single-line inputs were forced to `nowrap`, so a title longer than
@@ -272,6 +295,7 @@ export async function exportReportToPdf(report: Report) {
 
     await waitForRenderedAssets(host)
     hidePdfOnlyControls(host)
+    pinTableColumnWidths(host)
     replaceEditableControlsWithStaticText(host)
     truncateOverflowingStaticText(host)
     rasterizeImagesAtTheirRenderedAspectRatio(host)

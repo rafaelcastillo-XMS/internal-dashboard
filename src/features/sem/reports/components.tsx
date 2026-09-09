@@ -863,18 +863,18 @@ export function SearchAdPreviewCard({
   const path = (ad.pathLabels ?? []).join(' › ')
 
   return (
-    <div className="mx-auto flex h-full min-w-0 min-h-[280px] w-full max-w-[480px] flex-col px-6">
-      <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[#1a73e8]">
-        <span className="h-2.5 w-2.5 rounded-full bg-[#188038]" />
-        <span>{ad.businessName}</span>
-        {path ? <><span className="text-slate-400">›</span><span>{path}</span></> : null}
+    <div className="mx-auto flex h-full min-w-0 min-h-[280px] w-full max-w-[400px] flex-col px-1">
+      <div className="mb-2 flex items-center justify-center gap-1.5 text-[11px] font-medium text-[#1a73e8]">
+        <span className="shrink-0 text-[#188038]">●</span>
+        <span className="min-w-0 truncate">{ad.businessName}</span>
+        {path ? <><span className="shrink-0 text-slate-400">›</span><span className="min-w-0 truncate">{path}</span></> : null}
       </div>
 
       <div className="relative flex flex-1 flex-col rounded-t-[38px] rounded-b-none border-[5px] border-[#dadce0] bg-white px-4 pb-4 pt-6 shadow-[0_14px_35px_rgba(60,64,67,0.12)]">
         <span className="absolute left-1/2 top-2 h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-[#dadce0] bg-white" />
         <div className="flex flex-1 flex-col rounded border border-[#dadce0] bg-[#f8f9fa] px-3 py-2">
-          <div className="mb-2 flex items-center gap-1.5 border-b border-[#e2e5e9] pb-2 text-xs text-[#188038]">
-            <span className="shrink-0 rounded-sm border border-[#188038] px-1 font-semibold leading-4">Ad</span>
+          <div className="mb-2 flex items-baseline gap-1.5 border-b border-[#e2e5e9] pb-2 text-[11px] text-[#188038]">
+            <span className="shrink-0 font-bold">Ad</span>
             <span className="min-w-0 shrink truncate">{ad.displayUrl}</span>
             {path ? <span className="min-w-0 shrink truncate">› {path}</span> : null}
           </div>
@@ -918,7 +918,7 @@ export function PmaxAdPreviewCard({
     .toUpperCase()
 
   return (
-    <div className="mx-auto flex h-full min-h-[280px] min-w-0 w-full max-w-[480px] flex-col rounded-lg border border-[#5f6368] bg-white p-4 shadow-[0_10px_24px_rgba(60,64,67,0.08)]">
+    <div className="mx-auto flex h-full min-h-[280px] min-w-0 w-full max-w-[400px] flex-col rounded-lg border border-[#5f6368] bg-white p-4 shadow-[0_10px_24px_rgba(60,64,67,0.08)]">
       <div className="flex items-center gap-3">
         {ad.logoSrc && !logoFailed ? (
           <img
@@ -967,8 +967,9 @@ export function PmaxAdPreviewCard({
       </div>
 
       <div className="mt-3 flex flex-wrap justify-center gap-2">
-        {(ad.ctaLabels ?? []).slice(0, 3).map((label) => (
-          <span key={label} className="rounded-full border border-[#dadce0] px-3 py-1.5 text-xs font-medium text-[#0b57d0]">{label}</span>
+        {/* ponytail: two pills fit one row at this card width; a third wraps alone. */}
+        {(ad.ctaLabels ?? []).slice(0, 2).map((label) => (
+          <span key={label} className="whitespace-nowrap rounded-full border border-[#dadce0] px-2.5 py-1 text-[11px] font-medium text-[#0b57d0]">{label}</span>
         ))}
       </div>
     </div>
@@ -1631,7 +1632,7 @@ export function ReportSlide({
   return (
     <section className={`flex ${slideFrameClass} flex-col border border-[#D8E4F2] bg-white shadow-[0_20px_45px_rgba(0,59,143,0.12)]`}>
       <div className="h-3 shrink-0 bg-gradient-to-r from-[#003B8F] via-[#0057C2] to-[#00AEEF]" />
-      <div className="flex min-h-0 flex-1 flex-col p-8">
+      <div className="flex min-h-0 flex-1 flex-col p-10">
       <div className="mb-4 shrink-0 border-b border-[#D8E4F2] pb-3">
         <div className="min-w-0">
           <AutoResizeSlideTitle
