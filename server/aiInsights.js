@@ -1,13 +1,84 @@
 /**
  * server/aiInsights.js
- * Shared Anthropic-backed dashboard AI endpoints, used by both the
+ * Shared dashboard AI endpoints, used by both the
  * production server (server.js) and the Vite dev middleware (vite.config.ts)
  * so the prompts/logic live in exactly one place.
  */
 
 import Anthropic from "@anthropic-ai/sdk"
+import { getResponseText } from "./openaiPromptOptimizer.js"
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+// The SEM and SEO insight panels run on OpenAI; /api/ai/ask, /api/ai/task-insight
+// and /api/ai/social-insights still run on Anthropic. Prod only ever had an
+// OPENAI_API_KEY, so the two panels the team actually uses live on that side.
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+// ponytail: model pinned, not read from OPENAI_MODEL — that var is set to the
+// non-existent "gpt-5.6" and would 404. Change here if the model moves.
+const INSIGHTS_MODEL = "gpt-5"
+
+const INSIGHT_ITEM = {
+  type: "object",
+  properties: {
+    action: { type: "string" },
+    impact: { type: "string", enum: ["high", "medium", "low"] },
+  },
+  required: ["action", "impact"],
+  additionalProperties: false,
+}
+
+export const INSIGHTS_SCHEMA = {
+  type: "object",
+  properties: {
+    short_term: { type: "array", items: INSIGHT_ITEM },
+    medium_term: { type: "array", items: INSIGHT_ITEM },
+    long_term: { type: "array", items: INSIGHT_ITEM },
+  },
+  required: ["short_term", "medium_term", "long_term"],
+  additionalProperties: false,
+}
+
+// Shared by the SEM and SEO insight routes. strict json_schema means the reply
+// is already schema-valid, so there are no code fences to strip.
+export async function callOpenAiInsights({ system, user, schemaName }) {
+  if (!process.env.OPENAI_API_KEY) throw statusErr(503, "AI not configured")
+
+  const res = await fetch(OPENAI_RESPONSES_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: INSIGHTS_MODEL,
+      input: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      text: {
+        format: { type: "json_schema", name: schemaName, strict: true, schema: INSIGHTS_SCHEMA },
+      },
+      // gpt-5 spends output tokens on reasoning before emitting the JSON, so the
+      // budget covers both. Low effort is enough for 6-9 bounded action items;
+      // at 2000 total the reply came back status:"incomplete".
+      reasoning: { effort: "low" },
+      max_output_tokens: 6000,
+    }),
+  })
+
+  const payload = await res.json().catch(() => ({}))
+  if (!res.ok) throw statusErr(502, payload?.error?.message || `OpenAI API HTTP ${res.status}`)
+  if (payload.status === "incomplete") {
+    throw statusErr(502, `OpenAI response incomplete: ${payload.incomplete_details?.reason || "unknown reason"}`)
+  }
+
+  try {
+    return JSON.parse(getResponseText(payload).trim())
+  } catch {
+    throw statusErr(502, "OpenAI returned an invalid insights payload")
+  }
+}
 
 function statusErr(statusCode, message) {
   return Object.assign(new Error(message), { statusCode })
@@ -109,7 +180,6 @@ No intro sentence, no conclusion. Just the actions. Keep each bullet under 20 wo
 
 // ─── /api/ai/sem-insights ─────────────────────────────────────────────────────
 export async function getSemInsights({ accountName, summary, campaigns }) {
-  requireAnthropicConfigured()
   if (!accountName) throw statusErr(400, "accountName is required")
 
   const campaignText = (campaigns ?? []).slice(0, 8).map(c =>
@@ -137,24 +207,20 @@ Provide 2-3 specific, data-driven action items per timeframe. Reference actual n
   "long_term": [{"action": "...", "impact": "high|medium|low"}]
 }`
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
+  return callOpenAiInsights({
+    schemaName: "sem_insights",
+    user: userPrompt,
     system: `You are a senior Google Ads strategist with 10+ years of agency experience. Analyze SEM performance data and provide specific, data-driven action items for each timeframe:
 SHORT-TERM (7-14 days): immediate bid adjustments, budget reallocation, pausing underperformers.
 MEDIUM-TERM (30-60 days): A/B tests, audience refinements, ad copy experiments, keyword expansion.
 LONG-TERM (3-6 months): account restructuring, automation setup, campaign type diversification.
 Each action must cite specific metrics from the provided data. Always respond in English.
 Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
-    messages: [{ role: "user", content: userPrompt }],
   })
-
-  return parseJsonResponse(textFrom(message))
 }
 
 // ─── /api/ai/seo-insights ─────────────────────────────────────────────────────
 export async function getSeoInsights({ clientName, gscSite, gsc, ga4, psiScore }) {
-  requireAnthropicConfigured()
   if (!gscSite) throw statusErr(400, "gscSite is required")
 
   const displayName = clientName || String(gscSite).replace(/^https?:\/\//, "").replace(/\/$/, "")
@@ -188,19 +254,16 @@ ${psiScore != null ? `PageSpeed Score (mobile): ${psiScore}/100` : ""}
 Provide 2-3 specific, data-driven SEO action items per timeframe. Reference actual numbers from the data. Return ONLY valid JSON (no markdown, no explanation):
 {"short_term":[{"action":"...","impact":"high|medium|low"}],"medium_term":[{"action":"...","impact":"high|medium|low"}],"long_term":[{"action":"...","impact":"high|medium|low"}]}`
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
+  return callOpenAiInsights({
+    schemaName: "seo_insights",
+    user: userPrompt,
     system: `You are a senior SEO strategist with 10+ years of agency experience. Analyze organic search performance data and provide specific, data-driven action items for each timeframe:
 SHORT-TERM (7-14 days): quick wins — meta descriptions for high-impression/low-CTR queries, internal linking, fixing crawl issues.
 MEDIUM-TERM (30-60 days): content optimization for near-first-page keywords, structured data, page speed fixes, content gaps.
 LONG-TERM (3-6 months): authority building, content cluster strategy, technical architecture, Core Web Vitals.
 Each action must cite specific numbers or query names from the data. Always respond in English.
 Return ONLY the JSON object. No markdown, no code fences, no explanation.`,
-    messages: [{ role: "user", content: userPrompt }],
   })
-
-  return parseJsonResponse(textFrom(message))
 }
 
 // ─── /api/ai/social-insights ──────────────────────────────────────────────────

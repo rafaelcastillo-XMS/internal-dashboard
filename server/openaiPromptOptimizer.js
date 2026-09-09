@@ -19,7 +19,7 @@ function apiError(message, statusCode) {
   return error
 }
 
-function getResponseText(payload) {
+export function getResponseText(payload) {
   if (typeof payload?.output_text === "string") return payload.output_text
   const parts = (payload?.output || []).flatMap(item => item?.content || [])
   return parts.find(part => typeof part?.text === "string")?.text || ""

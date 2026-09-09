@@ -5,6 +5,7 @@ import { CardDataStats }      from '@/features/seo/components/CardDataStats'
 import { ChartVisibility }    from '@/features/seo/components/ChartVisibility'
 import { QueryRankingsTable } from '@/features/seo/components/QueryRankingsTable'
 import { CoreWebVitals }      from '@/features/seo/components/CoreWebVitals'
+import { SEOAIInsights }      from '@/features/seo/components/SEOAIInsights'
 import { useSEODashboardState, formatDateLabel, DATE_PRESETS, SEO_API } from '@/features/seo/hooks/useSEODashboardState'
 import { cacheGet, cacheSet } from '@/features/seo/lib/seoCache'
 
@@ -129,6 +130,14 @@ export function SEODashboard() {
           </button>
         </div>
       </div>
+
+      {/* AI Insights banner */}
+      <SEOAIInsights
+        clientName={state.clientName}
+        gscSite={state.selectedGscSite}
+        gsc={data.gsc}
+        ga4={data.ga4}
+      />
 
       {/* No-client banner */}
       {state.propertiesLoaded && !state.selectedGscSite && !state.selectedGa4Id && (

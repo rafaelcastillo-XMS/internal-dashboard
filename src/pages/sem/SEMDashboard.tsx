@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
 import 'react-loading-skeleton/dist/skeleton.css'
 import { DashboardControls } from '@/features/sem/components/DashboardControls'
+import { SEMAIInsights } from '@/features/sem/components/SEMAIInsights'
 import { useSEMDashboardState, formatDateLabel } from '@/features/sem/hooks/useSEMDashboardState'
 import { cacheGet, cacheSet } from '@/features/sem/lib/semCache'
 import { supabase } from '@/lib/supabase'
@@ -231,6 +232,13 @@ export function SEMDashboard() {
           pageTitle="SEM-Overview"
         />
       </div>
+
+      {/* ── AI Insights banner ────────────────────────────────── */}
+      <SEMAIInsights
+        accountName={state.selectedAccount?.name || ''}
+        summary={summary}
+        campaigns={campaigns}
+      />
 
       {/* ── Google Ads metrics card ────────────────────────────────────────── */}
       <div className="mb-6 rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
