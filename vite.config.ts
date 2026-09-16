@@ -19,7 +19,7 @@ import {
   decodeAuthReturnPath, appendAuthResult,
 } from "./server/googleAuth.js"
 import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail } from "./server/mondayTasks.js"
-import { askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
+import { chatPerformanceAi, askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
 import { sanitizePdfFilename, exportPdfBuffer } from "./server/pdfExport.js"
 
 loadDotenv({ path: path.resolve(__dirname, ".env") })
@@ -907,13 +907,14 @@ function aiPlugin() {
     name: "ai-api",
     configureServer(server: { middlewares: { use: (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void | Promise<void>) => void } }) {
       server.middlewares.use(async (req, res, next) => {
+        const isPerformanceChat = req.url === "/api/ai/performance-chat" && req.method === "POST"
         const isAsk           = req.url === "/api/ai/ask"              && req.method === "POST"
         const isInsight       = req.url === "/api/ai/task-insight"     && req.method === "POST"
         const isSemInsight    = req.url === "/api/ai/sem-insights"     && req.method === "POST"
         const isSeoInsight    = req.url === "/api/ai/seo-insights"     && req.method === "POST"
         const isSocialInsight = req.url === "/api/ai/social-insights"  && req.method === "POST"
         const isPromptOptimize = req.url === "/api/ai/prompt-optimize"  && req.method === "POST"
-        if (!isAsk && !isInsight && !isSemInsight && !isSeoInsight && !isSocialInsight && !isPromptOptimize) { next(); return }
+        if (!isPerformanceChat && !isAsk && !isInsight && !isSemInsight && !isSeoInsight && !isSocialInsight && !isPromptOptimize) { next(); return }
 
         if (isPromptOptimize) {
           try {
@@ -933,7 +934,8 @@ function aiPlugin() {
         const body = await readJsonBody(req) as Record<string, unknown>
         let tag = "ai-ask"
         let run: () => Promise<unknown> = () => askDashboardAi(body as never)
-        if (isInsight)       { tag = "ai-task-insight";    run = () => getTaskInsight(body as never) }
+        if (isPerformanceChat) { tag = "ai-performance-chat"; run = () => chatPerformanceAi(body as never) }
+        else if (isInsight)       { tag = "ai-task-insight";    run = () => getTaskInsight(body as never) }
         else if (isSemInsight)    { tag = "ai-sem-insights";    run = () => getSemInsights(body as never) }
         else if (isSocialInsight) { tag = "ai-social-insights"; run = () => getSocialInsights(body as never) }
         else if (isSeoInsight)    { tag = "ai-seo-insights";    run = () => getSeoInsights(body as never) }

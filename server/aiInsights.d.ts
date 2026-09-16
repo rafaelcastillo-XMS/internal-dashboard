@@ -25,3 +25,10 @@ export function getSocialInsights(input: {
   metrics?: Record<string, number>
   posts?: Record<string, unknown>[]
 }): Promise<Record<string, unknown>>
+
+export function chatPerformanceAi(input: {
+  module: 'seo' | 'sem'
+  context: Record<string, unknown>
+  insights?: Record<string, unknown> | null
+  messages: { role: 'user' | 'assistant'; content: string }[]
+}): Promise<{ response: string }>

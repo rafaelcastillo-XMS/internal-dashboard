@@ -42,6 +42,8 @@ const EMPTY_DATA = {
 
 export function SEODashboard() {
   const state = useSEODashboardState()
+  const [loadedOverviewKey, setLoadedOverviewKey] = useState('')
+  const overviewKey = `dashboard:${state.selectedGscSite}:${state.selectedGa4Id}:${state.dateRange.startDate}:${state.dateRange.endDate}`
   const navigate = useNavigate()
   const [data, setData] = useState(EMPTY_DATA)
   const [isDark, setIsDark] = useState(false)
@@ -58,7 +60,7 @@ export function SEODashboard() {
     const cacheKey = `dashboard:${state.selectedGscSite}:${state.selectedGa4Id}:${state.dateRange.startDate}:${state.dateRange.endDate}`
     if (!force) {
       const cached = cacheGet<{ data: typeof EMPTY_DATA; lastUpdated: string }>(cacheKey)
-      if (cached) { setData(cached.data); state.setLastUpdated(new Date(cached.lastUpdated)); return }
+      if (cached) { setLoadedOverviewKey(cacheKey); setData(cached.data); state.setLastUpdated(new Date(cached.lastUpdated)); return }
     }
     state.setLoading(true)
     try {
@@ -78,6 +80,7 @@ export function SEODashboard() {
 
       const updated = new Date()
       const newData = { gsc: { ...EMPTY_DATA.gsc, ...gscData }, ga4: { ...EMPTY_DATA.ga4, ...ga4Data }, psi: { ...EMPTY_DATA.psi, ...psiData } }
+      setLoadedOverviewKey(cacheKey)
       setData(newData)
       cacheSet(cacheKey, { data: newData, lastUpdated: updated.toISOString() })
       state.setLastUpdated(updated)
@@ -131,8 +134,11 @@ export function SEODashboard() {
         </div>
       </div>
 
-      {/* AI Insights banner */}
+      {/* AI overview assistant */}
       <SEOAIInsights
+        contextId={`${state.selectedGscSite}:${state.selectedGa4Id}`}
+        dateRange={state.dateRange}
+        disabled={state.loading || loadedOverviewKey !== overviewKey}
         clientName={state.clientName}
         gscSite={state.selectedGscSite}
         gsc={data.gsc}

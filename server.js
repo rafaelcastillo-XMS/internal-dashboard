@@ -11,7 +11,7 @@ import { MetaApiError, getAdCampaigns, getCampaignInsightsSeries, getFacebookPag
 import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
 import { handleNotionClientSyncRequest, queryRelatedNotionData, queryNotionClientCovers, syncClientFromNotion } from "./server/notionSync.js"
 import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail } from "./server/mondayTasks.js"
-import { askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
+import { chatPerformanceAi, askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
 import { sanitizePdfFilename, exportPdfBuffer } from "./server/pdfExport.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -170,6 +170,15 @@ app.get("/api/monday/tasks", async (req, res) => {
     const message = err instanceof Error ? err.message : "Monday API error"
     console.error("[monday-api]", message)
     res.status(err?.statusCode ?? 500).json({ error: message })
+  }
+})
+
+app.post("/api/ai/performance-chat", async (req, res) => {
+  try {
+    res.json(await chatPerformanceAi(req.body ?? {}))
+  } catch (err) {
+    console.error("[ai-performance-chat]", err.message)
+    res.status(err.statusCode ?? 502).json({ error: "Unable to complete chat response" })
   }
 })
 

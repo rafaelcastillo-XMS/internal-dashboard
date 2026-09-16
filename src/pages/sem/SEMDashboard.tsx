@@ -98,6 +98,8 @@ function summarize(campaigns: Campaign[]): Summary {
 
 export function SEMDashboard() {
   const state = useSEMDashboardState()
+  const [loadedOverviewKey, setLoadedOverviewKey] = useState('')
+  const overviewKey = `dashboard:${state.selectedAccountId}:${state.rangeKey}`
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [activeTab, setActiveTab] = useState<'ads' | 'guarantee'>('ads')
 
@@ -169,7 +171,7 @@ export function SEMDashboard() {
     const cacheKey = `dashboard:${state.selectedAccountId}:${state.rangeKey}`
     if (!force) {
       const cached = cacheGet<{ data: Campaign[]; lastUpdated: string }>(cacheKey)
-      if (cached) { setCampaigns(cached.data); state.setLastUpdated(new Date(cached.lastUpdated)); return }
+      if (cached) { setLoadedOverviewKey(cacheKey); setCampaigns(cached.data); state.setLastUpdated(new Date(cached.lastUpdated)); return }
     }
     state.setLoading(true)
     try {
@@ -194,6 +196,7 @@ export function SEMDashboard() {
         cost_per_conversion: r.cost_per_conversion,
       }))
       const updated = new Date()
+      setLoadedOverviewKey(cacheKey)
       setCampaigns(rows)
       cacheSet(cacheKey, { data: rows, lastUpdated: updated.toISOString() })
       state.setLastUpdated(updated)
@@ -233,8 +236,11 @@ export function SEMDashboard() {
         />
       </div>
 
-      {/* ── AI Insights banner ────────────────────────────────── */}
+      {/* ── AI overview assistant ────────────────────────────────── */}
       <SEMAIInsights
+        contextId={state.selectedAccountId}
+        dateRange={state.dateRange}
+        disabled={state.loading || loadedOverviewKey !== overviewKey}
         accountName={state.selectedAccount?.name || ''}
         summary={summary}
         campaigns={campaigns}
