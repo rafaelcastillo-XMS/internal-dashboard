@@ -1,3 +1,8 @@
+# NOT used in production. Dokploy builds from the Dockerfile and runs the app as a
+# Swarm service, ignoring this file — the volumes below never apply there. In prod the
+# credential files are File Mounts configured in the Dokploy panel (app → Advanced →
+# Volumes), stored in /etc/dokploy/applications/<app>/files/ and mounted to /app/<file>.
+# This compose file is for local/self-hosted runs only.
 services:
   dashboard:
     build: .
