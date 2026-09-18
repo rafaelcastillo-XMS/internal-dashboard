@@ -5,6 +5,7 @@ import { Eye, EyeOff, Lock, Mail } from "lucide-react"
 import { XMSLogo } from "@/components/ui/XMSLogo"
 import { useTheme } from "@/context/useTheme"
 import { supabase } from "@/lib/supabase"
+import { DASHBOARD_EMAIL_DOMAIN, isAllowedDashboardEmail } from "@/features/auth/access"
 
 function GoogleIcon() {
     return (
@@ -31,6 +32,11 @@ export function Login() {
         e.preventDefault()
         setLoading(true)
         setAuthError(null)
+        if (!isAllowedDashboardEmail(email)) {
+            setAuthError(`Use your @${DASHBOARD_EMAIL_DOMAIN} work email.`)
+            setLoading(false)
+            return
+        }
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) {
             setAuthError(error.message)
@@ -45,7 +51,10 @@ export function Login() {
         setAuthError(null)
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
-            options: { redirectTo: `${window.location.origin}/` },
+            options: {
+                redirectTo: `${window.location.origin}/`,
+                queryParams: { hd: DASHBOARD_EMAIL_DOMAIN },
+            },
         })
         if (error) {
             setAuthError(error.message)
@@ -111,7 +120,7 @@ export function Login() {
                                         type="email"
                                         value={email}
                                         onChange={e => setEmail(e.target.value)}
-                                        placeholder="you@xms-marketing.com"
+                                        placeholder={`you@${DASHBOARD_EMAIL_DOMAIN}`}
                                         required
                                         className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-[#E2E5E9] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                                     />

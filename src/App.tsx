@@ -7,6 +7,8 @@ import { MainLayout } from "./components/layout/MainLayout"
 import { supabase } from "@/lib/supabase"
 import type { Session } from "@supabase/supabase-js"
 import { PageLoadingProvider } from "@/context/PageLoadingContext"
+import { DashboardAccessProvider } from "@/context/DashboardAccessProvider"
+import { useDashboardAccess } from "@/context/useDashboardAccess"
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then(module => ({ default: module.Dashboard })))
 const AllClients = lazy(() => import("./pages/AllClients").then(module => ({ default: module.AllClients })))
@@ -70,6 +72,12 @@ function ProtectedLayout({ session }: { session: Session | null }) {
     return <AppLayout />
 }
 
+function SuperadminLayout() {
+    const { isSuperadmin } = useDashboardAccess()
+    if (!isSuperadmin) return <Navigate to="/clients" replace />
+    return <Outlet />
+}
+
 function SEOProtectedLayout({ session }: { session: Session | null }) {
     if (!session) return <Navigate to="/login" replace />
     return <SEOLayout />
@@ -105,18 +113,22 @@ function App() {
     return (
         <ThemeProvider>
             <PageLoadingProvider>
-                <BrowserRouter>
-                    <TopLoadingBar />
-                    <Suspense fallback={<PageLoader />}>
-                        <Routes>
-                            <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
+                {session ? (
+                    <DashboardAccessProvider session={session}>
+                        <BrowserRouter>
+                            <TopLoadingBar />
+                            <Suspense fallback={<PageLoader />}>
+                                <Routes>
+                            <Route path="/login" element={<Navigate to="/" replace />} />
                             <Route element={<ProtectedLayout session={session} />}>
                                 <Route path="/" element={<Dashboard />} />
                                 <Route path="/clients" element={<AllClients />} />
-                                <Route path="/clients/:clientId/integrations" element={<ClientIntegrations />} />
                                 <Route path="/clients/:clientId" element={<Clients />} />
+                                <Route element={<SuperadminLayout />}>
+                                    <Route path="/clients/:clientId/integrations" element={<ClientIntegrations />} />
+                                </Route>
                                 <Route path="/tasks" element={<Tasks />} />
-                <Route path="/tasks/:taskId" element={<TaskDetail />} />
+                                <Route path="/tasks/:taskId" element={<TaskDetail />} />
                                 <Route path="/calendar" element={<CalendarPage />} />
                                 <Route path="/profile" element={<Profile />} />
                                 <Route path="/settings" element={<Settings />} />
@@ -159,9 +171,20 @@ function App() {
                             <Route element={<DesignProtectedLayout session={session} />}>
                                 <Route path="/design" element={<DesignDashboard />} />
                             </Route>
-                        </Routes>
-                    </Suspense>
-                </BrowserRouter>
+                                </Routes>
+                            </Suspense>
+                        </BrowserRouter>
+                    </DashboardAccessProvider>
+                ) : (
+                    <BrowserRouter>
+                        <Suspense fallback={<PageLoader />}>
+                            <Routes>
+                                <Route path="/login" element={<Login />} />
+                                <Route path="*" element={<Navigate to="/login" replace />} />
+                            </Routes>
+                        </Suspense>
+                    </BrowserRouter>
+                )}
             </PageLoadingProvider>
         </ThemeProvider>
     )

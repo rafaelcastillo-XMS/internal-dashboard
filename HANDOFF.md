@@ -16,7 +16,7 @@ must be added in both places**, they don't share code.
 
 - `public.clients` (Supabase, project `sjpvyxdyleebhqlmqscy`) is the source of
   truth for clients: id slug, name, status, gsc_property, ga4_property_id,
-  sem_account_id, notebooklm_*. Managed via the Clients view
+  sem_account_id. Managed via the Clients view
   (`AllClients.tsx` / `ClientIntegrations.tsx`).
 - SEO and SEM client selection are **intentionally not synced** — future plan
   is per-module user roles. Don't reintroduce a shared selector.

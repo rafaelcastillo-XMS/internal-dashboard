@@ -8,9 +8,11 @@ import { hasService } from "@/features/clients/clientServices"
 import { fetchClientProfiles } from "@/features/clients/profiles"
 import { fetchNotionCovers } from "@/features/clients/notionCovers"
 import { supabase } from "@/lib/supabase"
+import { useDashboardAccess } from "@/context/useDashboardAccess"
 
 export function AllClients() {
   const navigate = useNavigate()
+  const { isSuperadmin } = useDashboardAccess()
   const [clients, setClients] = useState<ClientRecord[]>([])
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -38,6 +40,7 @@ export function AllClients() {
   useEffect(() => { loadClients() }, [loadClients])
 
   const addClient = useCallback(async () => {
+    if (!isSuperadmin) return
     const name = newName.trim()
     if (!name) return
     setCreating(true)
@@ -52,7 +55,7 @@ export function AllClients() {
     } finally {
       setCreating(false)
     }
-  }, [navigate, newName])
+  }, [isSuperadmin, navigate, newName])
 
   const cardClass =
     "rounded-xl border border-stroke bg-white shadow-none transition-all duration-200 hover:brightness-90 dark:border-strokedark dark:bg-boxdark"
@@ -80,13 +83,15 @@ export function AllClients() {
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => { setNewName(""); setCreateError(null); setAdding(true) }}
-                    className="ml-auto flex items-center gap-2 rounded-lg border border-stroke bg-white px-3 py-2 text-sm font-medium text-body transition-colors hover:border-[#1A72D9]/25 hover:text-[#1A72D9] disabled:cursor-not-allowed disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-bodydark"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add client
-                  </button>
+                  {isSuperadmin && (
+                    <button
+                      onClick={() => { setNewName(""); setCreateError(null); setAdding(true) }}
+                      className="ml-auto flex items-center gap-2 rounded-lg border border-stroke bg-white px-3 py-2 text-sm font-medium text-body transition-colors hover:border-[#1A72D9]/25 hover:text-[#1A72D9] disabled:cursor-not-allowed disabled:opacity-60 dark:border-strokedark dark:bg-boxdark dark:text-bodydark"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add client
+                    </button>
+                  )}
                 </div>
 
                 {loadError && (
@@ -127,14 +132,16 @@ export function AllClients() {
                               <h3 className="truncate font-semibold leading-tight text-[var(--text-primary)]">{client.name}</h3>
                               {client.gsc_property && <p className="mt-0.5 truncate text-xs leading-tight text-[var(--text-muted)]">{client.gsc_property.replace(/^sc-domain:/, '')}</p>}
                             </div>
-                            <button
-                              type="button"
-                              aria-label={`Configure ${client.name}`}
-                              onClick={() => navigate(`/clients/${client.id}/integrations`)}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-stroke bg-white text-body transition-colors hover:border-[#1A72D9]/25 hover:text-[#1A72D9] dark:border-strokedark dark:bg-boxdark dark:text-bodydark shrink-0"
-                            >
-                              <Settings2 className="h-3.5 w-3.5" />
-                            </button>
+                            {isSuperadmin && (
+                              <button
+                                type="button"
+                                aria-label={`Configure ${client.name}`}
+                                onClick={() => navigate(`/clients/${client.id}/integrations`)}
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-stroke bg-white text-body transition-colors hover:border-[#1A72D9]/25 hover:text-[#1A72D9] dark:border-strokedark dark:bg-boxdark dark:text-bodydark"
+                              >
+                                <Settings2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
                           <div className="h-2 cursor-pointer" onClick={() => navigate(`/clients/${client.id}`)} aria-label={`Open ${client.name}`} />
 
@@ -167,7 +174,7 @@ export function AllClients() {
         </div>
       </div>
 
-      {adding && (
+      {isSuperadmin && adding && (
         <div
           className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
           onClick={() => !creating && setAdding(false)}

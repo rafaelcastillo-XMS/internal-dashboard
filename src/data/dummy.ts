@@ -36,7 +36,7 @@ export const clients: Client[] = [
         status: "active",
         color: "bg-emerald-600",
         tagColor: "text-emerald-700 bg-emerald-50",
-        note: "Pilot client for the live data layer. NotebookLM is the first connected integration and will power the client chat with real workshop knowledge.",
+        note: "Pilot client for the live data layer and connected reporting services.",
         pocOwnerName: "Eric Holt & Rafael",
         levelOfService: "Pilot Integration",
         phone: "+1 512 555 0197",

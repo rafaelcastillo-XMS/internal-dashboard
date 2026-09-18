@@ -16,7 +16,7 @@ authenticated application.
 - Social dashboards for Facebook, Instagram, and YouTube. The Facebook screen
   reads live page and post data from the Meta Graph API; reach, impressions and
   engagement counts stay locked until the Meta app clears App Review
-- Client integrations for Notion, NotebookLM, and Google services
+- Client integrations for Notion and Google services
 - Internal AI assistance powered by Anthropic
 
 ## SEO audit scoring prompt

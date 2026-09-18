@@ -1,0 +1,82 @@
+[
+  {
+    "table": "seo_client_reports",
+    "status": 401,
+    "anonymous_rows_visible": null
+  },
+  {
+    "table": "seo_initial_audit_items",
+    "status": 401,
+    "anonymous_rows_visible": null
+  },
+  {
+    "table": "seo_onpage_audits",
+    "status": 401,
+    "anonymous_rows_visible": null
+  },
+  {
+    "table": "sem_ads_daily",
+    "status": 401,
+    "anonymous_rows_visible": null
+  },
+  {
+    "table": "seo_initial_findings",
+    "status": 200,
+    "anonymous_rows_visible": true
+  },
+  {
+    "table": "seo_ahrefs_snapshots",
+    "status": 206,
+    "anonymous_rows_visible": true
+  },
+  {
+    "table": "sem_guarantee_daily",
+    "status": 206,
+    "anonymous_rows_visible": true
+  },
+  {
+    "table": "sem_yearly_ads",
+    "status": 200,
+    "anonymous_rows_visible": false
+  },
+  {
+    "table": "sem_yearly_guarantee",
+    "status": 200,
+    "anonymous_rows_visible": false
+  },
+  {
+    "table": "sem_report_budgets",
+    "status": 206,
+    "anonymous_rows_visible": true
+  },
+  {
+    "table": "sem_monthly_report_rows",
+    "status": 200,
+    "anonymous_rows_visible": false
+  },
+  {
+    "table": "sem_monthly_report_values",
+    "status": 200,
+    "anonymous_rows_visible": false
+  },
+  {
+    "table": "social_weekly_goals",
+    "status": 206,
+    "anonymous_rows_visible": true
+  },
+  {
+    "table": "sem_monthly_reports",
+    "status": 401,
+    "anonymous_rows_visible": null
+  },
+  {
+    "table": "clients",
+    "status": 200,
+    "anonymous_rows_visible": false
+  },
+  {
+    "table": "dashboard_user_roles",
+    "status": 404,
+    "anonymous_rows_visible": null
+  }
+]

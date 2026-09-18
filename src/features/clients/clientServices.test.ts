@@ -6,7 +6,6 @@ const base: ClientRecord = {
     id: "acme", name: "Acme", status: "active",
     gsc_property: null, ga4_property_id: null,
     sem_account_id: null, lsa_account_id: null, sem_enabled: false,
-    notebooklm_enabled: false, notebooklm_id: null, notebooklm_title: null,
 }
 
 describe("clientServices", () => {
