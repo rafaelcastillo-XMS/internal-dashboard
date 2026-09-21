@@ -194,13 +194,21 @@ export async function completeGoogleAuthExchange({ code, redirectUri, requiredEm
   return { ok: true, email }
 }
 
-// ─── GBP-only token (separate Google account that owns the Business Profiles) ─
+// ─── Shared XMS account token (the account the clients grant access to) ──────
+// Owns the Business Profiles, and — once SEO_GOOGLE_ACCOUNT=shared — Search
+// Console and GA4 too. Google Ads stays on the main token: Ads is reached
+// through the MCC, which only GOOGLE_REQUIRED_EMAIL belongs to.
 // Uses credentials-gbp.json if present (e.g. Steven's GCP client with approved
 // GBP API quota), else falls back to the main credentials.json.
+// File name kept as token-gbp.json: production mounts it by path (Dokploy).
 
 const GBP_TOKEN_PATH = path.resolve(__dirname, "..", "token-gbp.json")
 const GBP_CREDS_PATH = path.resolve(__dirname, "..", "credentials-gbp.json")
-const GBP_SCOPES = ["https://www.googleapis.com/auth/business.manage"]
+const GBP_SCOPES = [
+  "https://www.googleapis.com/auth/business.manage",
+  "https://www.googleapis.com/auth/webmasters.readonly",
+  "https://www.googleapis.com/auth/analytics.readonly",
+]
 
 function getGbpClientCreds() {
   const credsPath = fs.existsSync(GBP_CREDS_PATH) ? GBP_CREDS_PATH : CREDS_PATH

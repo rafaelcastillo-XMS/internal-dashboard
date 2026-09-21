@@ -63,9 +63,15 @@ async function getGbpAccessToken() {
   return refreshFromFile(hasGbpToken() ? GBP_TOKEN_PATH : MAIN_TOKEN_PATH)
 }
 
-// GA4 / GSC calls: always the main (eva@) token
+// GA4 / GSC calls: the shared XMS account only when explicitly switched over,
+// so connecting the shared account for GBP alone cannot silently move Search
+// Console and GA4 to an account that was never granted those properties.
+export function usesSharedSeoAccount() {
+  return process.env.SEO_GOOGLE_ACCOUNT === "shared" && hasGbpToken()
+}
+
 export async function getAccessToken() {
-  return refreshFromFile(MAIN_TOKEN_PATH)
+  return refreshFromFile(usesSharedSeoAccount() ? GBP_TOKEN_PATH : MAIN_TOKEN_PATH)
 }
 
 async function gFetch(url) {

@@ -3,13 +3,17 @@ import { CORS_HEADERS as CORS } from "../_shared/cors.ts"
 
 // ── Google OAuth ────────────────────────────────────────────────────────────
 
+// Search Console and GA4 move to the shared XMS account by setting
+// SEO_REFRESH_TOKEN. Google Ads (the sem function) stays on
+// GOOGLE_REFRESH_TOKEN: it reaches Ads through the MCC, which only the main
+// account belongs to.
 async function getAccessToken(): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: Deno.env.get("GOOGLE_REFRESH_TOKEN")!,
+      refresh_token: Deno.env.get("SEO_REFRESH_TOKEN") ?? Deno.env.get("GOOGLE_REFRESH_TOKEN")!,
       client_id: Deno.env.get("GOOGLE_CLIENT_ID")!,
       client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET")!,
     }),
