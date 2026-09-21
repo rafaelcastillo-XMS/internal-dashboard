@@ -453,12 +453,20 @@ export function ReportTable({
   table,
   onCellChange,
   maxRows,
+  hideStatusInPdf = false,
+  isPdfExport = false,
+  searchTermsLayout = false,
 }: {
   table: ReportTableData
   onCellChange: (rowIndex: number, key: string, value: string) => void
   maxRows?: number
+  hideStatusInPdf?: boolean
+  isPdfExport?: boolean
+  searchTermsLayout?: boolean
 }) {
   const visibleRows = typeof maxRows === 'number' ? table.rows.slice(0, maxRows) : table.rows
+  const columns = table.columns.filter((column) => !(isPdfExport && hideStatusInPdf && column.key === 'status'))
+  const columnOpacity = (key: string) => hideStatusInPdf && key === 'status' ? 'opacity-50' : ''
 
   return (
     <div className="overflow-hidden rounded-lg border border-[#D8E4F2] bg-white shadow-[0_10px_24px_rgba(0,59,143,0.06)]">
@@ -466,11 +474,18 @@ export function ReportTable({
         <h3 className="text-sm font-semibold text-[#062A63]">{table.title}</h3>
       </div>
       <div className="overflow-x-auto custom-scrollbar">
-        <table className="w-full min-w-[720px] text-xs">
+        <table className={`w-full min-w-[720px] text-xs ${searchTermsLayout ? 'table-fixed' : ''}`}>
+          {searchTermsLayout && (
+            <colgroup>
+              {columns.map((column) => (
+                <col key={column.key} style={{ width: column.key === 'term' ? '52%' : `${48 / Math.max(columns.length - 1, 1)}%` }} />
+              ))}
+            </colgroup>
+          )}
           <thead>
             <tr className="bg-[#EAF6FF] text-left text-[10px] font-bold uppercase tracking-[0.08em] text-[#003B8F]">
-              {table.columns.map((column) => (
-                <th key={column.key} className={`px-2 py-2 ${column.align === 'right' ? 'text-right' : ''}`}>
+              {columns.map((column) => (
+                <th key={column.key} className={`px-2 py-2 ${columnOpacity(column.key)} ${column.align === 'right' ? 'text-right' : ''}`}>
                   {column.label}
                 </th>
               ))}
@@ -479,15 +494,15 @@ export function ReportTable({
           <tbody className="divide-y divide-[#D8E4F2]">
             {visibleRows.length === 0 && (
               <tr>
-                <td colSpan={table.columns.length} className="px-4 py-6 text-center text-sm font-medium text-slate-500">
+                <td colSpan={columns.length} className="px-4 py-6 text-center text-sm font-medium text-slate-500">
                   {table.dataSource?.message ?? 'No rows available for this report table.'}
                 </td>
               </tr>
             )}
             {visibleRows.map((row, rowIndex) => (
               <tr key={rowIndex} className="hover:bg-[#F7FBFF]">
-                {table.columns.map((column) => (
-                  <td key={column.key} className="px-1.5 py-1 align-top">
+                {columns.map((column) => (
+                  <td key={column.key} className={`px-1.5 py-1 align-top ${columnOpacity(column.key)}`}>
                     <input
                       value={row[column.key] ?? ''}
                       onChange={(event) => onCellChange(rowIndex, column.key, event.target.value)}
@@ -1237,10 +1252,12 @@ export function ReportSlide({
   report,
   slide,
   onChange,
+  isPdfExport = false,
 }: {
   report: Report
   slide: Slide
   onChange: (slide: Slide) => void
+  isPdfExport?: boolean
 }) {
   const updateContent = (patch: Partial<SlideContent>) => {
     onChange({ ...slide, content: { ...slide.content, ...patch } })
@@ -1504,7 +1521,7 @@ export function ReportSlide({
                   className="max-h-full max-w-full object-contain"
                 />
               ) : (
-                <label htmlFor={imageInputId} className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-6 text-center text-[#0057C2] transition hover:bg-[#EAF6FF]">
+                <label htmlFor={imageInputId} data-pdf-hide="true" className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 px-6 text-center text-[#0057C2] transition hover:bg-[#EAF6FF]">
                   <span className="flex h-10 w-10 items-center justify-center rounded-md border border-[#B9D8F4] bg-white">
                     <ImagePlus className="h-5 w-5" />
                   </span>
@@ -1515,6 +1532,7 @@ export function ReportSlide({
                 id={imageInputId}
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
+                data-pdf-hide="true"
                 onChange={(event) => {
                   handleSupportingImageChange(event.target.files?.[0])
                   event.currentTarget.value = ''
@@ -1522,7 +1540,7 @@ export function ReportSlide({
                 className="sr-only"
               />
               {slide.content.supportingImageSrc && (
-                <div className="absolute right-2 top-2 flex gap-2">
+                <div className="absolute right-2 top-2 flex gap-2" data-pdf-hide="true">
                   <label htmlFor={imageInputId} className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-white px-3 text-xs font-bold text-[#0057C2] shadow">
                     Replace
                   </label>
@@ -1620,6 +1638,14 @@ export function ReportSlide({
               />
             ))}
           </div>
+          <div className="mt-4 shrink-0 rounded-lg border border-[#D8E4F2] bg-[#F7FBFF] px-5 py-4">
+            <p className="text-sm leading-6 text-[#062A63]">
+              Review our additional guidelines for call handling, lead follow-up, and Google Local Services Ads requirements. Share this guide with your team and revisit it for updates.
+            </p>
+            <a href="/sem-reports/client-guidelines.html" target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm font-bold text-[#0057C2] underline underline-offset-4">
+              View additional guidelines &amp; best practices
+            </a>
+          </div>
         </div>
       </section>
     )
@@ -1672,6 +1698,9 @@ export function ReportSlide({
           <ReportTable
             key={table.id}
             table={table}
+            hideStatusInPdf={slide.type === 'keywords'}
+            isPdfExport={isPdfExport}
+            searchTermsLayout={slide.type === 'search_terms'}
             maxRows={slide.type === 'keywords' ? 7 : slide.type === 'search_terms' ? 9 : undefined}
             onCellChange={(rowIndex, key, value) => updateTableCell(table.id, rowIndex, key, value)}
           />

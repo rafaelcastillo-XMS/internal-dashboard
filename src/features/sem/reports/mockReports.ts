@@ -180,7 +180,7 @@ export function createSlidesTemplate(
       type: 'search_terms',
       title: 'Google Ads - Search Terms Stats and Performance',
       order: 5,
-      notes: 'Use recommendations to document what should be added, excluded, or watched next month.',
+      notes: 'Review search term performance and use the analysis below to document next steps.',
       content: {
         tables: [
           {
@@ -192,16 +192,15 @@ export function createSlidesTemplate(
               { key: 'clicks', label: 'Clicks', align: 'right' },
               { key: 'cost', label: 'Cost', align: 'right' },
               { key: 'conversions', label: 'Conv.', align: 'right' },
-              { key: 'action', label: 'Action / Recommendation' },
             ],
             rows: [
-              { term: 'garage door repair same day', impressions: '1,184', clicks: '74', cost: '$355.42', conversions: '8.0', action: 'Add as exact keyword' },
-              { term: 'broken spring repair near me', impressions: '942', clicks: '58', cost: '$281.20', conversions: '6.0', action: 'Add as phrase keyword' },
-              { term: 'garage door repair jobs', impressions: '320', clicks: '18', cost: '$76.10', conversions: '0', action: 'Add negative keyword' },
-              { term: 'diy garage door opener repair', impressions: '284', clicks: '12', cost: '$44.85', conversions: '0', action: 'Exclude DIY intent' },
-              { term: 'emergency garage door repair', impressions: '248', clicks: '21', cost: '$118.90', conversions: '3.0', action: 'Keep monitored' },
-              { term: 'garage door opener installation', impressions: '221', clicks: '16', cost: '$92.44', conversions: '2.0', action: 'Review bid coverage' },
-              { term: 'commercial garage door repair', impressions: '176', clicks: '11', cost: '$66.32', conversions: '1.0', action: 'Segment if volume grows' },
+              { term: 'garage door repair same day', impressions: '1,184', clicks: '74', cost: '$355.42', conversions: '8.0' },
+              { term: 'broken spring repair near me', impressions: '942', clicks: '58', cost: '$281.20', conversions: '6.0' },
+              { term: 'garage door repair jobs', impressions: '320', clicks: '18', cost: '$76.10', conversions: '0' },
+              { term: 'diy garage door opener repair', impressions: '284', clicks: '12', cost: '$44.85', conversions: '0' },
+              { term: 'emergency garage door repair', impressions: '248', clicks: '21', cost: '$118.90', conversions: '3.0' },
+              { term: 'garage door opener installation', impressions: '221', clicks: '16', cost: '$92.44', conversions: '2.0' },
+              { term: 'commercial garage door repair', impressions: '176', clicks: '11', cost: '$66.32', conversions: '1.0' },
             ],
           },
         ],

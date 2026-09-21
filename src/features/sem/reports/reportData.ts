@@ -1221,15 +1221,6 @@ export async function getGoogleAdsBreakdownReportData(
   }
 }
 
-function searchTermAction(row: GoogleAdsSearchTermApiRow) {
-  const conversions = safeNumber(row.conversions)
-  const clicks = safeNumber(row.clicks)
-  const cost = safeNumber(row.cost)
-  if (conversions > 0) return 'Keep monitored'
-  if (clicks >= 10 || cost >= 50) return 'Review / add negative'
-  return 'Monitor'
-}
-
 async function getGoogleAdsSearchTermReportData(clientId: string, month: string, year: number) {
   const dateRange = getMonthlyReportDateRange(month, year)
   let accountId = ''
@@ -1259,7 +1250,6 @@ async function getGoogleAdsSearchTermReportData(clientId: string, month: string,
         clicks: formatNumber(safeNumber(row.clicks)),
         cost: formatCurrency(safeNumber(row.cost)),
         conversions: formatNumber(safeNumber(row.conversions), 1),
-        action: searchTermAction(row),
       })),
       analysis: rows.length
         ? `Top ${rows.length} search terms loaded from Google Ads for ${dateRange.start} through ${dateRange.end}, ordered by clicks from highest to lowest.`

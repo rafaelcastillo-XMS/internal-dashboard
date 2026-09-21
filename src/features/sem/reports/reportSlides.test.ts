@@ -3,6 +3,25 @@ import { normalizeReportSlides } from './reportSlides'
 import type { Slide } from './types'
 
 describe('normalizeReportSlides', () => {
+  it('removes legacy search-term actions without changing other table data or the original report', () => {
+    const slides: Slide[] = [{
+      id: 'search-terms', type: 'search_terms', title: 'Search Terms', order: 5, notes: '',
+      content: { tables: [{
+        id: 'search-terms-table', title: 'Search Term Review',
+        columns: [{ key: 'term', label: 'Search term' }, { key: 'action', label: 'Action / Recommendation' }, { key: 'clicks', label: 'Clicks' }],
+        rows: [{ term: 'emergency repair', action: 'Monitor', clicks: '42' }],
+      }] },
+    }]
+    const normalized = normalizeReportSlides(slides)
+    expect(normalized[0].content.tables?.[0]).toEqual({
+      id: 'search-terms-table', title: 'Search Term Review',
+      columns: [{ key: 'term', label: 'Search term' }, { key: 'clicks', label: 'Clicks' }],
+      rows: [{ term: 'emergency repair', clicks: '42' }],
+    })
+    expect(slides[0].content.tables?.[0].rows[0].action).toBe('Monitor')
+    expect(normalizeReportSlides(normalized)).toEqual(normalized)
+  })
+
   it('removes the strategy slide and renumbers the remaining slides', () => {
     const slides = [
       { id: 'cover', type: 'cover', title: 'Cover', order: 1, notes: '', content: {} },

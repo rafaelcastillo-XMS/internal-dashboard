@@ -41,6 +41,23 @@ export function normalizeReportSlides(slides: Slide[]): Slide[] {
   const expandedSlides: Slide[] = []
 
   for (const slide of sortedSlides) {
+    if (slide.type === 'search_terms') {
+      expandedSlides.push({
+        ...slide,
+        content: {
+          ...slide.content,
+          tables: slide.content.tables?.map((table) => ({
+            ...table,
+            columns: table.columns.filter((column) => column.key !== 'action'),
+            rows: table.rows.map((row) => Object.fromEntries(
+              Object.entries(row).filter(([key]) => key !== 'action'),
+            )),
+          })),
+        },
+      })
+      continue
+    }
+
     if (slide.type === 'highlights') {
       const shouldAddSummarySlide = Array.isArray(slide.content.highlights) && !hasHighlightsSummarySlide
       const dividerContent = { ...slide.content }

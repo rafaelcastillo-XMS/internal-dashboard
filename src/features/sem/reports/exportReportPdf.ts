@@ -288,7 +288,7 @@ export async function exportReportToPdf(report: Report) {
               background: '#ffffff',
             },
           },
-          createElement(ReportSlide, { report, slide, onChange: () => undefined }),
+          createElement(ReportSlide, { report, slide, onChange: () => undefined, isPdfExport: true }),
         )),
       ))
     })
@@ -332,6 +332,26 @@ export async function exportReportToPdf(report: Report) {
         undefined,
         'FAST',
       )
+
+      // Slides are rasterized, so restore clickable links as PDF annotations.
+      const slideBounds = slideNodes[index].getBoundingClientRect()
+      slideNodes[index].querySelectorAll<HTMLAnchorElement>('a[href]').forEach((link) => {
+        if (!/^https?:$/.test(new URL(link.href).protocol)) return
+        Array.from(link.getClientRects()).forEach((rect) => {
+          const left = Math.max(rect.left, slideBounds.left)
+          const top = Math.max(rect.top, slideBounds.top)
+          const right = Math.min(rect.right, slideBounds.right)
+          const bottom = Math.min(rect.bottom, slideBounds.bottom)
+          if (right <= left || bottom <= top) return
+          pdf.link(
+            (left - slideBounds.left) * pageWidth / slideBounds.width,
+            (top - slideBounds.top) * pageHeight / slideBounds.height,
+            (right - left) * pageWidth / slideBounds.width,
+            (bottom - top) * pageHeight / slideBounds.height,
+            { url: link.href },
+          )
+        })
+      })
     }
 
     pdf.save(`${report.clientName}-${report.month}-${report.year}-SEM-Report.pdf`.replace(/\s+/g, '-'))
