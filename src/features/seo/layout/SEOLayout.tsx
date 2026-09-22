@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { SEOSidebar } from './SEOSidebar'
 import { Header } from '@/components/layout/Header'
 import { SidebarProvider } from '@/context/SidebarContext'
+import { SeoGoogleConnection } from '../components/SeoGoogleConnection'
 
 export function SEOLayout() {
   return (
@@ -11,6 +12,7 @@ export function SEOLayout() {
         <div className="flex flex-col flex-1 h-full min-w-0 relative">
           <Header />
           <main className="internal-dashboard-main flex-1 overflow-y-auto overflow-x-hidden relative">
+            <SeoGoogleConnection compact />
             <Outlet />
           </main>
         </div>

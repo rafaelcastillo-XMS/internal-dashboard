@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom"
 import { ExternalLink, Puzzle } from "lucide-react"
 import { getClients } from "@/features/clients/repository"
 import { fetchClientProfiles } from "@/features/clients/profiles"
+import { SeoGoogleConnection } from "@/features/seo/components/SeoGoogleConnection"
 
 export function Settings() {
     const navigate = useNavigate()
@@ -30,6 +31,8 @@ export function Settings() {
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-[#E2E5E9]">Settings</h1>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Dashboard preferences and integrations</p>
                 </div>
+
+                <SeoGoogleConnection />
 
                 <motion.div
                     initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}

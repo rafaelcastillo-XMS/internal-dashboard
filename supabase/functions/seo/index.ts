@@ -1,27 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { CORS_HEADERS as CORS } from "../_shared/cors.ts"
+import { createSeoGoogleConnection, SeoConnectionError } from "./googleConnection.ts"
 
 // ── Google OAuth ────────────────────────────────────────────────────────────
 
-// Search Console and GA4 move to the shared XMS account by setting
-// SEO_REFRESH_TOKEN. Google Ads (the sem function) stays on
-// GOOGLE_REFRESH_TOKEN: it reaches Ads through the MCC, which only the main
-// account belongs to.
-async function getAccessToken(): Promise<string> {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: Deno.env.get("SEO_REFRESH_TOKEN") ?? Deno.env.get("GOOGLE_REFRESH_TOKEN")!,
-      client_id: Deno.env.get("GOOGLE_CLIENT_ID")!,
-      client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET")!,
-    }),
-  })
-  const data = await res.json()
-  if (!data.access_token) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`)
-  return data.access_token
-}
+const { getAccessToken, getStatus } = createSeoGoogleConnection({ env: name => Deno.env.get(name) })
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -56,6 +39,14 @@ async function fetchProperties(token: string) {
 
   const gscData = await gscRes.json()
   const ga4Data = await ga4Res.json()
+  if (!gscRes.ok || !ga4Res.ok) {
+    const status = !gscRes.ok ? gscRes.status : ga4Res.status
+    throw new SeoConnectionError(
+      status === 401 ? "SEO_RECONNECT_REQUIRED" : "SEO_PROPERTIES_UNAVAILABLE",
+      status === 401 ? "Google requires a new SEO authorization." : "Google could not load SEO properties. Check account permissions and try again.",
+      502,
+    )
+  }
 
   const gscSites = (gscData.siteEntry ?? []).map((s: Record<string, string>) => ({
     url: s.siteUrl,
@@ -413,7 +404,9 @@ serve(async (req) => {
 
   try {
     let result
-    if (segment === "properties") {
+    if (segment === "connection") {
+      result = await getStatus()
+    } else if (segment === "properties") {
       const token = await getAccessToken()
       result = await fetchProperties(token)
     } else if (segment === "gsc") {
@@ -435,12 +428,12 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify(result), {
-      headers: { ...CORS, "Content-Type": "application/json" },
+      headers: { ...CORS, "Content-Type": "application/json", "Cache-Control": "no-store" },
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 500,
+    return new Response(JSON.stringify({ error: msg, code: e instanceof SeoConnectionError ? e.code : "SEO_REQUEST_FAILED" }), {
+      status: e instanceof SeoConnectionError ? e.status : 500,
       headers: { ...CORS, "Content-Type": "application/json" },
     })
   }

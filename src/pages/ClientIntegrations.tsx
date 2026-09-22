@@ -14,6 +14,7 @@ import { supabase } from "@/lib/supabase"
 import notionIcon from "@/assets/notion-icon.svg"
 import googleAdsIcon from "@/assets/google-ads-icon.png"
 import openaiIcon from "@/assets/openai-icon.svg"
+import { SeoGoogleConnection } from "@/features/seo/components/SeoGoogleConnection"
 
 const tabs = ["Integrations", "Data"] as const
 type Tab = typeof tabs[number]
@@ -606,7 +607,7 @@ export function ClientIntegrations() {
                                                 </svg>
                                             </div>
                                             <div>
-                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">Google APIs</h3>
+                                                <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">Google Ads connection</h3>
                                                 <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
                                                     loadingGoogle ? "text-slate-400" :
                                                     googleAuthorized ? "text-emerald-600 dark:text-emerald-400" :
@@ -634,7 +635,7 @@ export function ClientIntegrations() {
                                     )}
                                     {googleWrongAccount && (
                                         <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                                            SEO and SEM are locked to {googleStatus?.requiredEmail || "eva@xperienceusa.com"}.
+                                            Google Ads uses {googleStatus?.requiredEmail || "eva@xperienceusa.com"}.
                                         </p>
                                     )}
 
@@ -643,8 +644,7 @@ export function ClientIntegrations() {
                                         <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Covers</label>
                                         <div className="space-y-1.5">
                                             {[
-                                                { label: "Search Console", color: "bg-blue-500" },
-                                                { label: "Google Analytics 4", color: "bg-orange-500" },
+                                                { label: "Google Ads / SEM", color: "bg-blue-500" },
                                             ].map(api => (
                                                 <div key={api.label} className="flex items-center gap-2.5">
                                                     <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${googleAuthorized ? api.color : "bg-slate-300 dark:bg-slate-600"}`} />
@@ -666,10 +666,10 @@ export function ClientIntegrations() {
                                         >
                                             <RefreshCw className={`h-4 w-4 ${loadingGoogle ? "animate-spin" : ""}`} />
                                             {googleAuthorized
-                                                ? "Reconnect Google Account"
+                                                ? "Reconnect Google Ads Account"
                                                 : googleWrongAccount
                                                     ? `Reconnect as ${googleStatus?.requiredEmail || "eva@xperienceusa.com"}`
-                                                    : "Connect Google Account"}
+                                                    : "Connect Google Ads Account"}
                                         </button>
                                     </div>
                                 </div>
@@ -694,6 +694,8 @@ export function ClientIntegrations() {
                                             </p>
                                         </div>
                                     </div>
+
+                                    <SeoGoogleConnection />
 
                                     <div className="mt-5 space-y-2">
                                         <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Search Console Property</label>
