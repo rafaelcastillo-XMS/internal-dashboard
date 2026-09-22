@@ -344,7 +344,7 @@ export function createSlidesTemplate(
       order: 13,
       notes: 'Close with a concise client-facing message.',
       content: {
-        finalMessage: 'Thank you for your business. If you have any questions let us know, we are here to help.',
+        finalMessage: 'Thank you for your business.\nIf you have any questions let us know, we are here to help.',
       },
     },
   ]
@@ -386,4 +386,3 @@ export function createReportFromTemplate(input: {
     updatedAt: createdAt,
   }
 }
-

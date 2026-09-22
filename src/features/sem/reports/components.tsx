@@ -1444,6 +1444,12 @@ export function ReportSlide({
   }
 
   if (slide.type === 'thank_you') {
+    const message = slide.content.finalMessage ?? ''
+    // Support existing reports that stored the closing copy as one paragraph.
+    const parts = message.match(/^([^\n]*?)(?:\r?\n|[ \t]+(?=If\b))([\s\S]*)$/i)
+    const headline = parts ? parts[1] : message
+    const followUp = parts ? parts[2] : ''
+
     return (
       <section
         className={`relative flex ${slideFrameClass} items-center justify-center border border-[#0B67D1] bg-[#0057C2] p-10 text-center text-white shadow-[0_24px_60px_rgba(0,59,143,0.22)]`}
@@ -1464,12 +1470,20 @@ export function ReportSlide({
         />
         
           <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-8 text-center">
-            <textarea
-              value={slide.content.finalMessage ?? ''}
-              onChange={(event) => updateContent({ finalMessage: event.target.value })}
-              rows={4}
-              className="w-full max-w-3xl resize-none bg-transparent text-center text-5xl font-bold leading-tight text-white outline-none placeholder:text-white/50 max-md:text-3xl"
-            />
+            <div className="flex w-full max-w-4xl flex-col gap-5">
+              <AutoResizeSlideTitle
+                value={headline}
+                onChange={(value) => updateContent({ finalMessage: `${value}\n${followUp}` })}
+                ariaLabel="Thank you headline"
+                className="text-center text-[52px] font-bold leading-tight text-white placeholder:text-white/50"
+              />
+              <AutoResizeSlideTitle
+                value={followUp}
+                onChange={(value) => updateContent({ finalMessage: `${headline}\n${value}` })}
+                ariaLabel="Thank you follow-up message"
+                className="text-center text-[32px] font-medium leading-snug text-white placeholder:text-white/50"
+              />
+            </div>
             <div className="relative rounded-md px-4 py-3">
               <XMSLogo mode="dark" height={134} />
             </div>
