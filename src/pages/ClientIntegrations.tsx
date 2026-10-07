@@ -115,6 +115,8 @@ export function ClientIntegrations() {
     // OpenAI Ads API token (write-only: the browser can save it but never read it back)
     const [openaiToken, setOpenaiToken] = useState("")
     const [openaiTokenSet, setOpenaiTokenSet] = useState<string | null>(null)
+    const [loadingOpenaiToken, setLoadingOpenaiToken] = useState(true)
+    const [openaiStatusError, setOpenaiStatusError] = useState<string | null>(null)
     const [savingToken, setSavingToken] = useState(false)
     const [tokenMessage, setTokenMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -264,7 +266,10 @@ export function ClientIntegrations() {
     // Whether an OpenAI Ads token exists (metadata only — the token itself is never read back)
     useEffect(() => {
         const id = client?.id
-        if (!id) { setOpenaiTokenSet(null); return }
+        if (!id) { setOpenaiTokenSet(null); setLoadingOpenaiToken(false); return }
+        setLoadingOpenaiToken(true)
+        setOpenaiTokenSet(null)
+        setOpenaiStatusError(null)
         let active = true
         supabase
             .from("client_ad_secrets")
@@ -272,8 +277,10 @@ export function ClientIntegrations() {
             .eq("client_id", id)
             .eq("provider", "openai_ads")
             .maybeSingle()
-            .then(({ data }) => {
+            .then(({ data, error }) => {
                 if (!active) return
+                setLoadingOpenaiToken(false)
+                if (error) { setOpenaiStatusError(error.message); return }
                 setOpenaiTokenSet(data?.updated_at ? new Date(data.updated_at).toLocaleDateString() : null)
             })
         return () => { active = false }
@@ -381,6 +388,7 @@ export function ClientIntegrations() {
             if (error) throw error
             setOpenaiToken("")
             setOpenaiTokenSet(new Date().toLocaleDateString())
+            setOpenaiStatusError(null)
             setTokenMessage({ ok: true, text: "Token saved (write-only — it cannot be read back here)." })
         } catch (err) {
             setTokenMessage({ ok: false, text: err instanceof Error ? err.message : "Unable to save token." })
@@ -954,7 +962,7 @@ export function ClientIntegrations() {
                                             <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
                                                 openaiTokenSet ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
                                             }`}>
-                                                {openaiTokenSet ? "Configured" : "Not configured"}
+                                                {loadingOpenaiToken ? "Checking…" : openaiStatusError ? "Unable to check" : openaiTokenSet ? "Token saved" : "Not configured"}
                                             </p>
                                         </div>
                                     </div>
@@ -963,7 +971,7 @@ export function ClientIntegrations() {
                                         <div className="space-y-1.5">
                                             <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">API Token</label>
                                             <p className="text-[11px] text-slate-400">
-                                                {openaiTokenSet ? `Last updated ${openaiTokenSet}` : "No token saved yet."}
+                                                {loadingOpenaiToken ? "Checking saved token…" : openaiStatusError ? `Unable to verify saved token: ${openaiStatusError}` : openaiTokenSet ? `Last updated ${openaiTokenSet}` : "No token saved yet."}
                                             </p>
                                         </div>
                                         <input
@@ -987,7 +995,7 @@ export function ClientIntegrations() {
                                             </p>
                                         ) : (
                                             <p className="text-center text-[11px] text-slate-400">
-                                                Write-only — the token can't be read back here. OpenAI Ads has no reporting API yet; saved for future use.
+                                                Saved tokens are used automatically in SEM Reports → OpenAI Ads. You do not need to paste the token again.
                                             </p>
                                         )}
                                     </div>

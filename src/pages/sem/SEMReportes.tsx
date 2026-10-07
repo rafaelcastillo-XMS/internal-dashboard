@@ -613,7 +613,7 @@ function BudgetTableSection({
             <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
               <td className="px-5 py-4" />
               <td className="px-5 py-4 text-xs font-bold uppercase text-[#16a34a]">Totals</td>
-              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.budget > 0 ? fmtCurrency(totals.budget) : '—'}</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.budget > 0 && allCampaigns.every(c => c.budgetPeriod === allCampaigns[0]?.budgetPeriod) ? `${fmtCurrency(totals.budget)}${allCampaigns[0]?.budgetPeriod === 'daily' ? '/day' : ' lifetime'}` : '—'}</td>
               <td className="px-5 py-4 tabular-nums font-bold text-red-500">
                 {pendingCost ? <span className="text-xs italic text-body/50">Loading…</span> : totals.cost > 0 ? fmtCurrency(totals.cost) : '—'}
               </td>
@@ -1179,6 +1179,7 @@ function GuaranteeReport({
 const OPENAI_ADS_API = 'https://sjpvyxdyleebhqlmqscy.supabase.co/functions/v1/openai-ads'
 
 interface OpenAiCampaign {
+  budgetPeriod?: "daily" | "lifetime"
   id: string
   name: string
   status: string
@@ -1255,7 +1256,7 @@ function OpenAiAdsReport({
         </div>
       )}
 
-      {!loading && results.length === 0 ? (
+      {!loading && !error && results.length === 0 ? (
         <div className="rounded-xl border border-dashed border-stroke bg-white px-6 py-16 text-center dark:border-strokedark dark:bg-boxdark">
           <p className="text-base font-semibold text-black dark:text-[#E2E5E9]">No OpenAI Ads accounts connected</p>
           <p className="mx-auto mt-1.5 max-w-sm text-sm text-body dark:text-bodydark">
@@ -1267,7 +1268,7 @@ function OpenAiAdsReport({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
-                {['Client', 'Campaign', 'Status', 'Budget', 'Spend', 'CPC', 'Impressions'].map(h => (
+                {['Client', 'Campaign', 'Status', 'Budget', 'Spend', 'CPC', 'Clicks', 'Impressions'].map(h => (
                   <th key={h} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>
                 ))}
               </tr>
@@ -1278,12 +1279,12 @@ function OpenAiAdsReport({
                   {r.error ? (
                     <tr>
                       <td className="px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]">{r.clientName}</td>
-                      <td colSpan={6} className="px-5 py-4 text-xs text-red-500">{r.error}</td>
+                      <td colSpan={7} className="px-5 py-4 text-xs text-red-500">{r.error}</td>
                     </tr>
                   ) : r.campaigns.length === 0 ? (
                     <tr>
                       <td className="px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]">{r.clientName}</td>
-                      <td colSpan={6} className="px-5 py-4 text-xs text-body dark:text-bodydark opacity-60">No campaigns.</td>
+                      <td colSpan={7} className="px-5 py-4 text-xs text-body dark:text-bodydark opacity-60">No campaigns.</td>
                     </tr>
                   ) : r.campaigns.map((c, idx) => (
                     <tr key={c.id} className="hover:bg-gray-2 dark:hover:bg-meta-4 transition-colors">
@@ -1292,10 +1293,11 @@ function OpenAiAdsReport({
                       </td>
                       <td className="max-w-[220px] truncate px-5 py-4 text-black dark:text-[#E2E5E9]" title={c.name}>{c.name}</td>
                       <td className="px-5 py-4"><StatusBadge status={c.status === 'active' ? 'ENABLED' : 'PAUSED'} /></td>
-                      <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">{c.budget > 0 ? fmtCurrency(c.budget) : <span className="opacity-40 text-body dark:text-bodydark">—</span>}</td>
-                      <td className="px-5 py-4 tabular-nums font-medium text-red-500">{c.spend > 0 ? fmtCurrency(c.spend) : <span className="opacity-40 font-normal text-body dark:text-bodydark">—</span>}</td>
-                      <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{c.cpc > 0 ? fmtCurrency(c.cpc) : <span className="opacity-40">—</span>}</td>
-                      <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{c.impressions > 0 ? fmtNum(c.impressions) : <span className="opacity-40">—</span>}</td>
+                      <td className="px-5 py-4 tabular-nums text-black dark:text-[#E2E5E9]">{c.budget > 0 ? `${fmtCurrency(c.budget)}${c.budgetPeriod === "daily" ? "/day" : " lifetime"}` : <span className="opacity-40 text-body dark:text-bodydark">—</span>}</td>
+                      <td className="px-5 py-4 tabular-nums font-medium text-red-500">{r.insightsError ? "Unavailable" : c.spend > 0 ? fmtCurrency(c.spend) : <span className="opacity-40 font-normal text-body dark:text-bodydark">—</span>}</td>
+                      <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{r.insightsError ? "Unavailable" : c.cpc > 0 ? fmtCurrency(c.cpc) : <span className="opacity-40">—</span>}</td>
+                      <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{r.insightsError ? "Unavailable" : fmtNum(c.clicks)}</td>
+                      <td className="px-5 py-4 tabular-nums text-body dark:text-bodydark">{r.insightsError ? "Unavailable" : c.impressions > 0 ? fmtNum(c.impressions) : <span className="opacity-40">—</span>}</td>
                     </tr>
                   ))}
                 </Fragment>
@@ -1303,9 +1305,10 @@ function OpenAiAdsReport({
               {allCampaigns.length > 0 && (
                 <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
                   <td className="px-5 py-4 text-xs font-bold uppercase text-[#16a34a]" colSpan={3}>Totals</td>
-                  <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.budget > 0 ? fmtCurrency(totals.budget) : '—'}</td>
+                  <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.budget > 0 && allCampaigns.every(c => c.budgetPeriod === allCampaigns[0]?.budgetPeriod) ? `${fmtCurrency(totals.budget)}${allCampaigns[0]?.budgetPeriod === 'daily' ? '/day' : ' lifetime'}` : '—'}</td>
                   <td className="px-5 py-4 tabular-nums font-bold text-red-500">{totals.spend > 0 ? fmtCurrency(totals.spend) : '—'}</td>
                   <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.clicks > 0 ? fmtCurrency(totals.spend / totals.clicks) : '—'}</td>
+                  <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{fmtNum(totals.clicks)}</td>
                   <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.impressions > 0 ? fmtNum(totals.impressions) : '—'}</td>
                 </tr>
               )}
@@ -1316,7 +1319,8 @@ function OpenAiAdsReport({
 
       {results.some(r => r.insightsError) && (
         <p className="mt-3 text-[11px] text-amber-600 dark:text-amber-400">
-          Budget loaded from the Campaigns API. Spend / CPC / impressions come from the Insights API and may be unavailable until metrics are reported.
+          Performance metrics could not be loaded. Totals and exports may be incomplete.
+          {results.filter(r => r.insightsError).map(r => <span key={r.clientId} className="block">{r.clientName}: {r.insightsError}</span>)}
         </p>
       )}
     </div>
@@ -1451,22 +1455,21 @@ export function SEMReportes() {
   const fetchOpenAi = useCallback(async (from: string, to: string) => {
     setLoadingOpenai(true); setOpenaiError(null)
     try {
-      const { data: secrets } = await supabase
+      const { data: secrets, error: secretsError } = await supabase
         .from('client_ad_secrets')
         .select('client_id')
         .eq('provider', 'openai_ads')
+      if (secretsError) throw new Error(secretsError.message)
       const ids = (secrets ?? []).map(s => s.client_id)
       if (ids.length === 0) { setOpenaiResults([]); return }
 
-      const { data: clients } = await supabase.from('clients').select('id, name').in('id', ids)
+      const { data: clients, error: clientsError } = await supabase.from('clients').select('id, name').in('id', ids)
+      if (clientsError) throw new Error(clientsError.message)
       const nameById = new Map((clients ?? []).map(c => [c.id, c.name]))
-
-      const startTime = Math.floor(new Date(from + 'T00:00:00').getTime() / 1000)
-      const endTime   = Math.floor(new Date(to + 'T23:59:59').getTime() / 1000)
 
       const out = await Promise.all(ids.map(async (id): Promise<OpenAiClientResult> => {
         try {
-          const res = await edgeFetch(`${OPENAI_ADS_API}/campaigns?clientId=${encodeURIComponent(id)}&startTime=${startTime}&endTime=${endTime}`)
+          const res = await edgeFetch(`${OPENAI_ADS_API}/campaigns?clientId=${encodeURIComponent(id)}&startDate=${encodeURIComponent(from)}&endDate=${encodeURIComponent(to)}`)
           const json = await res.json()
           if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`)
           return { clientId: id, clientName: nameById.get(id) ?? id, campaigns: json.campaigns ?? [], insightsError: json.insightsError }
