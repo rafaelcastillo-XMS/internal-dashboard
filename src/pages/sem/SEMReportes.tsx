@@ -5,6 +5,7 @@ import { edgeFetch } from '@/lib/edgeFetch'
 import { generateMonthlyBudgetPdf, generateMonthlyBudgetPdfBytes, generateOpenAiAdsPdf, generateWeeklyBudgetPdf, generateWeeklyBudgetPdfBytes } from '@/features/sem/lib/generateReportsPdf'
 import type { PdfMonthlyRow, PdfOpenAiRow, PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
 import { captureTableAsImage } from '@/features/sem/lib/tableToImage'
+import { selectMonthlyBudgetAccounts, type MonthlyBudgetClient } from '@/features/sem/reports/monthlyBudgetAccounts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -276,7 +277,7 @@ interface MonthlyCell { refunded: number; paid_with: string }
 const fmtAccountId = (id: string) =>
   /^\d{10}$/.test(id) ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id
 
-function MonthlyReport({ accounts, accentColor = '#16a34a' }: { accounts: AdsAccount[]; accentColor?: string }) {
+function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { accounts: AdsAccount[]; clients: MonthlyBudgetClient[]; accentColor?: string }) {
   const now = new Date()
   const [month, setMonth]         = useState(now.getMonth())
   const [year, setYear]           = useState(now.getFullYear())
@@ -362,12 +363,12 @@ function MonthlyReport({ accounts, accentColor = '#16a34a' }: { accounts: AdsAcc
       .then(() => {})
   }
 
-  // One group per account, with a row per platform it runs (mirrors the weekly account list)
-  const groups = accounts
-    .map(acct => {
+  // Use activation and explicit LSA mappings before building table/export rows.
+  const groups = selectMonthlyBudgetAccounts(accounts, clients, adsIds, ggIds)
+    .map(({ account: acct, googleAds, googleGuarantee }) => {
       const items: { platform: MonthlyPlatform; budget: number; spend: number }[] = []
-      if (adsIds.has(acct.id)) items.push({ platform: 'Google Ads', budget: adsBudget[acct.id] ?? 0, spend: adsSpend[acct.id] ?? 0 })
-      if (ggIds.has(acct.id))  items.push({ platform: 'Google Guarantee', budget: ggBudget[acct.id] ?? 0, spend: ggSpend[acct.id] ?? 0 })
+      if (googleAds) items.push({ platform: 'Google Ads', budget: adsBudget[acct.id] ?? 0, spend: adsSpend[acct.id] ?? 0 })
+      if (googleGuarantee) items.push({ platform: 'Google Guarantee', budget: ggBudget[acct.id] ?? 0, spend: ggSpend[acct.id] ?? 0 })
       return { acct, items }
     })
     .filter(g => g.items.length > 0)
@@ -613,7 +614,7 @@ function BudgetTableSection({
             <tr className="border-t-2 border-[#16a34a]/30 bg-[#eef7f2] dark:bg-[#1a382e]">
               <td className="px-5 py-4" />
               <td className="px-5 py-4 text-xs font-bold uppercase text-[#16a34a]">Totals</td>
-              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.budget > 0 && allCampaigns.every(c => c.budgetPeriod === allCampaigns[0]?.budgetPeriod) ? `${fmtCurrency(totals.budget)}${allCampaigns[0]?.budgetPeriod === 'daily' ? '/day' : ' lifetime'}` : '—'}</td>
+              <td className="px-5 py-4 tabular-nums font-bold text-[#16a34a]">{totals.budget > 0 ? fmtCurrency(totals.budget) : '—'}</td>
               <td className="px-5 py-4 tabular-nums font-bold text-red-500">
                 {pendingCost ? <span className="text-xs italic text-body/50">Loading…</span> : totals.cost > 0 ? fmtCurrency(totals.cost) : '—'}
               </td>
@@ -1335,6 +1336,8 @@ export function SEMReportes() {
   const [period, setPeriod]               = useState<ReportPeriod>('weekly')
   const [activeTab, setActiveTab]         = useState<ReportTab>('ads')
   const [accounts, setAccounts]           = useState<AdsAccount[]>([])
+  const [budgetClients, setBudgetClients] = useState<MonthlyBudgetClient[]>([])
+  const [accountsError, setAccountsError] = useState<string | null>(null)
   const [adsAccountIds, setAdsAccountIds] = useState<Set<string>>(new Set())
   const [ggAccountIds, setGgAccountIds]   = useState<Set<string>>(new Set())
   const [loading, setLoading]             = useState(true)
@@ -1348,8 +1351,12 @@ export function SEMReportes() {
           supabase.from('sem_accounts').select('id, name, status').order('name'),
           supabase.from('sem_yearly_ads').select('account_id').eq('year', year),
           supabase.from('sem_yearly_guarantee').select('account_id').eq('year', year),
-          supabase.from('clients').select('sem_account_id, sem_enabled'),
+          supabase.from('clients').select('status, sem_account_id, lsa_account_id, sem_enabled'),
         ])
+        for (const result of [acctRes, adsRes, ggRes, clientsRes]) {
+          if (result.error) throw new Error(result.error.message)
+        }
+        setBudgetClients(clientsRes.data ?? [])
         // Accounts whose linked client has Google Ads disabled are hidden from all reports
         const disabled = new Set(
           (clientsRes.data ?? [])
@@ -1359,6 +1366,8 @@ export function SEMReportes() {
         setAccounts((acctRes.data ?? []).filter(a => !disabled.has(a.id)))
         setAdsAccountIds(new Set((adsRes.data ?? []).map(r => r.account_id)))
         setGgAccountIds(new Set((ggRes.data ?? []).map(r => r.account_id)))
+      } catch (error) {
+        setAccountsError(error instanceof Error ? error.message : 'Unable to load report accounts')
       } finally { setLoading(false) }
     })()
   }, [])
@@ -1578,7 +1587,7 @@ export function SEMReportes() {
       </div>
 
       {period === 'monthly' ? (
-        <MonthlyReport accounts={accounts} />
+        accountsError ? <p role="alert" className="text-sm text-red-500">Unable to load Monthly Budget accounts: {accountsError}</p> : <MonthlyReport accounts={accounts} clients={budgetClients} />
       ) : (
         <>
           <SendEmailModal payload={weeklyEmailPayload} onClose={() => setWeeklyEmailPayload(null)} />
