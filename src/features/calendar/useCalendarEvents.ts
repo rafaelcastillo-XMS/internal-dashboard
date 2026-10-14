@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
-import { endOfMonth, mapGoogleCalendarEvent, startOfMonth } from "./model"
+import { mapGoogleCalendarEvent } from "./model"
 import type { CalendarEvent, GoogleCalendarResponse } from "./types"
 import { useTrackPageLoading } from "@/context/PageLoadingContext"
 
@@ -11,9 +11,13 @@ type UseCalendarEventsOptions = {
 
 export function useCalendarEvents({ monthDate, monthSpan = 1 }: UseCalendarEventsOptions) {
     const [events, setEvents] = useState<CalendarEvent[]>([])
-    const [loading, setLoading] = useState(false)
+    const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const monthKey = `${monthDate.getFullYear()}-${monthDate.getMonth()}-${monthSpan}`
+    const year = monthDate.getFullYear()
+    const month = monthDate.getMonth()
+    const monthKey = `${year}-${month}-${monthSpan}`
+    const [revision, setRevision] = useState(0)
+    const refetch = useCallback(() => setRevision(value => value + 1), [])
 
     useTrackPageLoading(loading, `calendar:${monthKey}`)
 
@@ -21,19 +25,21 @@ export function useCalendarEvents({ monthDate, monthSpan = 1 }: UseCalendarEvent
         let cancelled = false
 
         async function fetchCalendarEvents() {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (!session || cancelled) return
-
             setLoading(true)
             setError(null)
 
             try {
-                const firstMonth = startOfMonth(monthDate)
-                const lastMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + monthSpan - 1, 1)
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+                if (cancelled) return
+                if (sessionError) throw sessionError
+                if (!session) throw new Error("Sign in to load your calendar.")
+                const firstMonth = new Date(year, month, 1)
+                // Google Calendar's upper bound is exclusive.
+                const nextMonth = new Date(year, month + monthSpan, 1)
                 const { data, error: invokeError } = await supabase.functions.invoke("google-calendar", {
                     body: {
                         timeMin: firstMonth.toISOString(),
-                        timeMax: endOfMonth(lastMonth).toISOString(),
+                        timeMax: nextMonth.toISOString(),
                     },
                 })
 
@@ -76,7 +82,7 @@ export function useCalendarEvents({ monthDate, monthSpan = 1 }: UseCalendarEvent
         return () => {
             cancelled = true
         }
-    }, [monthDate.getFullYear(), monthDate.getMonth(), monthSpan])
+    }, [year, month, monthSpan, revision])
 
-    return { events, loading, error }
+    return { events, loading, error, refetch }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { Link } from "react-router-dom"
 import { motion } from "framer-motion"
 import {
@@ -18,33 +18,12 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { formatIsoDate } from "@/features/calendar/model"
 import { useCalendarEvents } from "@/features/calendar/useCalendarEvents"
-import { useMondayTasks, priorityColor, type MondayTask } from "@/features/tasks/useMondayTasks"
-
-function buildPerfData(tasks: MondayTask[]) {
-  const now = new Date()
-  return Array.from({ length: 6 }, (_, w) => {
-    const start = new Date(now)
-    start.setDate(now.getDate() - now.getDay() - (5 - w) * 7)
-    start.setHours(0, 0, 0, 0)
-    const end = new Date(start)
-    end.setDate(start.getDate() + 6)
-    end.setHours(23, 59, 59, 999)
-    const bucket = tasks.filter(t => {
-      const d = new Date(t.updatedAt)
-      return d >= start && d <= end
-    })
-    return {
-      date: start.toISOString().split("T")[0],
-      done: bucket.filter(t => t.statusIndex === 1).length,
-      open: bucket.filter(t => t.statusIndex !== 1).length,
-    }
-  })
-}
+import { useMondayTasks, priorityColor } from "@/features/tasks/useMondayTasks"
+import { buildPerfData, dueDaysFromToday, isEventPast, parseLocalDate } from "@/features/dashboard/model"
 
 const perfChartConfig = {
-  views: { label: "Tasks" },
   done: { label: "Completed", color: "var(--chart-2)" },
-  open: { label: "In Progress", color: "var(--chart-1)" },
+  open: { label: "Pending", color: "var(--chart-1)" },
 } satisfies ChartConfig
 
 const colorMap: Record<string, { bg: string; text: string; dot: string }> = {
@@ -55,11 +34,10 @@ const colorMap: Record<string, { bg: string; text: string; dot: string }> = {
   slate:  { bg: "bg-slate-100 dark:bg-slate-700/40",  text: "text-slate-600 dark:text-slate-400",   dot: "bg-slate-400"  },
 }
 
-function MiniDueBadge({ date }: { date: string | null }) {
+function MiniDueBadge({ date, now }: { date: string | null; now: Date }) {
   if (!date) return null
-  const due = new Date(date)
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const diff = Math.round((due.getTime() - today.getTime()) / 86_400_000)
+  const diff = dueDaysFromToday(date, now)
+  if (!Number.isFinite(diff)) return null
   let cls = "text-slate-400 dark:text-slate-500"
   if (diff < 0)      cls = "text-red-500 dark:text-red-400"
   else if (diff <= 2) cls = "text-amber-500 dark:text-amber-400"
@@ -97,11 +75,6 @@ function parseTimeMinutes(timeStr: string): number {
   return 0
 }
 
-function isEventPast(timeStr: string): boolean {
-  const now = new Date()
-  return parseTimeMinutes(timeStr) < now.getHours() * 60 + now.getMinutes()
-}
-
 function priorityRank(p: string | null): number {
   const l = p?.toLowerCase() ?? ""
   if (l.includes("critical")) return 0
@@ -111,20 +84,35 @@ function priorityRank(p: string | null): number {
   return 4
 }
 
-function useSlider() {
+function useSlider(itemCount: number, loading: boolean) {
   const ref = useRef<HTMLDivElement>(null)
   const [canPrev, setCanPrev] = useState(false)
   const [canNext, setCanNext] = useState(false)
 
-  const check = () => {
+  const check = useCallback(() => {
     const el = ref.current
-    if (!el) return
+    if (!el) {
+      setCanPrev(false)
+      setCanNext(false)
+      return
+    }
     setCanPrev(el.scrollLeft > 2)
     setCanNext(el.scrollLeft < el.scrollWidth - el.clientWidth - 2)
-  }
+  }, [])
 
-  const scrollPrev = () => ref.current?.scrollBy({ left: -(ref.current.clientWidth / 4), behavior: "smooth" })
-  const scrollNext = () => ref.current?.scrollBy({ left:  ref.current.clientWidth / 4,  behavior: "smooth" })
+  useEffect(() => {
+    const frame = requestAnimationFrame(check)
+    const element = ref.current
+    const observer = new ResizeObserver(check)
+    if (element) observer.observe(element)
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [check, itemCount, loading])
+
+  const scrollPrev = () => ref.current?.scrollBy({ left: -(ref.current.clientWidth * 0.9), behavior: "smooth" })
+  const scrollNext = () => ref.current?.scrollBy({ left:  ref.current.clientWidth * 0.9,  behavior: "smooth" })
 
   return { ref, canPrev, canNext, check, scrollPrev, scrollNext }
 }
@@ -140,17 +128,18 @@ const guidelineLinks = [
 ] as const
 
 export function Dashboard() {
-  const [today] = useState(() => new Date())
+  const [today, setToday] = useState(() => new Date())
   const todayStr = formatIsoDate(today)
 
-  const { events, loading: loadingEvents } = useCalendarEvents({ monthDate: today, monthSpan: 2 })
-  const { tasks, loading: loadingTasks, syncing: syncingTasks, user: mondayUser } = useMondayTasks()
+  const { events, loading: loadingEvents, error: eventsError, refetch: retryEvents } = useCalendarEvents({ monthDate: today, monthSpan: 2 })
+  const { tasks, loading: loadingTasks, syncing: syncingTasks, user: mondayUser, error: tasksError, refetch: retryTasks } = useMondayTasks()
 
-  // Force re-render every 30s to keep relative timestamps fresh
-  const [, forceUpdate] = useState(0)
+  // Refresh the date too, so an open dashboard rolls over at midnight.
   useEffect(() => {
-    const id = setInterval(() => forceUpdate(n => n + 1), 30_000)
-    return () => clearInterval(id)
+    const updateToday = () => setToday(new Date())
+    const id = setInterval(updateToday, 30_000)
+    window.addEventListener("focus", updateToday)
+    return () => { clearInterval(id); window.removeEventListener("focus", updateToday) }
   }, [])
 
   const todayTasks = useMemo(
@@ -182,7 +171,7 @@ export function Dashboard() {
     [tasks, todayStr]
   )
 
-  const performanceData = useMemo(() => buildPerfData(tasks), [tasks])
+  const performanceData = useMemo(() => buildPerfData(tasks, parseLocalDate(todayStr)), [tasks, todayStr])
   const perfTotals = useMemo(() => ({
     done: performanceData.reduce((s, d) => s + d.done, 0),
     open: performanceData.reduce((s, d) => s + d.open, 0),
@@ -192,11 +181,8 @@ export function Dashboard() {
     return total > 0 ? Math.round((perfTotals.done / total) * 100) : 0
   }, [perfTotals])
 
-  const eventSlider = useSlider()
-  const taskSlider  = useSlider()
-
-  useEffect(() => { requestAnimationFrame(eventSlider.check) }, [todayEvents.length])
-  useEffect(() => { requestAnimationFrame(taskSlider.check)  }, [urgentTasks.length])
+  const eventSlider = useSlider(todayEvents.length, loadingEvents)
+  const taskSlider = useSlider(urgentTasks.length, loadingTasks)
 
   return (
     <div className="internal-dashboard-main h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
@@ -226,17 +212,18 @@ export function Dashboard() {
               <p className="mt-0.5 text-xs text-body dark:text-bodydark">
                 {loadingEvents
                   ? "Loading events…"
+                  : eventsError ? "Calendar unavailable"
                   : todayEvents.length === 0
                     ? "No events scheduled for today"
                     : `You have ${todayEvents.length} event${todayEvents.length !== 1 ? "s" : ""} today`}
               </p>
             </div>
-            {todayEvents.length > 4 && (
+            {(eventSlider.canPrev || eventSlider.canNext) && (
               <div className="flex items-center gap-1.5">
-                <button onClick={eventSlider.scrollPrev} disabled={!eventSlider.canPrev} className={sliderArrowClass}>
+                <button aria-label="Previous events" onClick={eventSlider.scrollPrev} disabled={!eventSlider.canPrev} className={sliderArrowClass}>
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={eventSlider.scrollNext} disabled={!eventSlider.canNext} className={sliderArrowClass}>
+                <button aria-label="Next events" onClick={eventSlider.scrollNext} disabled={!eventSlider.canNext} className={sliderArrowClass}>
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -247,6 +234,11 @@ export function Dashboard() {
             <div className="flex items-center gap-2 py-6 text-xs text-body dark:text-bodydark">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading events…
             </div>
+          ) : eventsError ? (
+            <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              Could not load your calendar.
+              <button onClick={retryEvents} className="ml-3 font-semibold underline">Retry calendar</button>
+            </div>
           ) : todayEvents.length === 0 ? (
             <div className="flex items-center justify-center rounded-xl border border-dashed border-stroke py-8 text-xs text-body dark:border-strokedark dark:text-bodydark">
               No events today
@@ -254,7 +246,7 @@ export function Dashboard() {
           ) : (
             <div ref={eventSlider.ref} onScroll={eventSlider.check} className="flex gap-3 overflow-x-auto no-scrollbar">
               {todayEvents.map(event => {
-                const past = isEventPast(event.time)
+                const past = isEventPast(event, today)
                 return (
                   <div
                     key={event.id}
@@ -290,6 +282,7 @@ export function Dashboard() {
               <p className="mt-0.5 text-xs text-body dark:text-bodydark">
                 {loadingTasks
                   ? "Loading tasks…"
+                  : tasksError ? "Task sync unavailable"
                   : urgentTasks.length === 0
                     ? "No pending tasks"
                     : todayTasks.length > 0
@@ -297,23 +290,29 @@ export function Dashboard() {
                       : "Sorted by priority · closest deadline"}
               </p>
             </div>
-            {urgentTasks.length > 4 && (
+            {(taskSlider.canPrev || taskSlider.canNext) && (
               <div className="flex items-center gap-1.5">
-                <button onClick={taskSlider.scrollPrev} disabled={!taskSlider.canPrev} className={sliderArrowClass}>
+                <button aria-label="Previous tasks" onClick={taskSlider.scrollPrev} disabled={!taskSlider.canPrev} className={sliderArrowClass}>
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={taskSlider.scrollNext} disabled={!taskSlider.canNext} className={sliderArrowClass}>
+                <button aria-label="Next tasks" onClick={taskSlider.scrollNext} disabled={!taskSlider.canNext} className={sliderArrowClass}>
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
           </div>
 
+          {tasksError && !loadingTasks && (
+            <div role="alert" className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              {tasks.length ? "Could not refresh tasks. Showing previously loaded data." : "Could not load your tasks."}
+              <button onClick={retryTasks} className="ml-3 font-semibold underline">Retry tasks</button>
+            </div>
+          )}
           {loadingTasks ? (
             <div className="flex items-center gap-2 py-6 text-xs text-body dark:text-bodydark">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading tasks…
             </div>
-          ) : urgentTasks.length === 0 ? (
+          ) : tasksError && tasks.length === 0 ? null : urgentTasks.length === 0 ? (
             <div className="flex items-center justify-center rounded-xl border border-dashed border-stroke py-8 text-xs text-body dark:border-strokedark dark:text-bodydark">
               No pending tasks
             </div>
@@ -335,7 +334,7 @@ export function Dashboard() {
                     </div>
                     <p className="truncate text-sm font-semibold text-black dark:text-[#E2E5E9]">{task.name}</p>
                     <div className="mt-1 flex items-center gap-2">
-                      <MiniDueBadge date={task.dueDate} />
+                      <MiniDueBadge date={task.dueDate} now={today} />
                     </div>
                   </Link>
                 )
@@ -390,17 +389,17 @@ export function Dashboard() {
                 <TrendingUp className="h-4 w-4 text-[#16a34a]" />
                 Task Performance
               </h2>
-              <p className="text-xs text-body dark:text-bodydark">Last 6 weeks</p>
+              <p className="text-xs text-body dark:text-bodydark">Last 6 weeks · current status grouped by last update</p>
             </div>
             <div className="flex border-t border-stroke dark:border-strokedark sm:border-t-0">
               {([
-                { label: "Completion", value: `${loadingTasks ? "—" : `${perfPct}%`}`, color: "text-[#16a34a]" },
-                { label: "Completed",  value: loadingTasks ? "—" : String(perfTotals.done), color: "text-black dark:text-[#E2E5E9]" },
-                { label: "In Progress", value: loadingTasks ? "—" : String(perfTotals.open), color: "text-black dark:text-[#E2E5E9]" },
+                { label: "Completion", value: `${loadingTasks || tasksError ? "—" : `${perfPct}%`}`, color: "text-[#16a34a]" },
+                { label: "Completed",  value: loadingTasks || tasksError ? "—" : String(perfTotals.done), color: "text-black dark:text-[#E2E5E9]" },
+                { label: "Pending", value: loadingTasks || tasksError ? "—" : String(perfTotals.open), color: "text-black dark:text-[#E2E5E9]" },
               ] as const).map(({ label, value, color }) => (
                 <div
                   key={label}
-                  className="flex flex-1 flex-col justify-center gap-0.5 border-l border-stroke dark:border-strokedark px-6 py-4 sm:px-8"
+                  className="flex flex-1 flex-col justify-center gap-0.5 border-l border-stroke dark:border-strokedark px-3 py-4 sm:px-8"
                 >
                   <span className="text-[11px] text-body dark:text-bodydark whitespace-nowrap">{label}</span>
                   <span className={`text-2xl font-bold tabular-nums ${color}`}>{value}</span>
@@ -415,6 +414,8 @@ export function Dashboard() {
               <div className="flex items-center justify-center h-48 gap-2 text-xs text-body dark:text-bodydark">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading…
               </div>
+            ) : tasksError ? (
+              <p className="py-12 text-center text-sm text-body dark:text-bodydark">Task performance is unavailable until tasks sync successfully.</p>
             ) : (
               <ChartContainer config={perfChartConfig} className="h-48 w-full">
                 <LineChart data={performanceData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
@@ -425,7 +426,7 @@ export function Dashboard() {
                     axisLine={false}
                     tickMargin={8}
                     tick={{ fontSize: 11 }}
-                    tickFormatter={v => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    tickFormatter={v => parseLocalDate(String(v)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   />
                   <YAxis
                     tickLine={false}
@@ -439,9 +440,8 @@ export function Dashboard() {
                     content={
                       <ChartTooltipContent
                         className="w-[170px]"
-                        nameKey="views"
                         labelFormatter={v =>
-                          new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                          parseLocalDate(String(v)).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                         }
                       />
                     }
@@ -459,7 +459,7 @@ export function Dashboard() {
               </span>
               <span className="flex items-center gap-1.5 text-xs text-body dark:text-bodydark">
                 <span className="inline-block h-2 w-4 rounded-full" style={{ background: "var(--chart-1)" }} />
-                In Progress
+                Pending
               </span>
             </div>
           </div>

@@ -27,6 +27,8 @@ export interface GoogleCalendarResponse {
 
 export interface CalendarEvent {
     id: string
+    startDateTime?: string | null
+    endDateTime?: string | null
     date: string
     time: string
     endTime: string | null

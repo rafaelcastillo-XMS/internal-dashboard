@@ -29,7 +29,9 @@ export function mapGoogleCalendarEvent(event: GoogleCalendarEvent, index: number
         id: event.id,
         title: event.summary ?? "(No title)",
         description: event.description ?? null,
-        date: startValue.slice(0, 10),
+        date: event.start?.dateTime ? formatIsoDate(new Date(startValue)) : startValue.slice(0, 10),
+        startDateTime: event.start?.dateTime ?? null,
+        endDateTime: event.end?.dateTime ?? null,
         time: event.start?.dateTime
             ? new Date(event.start.dateTime).toLocaleTimeString("en-US", {
                 hour: "numeric",
