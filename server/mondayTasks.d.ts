@@ -29,3 +29,5 @@ export interface MondayTaskDetail {
 }
 
 export function fetchMondayTaskDetail(input: { mondayToken: string; taskId: string }): Promise<MondayTaskDetail>
+
+export function resolveMondayEmail(input: { authorization?: string; email?: string; internalSecret?: string; supabaseUrl: string; supabaseAnonKey: string }): Promise<string>

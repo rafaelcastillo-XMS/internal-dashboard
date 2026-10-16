@@ -34,3 +34,8 @@ describe('Monthly Budget account eligibility', () => {
     ])
   })
 })
+
+it('filters removed accounts and deduplicates account IDs for both report periods', () => {
+  const roster = [{ id: 'active', status: 'ENABLED' }, { id: 'active', status: 'ENABLED' }, { id: 'removed', status: 'REMOVED' }]
+  expect(selectMonthlyBudgetAccounts(roster, [], new Set(['active', 'removed']), new Set()).map(r => r.account.id)).toEqual(['active'])
+})

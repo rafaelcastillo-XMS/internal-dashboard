@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 /**
  * server/mondayTasks.js
  * Shared Monday.com task-fetching logic, used by both the production
@@ -25,20 +27,49 @@ export function buildMondayEmailMap(raw) {
   )
 }
 
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
+
 async function mondayGraphQL(token, query, variables = {}) {
-  const resp = await fetch("https://api.monday.com/v2", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: token,
-      "API-Version": "2024-01",
-    },
-    body: JSON.stringify({ query, variables }),
+  for (let attempt = 0; ; attempt++) {
+    let resp
+    try {
+      resp = await fetch("https://api.monday.com/v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: token, "API-Version": "2026-07" },
+        body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(15000),
+      })
+    } catch (error) {
+      if (attempt >= 2) throw statusErr(502, `Monday connection failed: ${error.name}`)
+      await wait(500 * 2 ** attempt)
+      continue
+    }
+    const json = await resp.json().catch(() => null)
+    const errors = json?.errors ?? []
+    if (resp.ok && !errors.length && json?.data) return json.data
+    const transient = resp.status === 429 || resp.status >= 500 || errors.some(e =>
+      ['API_TEMPORARILY_BLOCKED', 'COMPLEXITY_BUDGET_EXHAUSTED', 'maxConcurrencyExceeded', 'Rate Limit Exceeded'].includes(e.extensions?.code))
+    const retrySeconds = Number(resp.headers.get('retry-after') ?? errors[0]?.extensions?.retry_in_seconds ?? 0)
+    if (transient && attempt < 2 && retrySeconds <= 10) {
+      await wait(Math.max(retrySeconds * 1000, 500 * 2 ** attempt))
+      continue
+    }
+    const error = statusErr(transient ? 503 : 502, `Monday API: ${errors.map(e => e.message).join('; ') || `HTTP ${resp.status}`}`)
+    error.requestId = json?.extensions?.request_id
+    throw error
+  }
+}
+
+// The browser authenticates with its dashboard session, never a server secret.
+export async function resolveMondayEmail({ authorization, email, internalSecret, supabaseUrl, supabaseAnonKey }) {
+  if (internalSecret && authorization === `Bearer ${internalSecret}` && email) return email
+  if (!/^Bearer \S+$/.test(authorization ?? '')) throw statusErr(401, 'A dashboard session is required')
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { apikey: supabaseAnonKey, Authorization: authorization }, signal: AbortSignal.timeout(10000),
   })
-  if (!resp.ok) throw new Error(`Monday API HTTP ${resp.status}`)
-  const json = await resp.json()
-  if (json.errors?.length) throw new Error(json.errors.map(e => e.message).join("; "))
-  return json.data
+  if (!response.ok) throw statusErr(response.status >= 500 ? 503 : 401, 'Unable to validate dashboard session')
+  const user = await response.json()
+  if (!user.email) throw statusErr(401, 'The dashboard session has no email')
+  return user.email
 }
 
 const COMPLETED_STATUSES = [
@@ -53,11 +84,27 @@ const isSubitemsBoard = name => SUBITEMS_PREFIXES.some(p => name.toLowerCase().s
 const mondayTaskCache = new Map()
 const MONDAY_CACHE_TTL_MS = 5 * 60 * 1000
 
+const pendingTasks = new Map()
 export async function fetchMondayTasksForUser({ mondayToken, sessionEmail, bust = false }) {
+  if (!mondayToken) throw statusErr(503, "MONDAY_API_TOKEN is not configured")
+  if (!sessionEmail) throw statusErr(401, 'A dashboard email is required')
+  const cacheKey = createHash('sha256').update(mondayToken).update(sessionEmail.toLowerCase()).digest('hex')
+  const cached = mondayTaskCache.get(cacheKey)
+  if (!bust && cached && Date.now() - cached.at < MONDAY_CACHE_TTL_MS) return cached.payload
+  if (pendingTasks.has(cacheKey)) return pendingTasks.get(cacheKey)
+  const pending = loadMondayTasks({ mondayToken, sessionEmail }).then(payload => {
+    mondayTaskCache.set(cacheKey, { at: Date.now(), payload })
+    return payload
+  }).finally(() => pendingTasks.delete(cacheKey))
+  pendingTasks.set(cacheKey, pending)
+  return pending
+}
+
+async function loadMondayTasks({ mondayToken, sessionEmail }) {
   if (!mondayToken) throw statusErr(503, "MONDAY_API_TOKEN is not configured")
 
   const usersData = await mondayGraphQL(mondayToken, `
-    query GetUsers($emails: [String]) {
+    query GetUsers($emails: [String!]) {
       users(emails: $emails, limit: 1) {
         id name email photo_thumb_small
       }
@@ -67,37 +114,37 @@ export async function fetchMondayTasksForUser({ mondayToken, sessionEmail, bust 
   const user = usersData?.users?.[0] ?? null
   if (!user) return { user: null, tasks: [] }
 
-  if (bust) mondayTaskCache.delete(user.id)
-  const cached = mondayTaskCache.get(user.id)
-  if (cached && Date.now() - cached.at < MONDAY_CACHE_TTL_MS) return cached.payload
-
-  // Monday returns items in board order unless an explicit order is given.
-  // Request the latest page first so newer assignments are not hidden beyond
-  // the page limit before we apply the per-user filter below.
-  const itemsData = await mondayGraphQL(mondayToken, `
-    query GetBoardItems {
-      boards(limit: 100, state: active) {
-        id name
-        items_page(
-          limit: 100
-          query_params: {
-            order_by: [{ column_id: "__last_updated__", direction: desc }]
-          }
-        ) {
-          items {
-            id name state updated_at
-            column_values {
-              id text type
-              column { title }
-              ... on StatusValue { label index }
-              ... on DateValue { date }
-              ... on PeopleValue { persons_and_teams { id kind } }
+  // Discover boards cheaply, excluding subitem boards before fetching items.
+  // A single 100-board item query can time out before Monday returns any data.
+  const roster = await mondayGraphQL(mondayToken, `query { boards(limit: 100, state: active) { id name } }`)
+  const boardIds = (roster?.boards ?? []).filter(board => !isSubitemsBoard(board.name)).map(board => board.id)
+  const batches = []
+  for (let i = 0; i < boardIds.length; i += 8) batches.push(boardIds.slice(i, i + 8))
+  const boards = []
+  // At most two item queries in flight; repeated dashboard requests share this work.
+  for (let i = 0; i < batches.length; i += 2) {
+    const results = await Promise.all(batches.slice(i, i + 2).map(ids => mondayGraphQL(mondayToken, `
+      query GetBoardItems($ids: [ID!]) {
+        boards(ids: $ids, limit: 8, state: active) {
+          id name
+          items_page(limit: 100, query_params: { order_by: [{ column_id: "__last_updated__", direction: desc }] }) {
+            items {
+              id name state updated_at
+              column_values {
+                id text type
+                column { title }
+                ... on StatusValue { label index }
+                ... on DateValue { date }
+                ... on PeopleValue { persons_and_teams { id kind } }
+              }
             }
           }
         }
       }
-    }
-  `)
+    `, { ids })))
+    for (const result of results) boards.push(...(result.boards ?? []))
+  }
+  const itemsData = { boards }
 
   const rawItems = (itemsData?.boards ?? [])
     .filter(board => !isSubitemsBoard(board.name))
@@ -144,7 +191,6 @@ export async function fetchMondayTasksForUser({ mondayToken, sessionEmail, bust 
     user: { id: user.id, name: user.name, email: user.email, avatar: user.photo_thumb_small },
     tasks,
   }
-  mondayTaskCache.set(user.id, { at: Date.now(), payload })
   return payload
 }
 

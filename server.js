@@ -10,7 +10,7 @@ import { AhrefsApiError, getAhrefsSnapshot } from "./server/ahrefs.js"
 import { MetaApiError, getAdCampaigns, getCampaignInsightsSeries, getFacebookPageSnapshot } from "./server/metaGraph.js"
 import { registerGoogleAuthRoutes, registerGbpAuthRoutes } from "./server/googleAuth.js"
 import { handleNotionClientSyncRequest, queryRelatedNotionData, queryNotionClientCovers, syncClientFromNotion } from "./server/notionSync.js"
-import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail } from "./server/mondayTasks.js"
+import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail, resolveMondayEmail } from "./server/mondayTasks.js"
 import { chatPerformanceAi, askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
 import { sanitizePdfFilename, exportPdfBuffer } from "./server/pdfExport.js"
 
@@ -152,19 +152,11 @@ app.get("/api/monday/tasks/:taskId", async (req, res) => {
 app.get("/api/monday/tasks", async (req, res) => {
   const mondayToken = process.env.MONDAY_API_TOKEN ?? ""
 
-  // Only enforce secret when INTERNAL_API_SECRET is configured
-  const internalSecret = process.env.INTERNAL_API_SECRET ?? ""
-  const authHeader = req.headers["authorization"] ?? ""
-  if (internalSecret && authHeader !== `Bearer ${internalSecret}`) {
-    return res.status(401).json({ error: "Unauthorized" })
-  }
-
-  const emailMap = buildMondayEmailMap(process.env.MONDAY_EMAIL_MAP)
-  const sessionEmail = req.query.email ?? ""
-  const mondayEmail = emailMap[sessionEmail] ?? sessionEmail
-  const bust = req.query.bust === "1"
-
   try {
+    const sessionEmail = await resolveMondayEmail({ authorization: req.headers.authorization, email: String(req.query.email ?? ''), internalSecret: process.env.INTERNAL_API_SECRET, supabaseUrl: SUPABASE_URL, supabaseAnonKey: SUPABASE_ANON_KEY })
+    const emailMap = buildMondayEmailMap(process.env.MONDAY_EMAIL_MAP)
+    const mondayEmail = emailMap[sessionEmail] ?? sessionEmail
+    const bust = req.query.bust === "1"
     res.json(await fetchMondayTasksForUser({ mondayToken, sessionEmail: mondayEmail, bust }))
   } catch (err) {
     const message = err instanceof Error ? err.message : "Monday API error"

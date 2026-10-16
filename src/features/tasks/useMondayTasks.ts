@@ -81,6 +81,7 @@ export function useMondayTasks(): MondayTasksResult {
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
 
     async function load() {
       setError(null)
@@ -88,8 +89,10 @@ export function useMondayTasks(): MondayTasksResult {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         const email = session?.user?.email ?? ""
+        if (!session || !email) { setUser(null); setTasks([]); throw new Error('Please sign in to load Monday tasks') }
         const cache = readCache()
         const matchingCache = cache?.email === email ? cache : null
+        if (!cancelled && !matchingCache) { setUser(null); setTasks([]) }
 
         // Show cached data immediately for this account, but always revalidate
         // against Monday so a recent local cache can never freeze the screen.
@@ -102,14 +105,14 @@ export function useMondayTasks(): MondayTasksResult {
           setLoading(true)
         }
 
-        if (tick > 0) localStorage.removeItem(CACHE_KEY)
+        if (tick > 0) { try { localStorage.removeItem(CACHE_KEY) } catch { /* storage may be disabled */ } }
 
         // When the user explicitly hits Refresh (tick > 0), bust the server cache too
         const url = tick > 0
           ? `/api/monday/tasks?email=${encodeURIComponent(email)}&bust=1`
           : `/api/monday/tasks?email=${encodeURIComponent(email)}`
 
-        const res = await fetch(url, { headers: { Accept: "application/json" } })
+        const res = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json", Authorization: `Bearer ${session.access_token}` } })
 
         if (!res.ok) {
           const body = await res.json().catch(() => ({})) as { error?: string }
@@ -131,8 +134,16 @@ export function useMondayTasks(): MondayTasksResult {
     }
 
     load()
-    return () => { cancelled = true }
+    return () => { cancelled = true; controller.abort() }
   }, [tick])
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => setTick(t => t + 1))
+    const refresh = () => { if (document.visibilityState === 'visible') setTick(t => t + 1) }
+    const timer = window.setInterval(refresh, 5 * 60 * 1000)
+    window.addEventListener('online', refresh)
+    return () => { subscription.unsubscribe(); clearInterval(timer); window.removeEventListener('online', refresh) }
+  }, [])
 
   return { user, tasks, loading, syncing, error, refetch }
 }

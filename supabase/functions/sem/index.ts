@@ -1,3 +1,4 @@
+import { fetchBudgetSpend } from './budgetSpend.ts'
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { CORS_HEADERS as CORS } from "../_shared/cors.ts"
@@ -25,7 +26,7 @@ async function getAccessToken(): Promise<string> {
 
 // ── Google Ads REST helpers ──────────────────────────────────────────────────
 
-async function adsSearch(token: string, customerId: string, query: string) {
+async function adsSearch(token: string, customerId: string, query: string, pageToken?: string) {
   const mccId = (Deno.env.get("ADS_MCC_ID") ?? "").replace(/-/g, "")
   const url = `https://googleads.googleapis.com/${ADS_VERSION}/customers/${customerId}/googleAds:search`
   const res = await fetch(url, {
@@ -36,7 +37,7 @@ async function adsSearch(token: string, customerId: string, query: string) {
       "login-customer-id": mccId,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }),
   })
   if (!res.ok) {
     const err = await res.text()
@@ -558,9 +559,9 @@ async function fetchLsaPerformance(token: string, params: URLSearchParams) {
   `
 
   const [campaignData, shareData, leadsData] = await Promise.all([
-    adsSearch(token, accountId, campaignQuery).catch(() => ({ results: [] })),
+    adsSearch(token, accountId, campaignQuery),
     adsSearch(token, accountId, impressionShareQuery).catch(() => ({ results: [] })),
-    adsSearch(token, accountId, leadsQuery).catch(() => ({ results: [] })),
+    adsSearch(token, accountId, leadsQuery),
   ])
 
   let totalSpend = 0
@@ -682,6 +683,8 @@ serve(async (req) => {
       result = await fetchAccounts(token)
     } else if (segment === "sync") {
       result = await syncAccounts(token)
+    } else if (segment === "budget-spend") {
+      result = await fetchBudgetSpend(url.searchParams, (id, query, page) => adsSearch(token, id, query, page))
     } else if (segment === "performance") {
       result = await fetchPerformance(token, url.searchParams)
     } else if (segment === "breakdowns") {

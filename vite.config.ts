@@ -18,7 +18,7 @@ import {
   getGbpAuthStatus, buildGbpAuthStartUrl, completeGbpAuthExchange,
   decodeAuthReturnPath, appendAuthResult,
 } from "./server/googleAuth.js"
-import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail } from "./server/mondayTasks.js"
+import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail, resolveMondayEmail } from "./server/mondayTasks.js"
 import { chatPerformanceAi, askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
 import { sanitizePdfFilename, exportPdfBuffer } from "./server/pdfExport.js"
 
@@ -723,16 +723,15 @@ function mondayPlugin() {
 
         const url = new URL(req.url, "http://localhost")
 
-        if (!(await enforceRequiredGoogleAccount(res, "Monday"))) return
 
         // GET /api/monday/tasks?email=...
         if (url.pathname === "/api/monday/tasks" && req.method === "GET") {
           const emailMap = buildMondayEmailMap(process.env.MONDAY_EMAIL_MAP)
-          const sessionEmail = url.searchParams.get("email") ?? ""
-          const mondayEmail = emailMap[sessionEmail] ?? sessionEmail
           const bust = url.searchParams.get("bust") === "1"
 
           try {
+            const sessionEmail = await resolveMondayEmail({ authorization: req.headers.authorization, supabaseUrl: DASHBOARD_SUPABASE_URL, supabaseAnonKey: DASHBOARD_SUPABASE_ANON_KEY })
+            const mondayEmail = emailMap[sessionEmail] ?? sessionEmail
             sendJson(res, 200, await fetchMondayTasksForUser({ mondayToken, sessionEmail: mondayEmail, bust }))
           } catch (err) {
             const message = err instanceof Error ? err.message : "Monday API error"

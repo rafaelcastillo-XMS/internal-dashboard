@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface PdfWeeklyRow {
+  leads?: number
   status: string
   accountName: string
   budget: number
@@ -14,13 +15,16 @@ export interface PdfMonthlyRow {
   accountName: string
   accountId?: string
   platform?: string
-  budget: number
-  spend: number
+  budget: number | null
+  spend: number | null
+  budgetPeriod?: 'daily' | 'lifetime'
+  note?: string
   refunded?: number
   paidWith?: string
 }
 
 export interface PdfOpenAiRow {
+  budgetPeriod?: 'daily' | 'lifetime'
   clientName: string
   campaignName: string
   status: string
@@ -89,8 +93,8 @@ const C = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fc(n: number): string {
-  if (n === 0) return '—'
+function fc(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return '—'
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
@@ -305,6 +309,28 @@ function drawWeeklyTotals(doc: jsPDF, rows: PdfWeeklyRow[], y: number, pendingCo
   return y + ROW_H + 1
 }
 
+function drawLsaTable(doc: jsPDF, rows: PdfWeeklyRow[], startY: number, period: string) {
+  const widths = [60, 65, 30, 30, 20, 30, 30]
+  const headers = ['ACCOUNT', 'PERIOD', 'BUDGET', 'SPEND', 'LEADS', 'COST / LEAD', '% USED']
+  let y = startY
+  const header = () => {
+    setColor(doc, C.blue, 'fill'); doc.rect(ML, y, USABLE, HDR_H, 'F')
+    let x = ML
+    headers.forEach((label, i) => { cell(doc, label, x, y, widths[i], HDR_H, { bold: true, color: C.white, size: 6.5 }); x += widths[i] })
+    y += HDR_H
+  }
+  header()
+  rows.forEach((row, index) => {
+    if (y + ROW_H > PAGE_H - 14) { doc.addPage(); y = 20; header() }
+    setColor(doc, index % 2 ? C.rowAlt : C.white, 'fill'); doc.rect(ML, y, USABLE, ROW_H, 'F')
+    const values = [row.accountName, period, fc(row.budget), fc(row.cost), row.leads === undefined ? '—' : String(row.leads), row.leads ? fc(row.cost / row.leads) : '—', row.budget > 0 ? `${(row.cost / row.budget * 100).toFixed(1)}%` : '—']
+    let x = ML
+    values.forEach((value, i) => { cell(doc, value, x, y, widths[i], ROW_H, { color: C.dark, align: i < 2 ? 'left' : 'right' }); x += widths[i] })
+    y += ROW_H
+  })
+  return y
+}
+
 function drawBrandMark(doc: jsPDF, logoDataUrl: string | null) {
   const h = 7
   const w = h * LOGO_ASPECT
@@ -483,14 +509,16 @@ function weeklySummaryBoxes(rows: PdfWeeklyRow[], accent: [number, number, numbe
   ]
 }
 
+function openaiBudgetTotal(rows: PdfOpenAiRow[]) {
+  if (!rows.length || !rows.every(row => row.budgetPeriod === rows[0].budgetPeriod)) return 'Mixed periods'
+  return `${fc(rows.reduce((sum, row) => sum + row.budget, 0))}${rows[0].budgetPeriod === 'daily' ? '/day' : ' lifetime'}`
+}
+
 function openaiSummaryBoxes(rows: PdfOpenAiRow[], accent: [number, number, number]) {
-  const budget = rows.reduce((s, r) => s + r.budget, 0)
   const spend  = rows.reduce((s, r) => s + r.spend, 0)
-  const impressions = rows.reduce((s, r) => s + r.impressions, 0)
   return [
-    { label: 'Total budget', value: fc(budget), color: accent },
+    { label: 'Total budget', value: openaiBudgetTotal(rows), color: accent },
     { label: 'Period spend', value: fc(spend), color: C.red },
-    { label: 'Impressions', value: impressions.toLocaleString('en-US'), color: accent },
   ]
 }
 
@@ -516,7 +544,7 @@ async function buildWeeklyBudgetPdfDoc(params: {
     dateLabel,
     logoDataUrl,
     stats: [
-      { label: 'Total budget', value: fc(allRows.reduce((s, r) => s + r.budget, 0) + openaiRows.reduce((s, r) => s + r.budget, 0)) },
+      { label: 'Google monthly budgets', value: fc(allRows.reduce((s, r) => s + r.budget, 0)) },
       { label: 'Period spend', value: fc(allRows.reduce((s, r) => s + r.cost, 0) + openaiRows.reduce((s, r) => s + r.spend, 0)) },
       { label: 'Accounts', value: String(allRows.length) },
     ],
@@ -557,10 +585,7 @@ async function buildWeeklyBudgetPdfDoc(params: {
 
     drawSectionLabel(doc, 'GOOGLE GUARANTEE', `Period: ${dateLabel}`, y, 'guarantee')
     y += 11
-    drawWeeklyTableHeader(doc, y, C.blue)
-    y += HDR_H
-    y = drawWeeklyRows(doc, guaranteeRows, y, false)
-    y = drawWeeklyTotals(doc, guaranteeRows, y, false)
+    y = drawLsaTable(doc, guaranteeRows, y, dateLabel)
   }
 
   if (openaiRows.length > 0) {
@@ -651,12 +676,12 @@ async function buildMonthlyBudgetPdfDoc(params: {
 
   drawCoverPage(doc, {
     title: TITLE_MONTHLY,
-    subtitle: 'Google Ads + Google Guarantee · SEM monthly data',
+    subtitle: 'Google Ads + Google Guarantee + OpenAI Ads',
     dateLabel: monthLabel,
     logoDataUrl,
     stats: [
-      { label: 'Total budget', value: fc(rows.reduce((s, r) => s + r.budget, 0)) },
-      { label: 'Total spend', value: fc(rows.reduce((s, r) => s + r.spend, 0)) },
+      { label: 'Total budget', value: fc(rows.reduce((s, r) => s + (r.budgetPeriod ? 0 : r.budget ?? 0), 0)) },
+      { label: 'Total spend', value: fc(rows.reduce((s, r) => s + (r.spend ?? 0), 0)) },
       { label: 'Accounts', value: String(rows.length) },
     ],
   })
@@ -665,8 +690,8 @@ async function buildMonthlyBudgetPdfDoc(params: {
   drawPageHeader(doc, TITLE_MONTHLY, monthLabel, logoDataUrl)
   let y = 32
 
-  const totalBudgetHead = rows.reduce((s, r) => s + r.budget, 0)
-  const totalSpendHead  = rows.reduce((s, r) => s + r.spend, 0)
+  const totalBudgetHead = rows.reduce((s, r) => s + (r.budgetPeriod ? 0 : r.budget ?? 0), 0)
+  const totalSpendHead  = rows.reduce((s, r) => s + (r.spend ?? 0), 0)
   y = drawSummaryStrip(doc, y, [
     { label: 'Total budget', value: fc(totalBudgetHead), color: C.green },
     { label: 'Total spend', value: fc(totalSpendHead), color: C.red },
@@ -676,7 +701,7 @@ async function buildMonthlyBudgetPdfDoc(params: {
   y += 6
 
   // Section label
-  drawSectionLabel(doc, 'MONTHLY BUDGET', 'Google Ads + Google Guarantee · SEM monthly data', y, 'ads')
+  drawSectionLabel(doc, 'MONTHLY BUDGET', 'Google Ads + Google Guarantee + OpenAI Ads', y, 'ads')
   y += 11
 
   // Table header
@@ -721,10 +746,10 @@ async function buildMonthlyBudgetPdfDoc(params: {
     cell(doc, row.platform ?? '—', x, y, MONTHLY_COLS[3], ROW_H, { color: C.dark, size: 7 })
     x += MONTHLY_COLS[3]
 
-    cell(doc, fc(row.budget), x, y, MONTHLY_COLS[4], ROW_H, { color: row.budget > 0 ? C.dark : C.muted, align: 'right' })
+    cell(doc, `${fc(row.budget)}${row.budgetPeriod === 'daily' ? '/day' : row.budgetPeriod === 'lifetime' ? ' lifetime' : ''}`, x, y, MONTHLY_COLS[4], ROW_H, { color: (row.budget ?? 0) > 0 ? C.dark : C.muted, align: 'right' })
     x += MONTHLY_COLS[4]
 
-    cell(doc, fc(row.spend), x, y, MONTHLY_COLS[5], ROW_H, { color: row.spend > 0 ? C.body : C.muted, align: 'right' })
+    cell(doc, fc(row.spend), x, y, MONTHLY_COLS[5], ROW_H, { color: (row.spend ?? 0) > 0 ? C.body : C.muted, align: 'right' })
     x += MONTHLY_COLS[5]
 
     cell(doc, fc(refunded), x, y, MONTHLY_COLS[6], ROW_H, { color: refunded > 0 ? C.dark : C.muted, align: 'right' })
@@ -739,8 +764,8 @@ async function buildMonthlyBudgetPdfDoc(params: {
   })
 
   // Totals
-  const totalBudget = rows.reduce((s, r) => s + r.budget, 0)
-  const totalSpend  = rows.reduce((s, r) => s + r.spend, 0)
+  const totalBudget = rows.reduce((s, r) => s + (r.budgetPeriod ? 0 : r.budget ?? 0), 0)
+  const totalSpend  = rows.reduce((s, r) => s + (r.spend ?? 0), 0)
   const totalRefund = rows.reduce((s, r) => s + (r.refunded ?? 0), 0)
 
   setColor(doc, C.totals, 'fill')
@@ -783,8 +808,8 @@ export async function generateMonthlyBudgetPdfBytes(params: {
 
 // ─── Public: OpenAI Ads PDF ───────────────────────────────────────────────────
 
-const OPENAI_COLS = [45, 68, 24, 30, 30, 28, 40] as const
-const OPENAI_HEADERS = ['CLIENT', 'CAMPAIGN', 'STATUS', 'BUDGET', 'SPEND', 'CPC', 'IMPRESSIONS']
+const OPENAI_COLS = [65, 100, 50, 50] as const
+const OPENAI_HEADERS = ['CLIENT', 'CAMPAIGN', 'BUDGET', 'SPEND']
 const TITLE_OPENAI = 'OpenAI Ads Report'
 
 function drawOpenAiTableHeader(doc: jsPDF, y: number) {
@@ -820,15 +845,9 @@ function drawOpenAiRows(doc: jsPDF, rows: PdfOpenAiRow[], startY: number, title:
     x += OPENAI_COLS[0]
     cell(doc, row.campaignName, x, y, OPENAI_COLS[1], ROW_H, { color: C.dark, size: 7 })
     x += OPENAI_COLS[1]
-    cell(doc, row.status === 'active' ? 'Active' : 'Paused', x, y, OPENAI_COLS[2], ROW_H, { color: row.status === 'active' ? C.greenText : C.muted, size: 7 })
+    cell(doc, `${fc(row.budget)}${row.budgetPeriod === 'daily' ? '/day' : row.budgetPeriod === 'lifetime' ? ' lifetime' : ''}`, x, y, OPENAI_COLS[2], ROW_H, { color: C.dark, align: 'right' })
     x += OPENAI_COLS[2]
-    cell(doc, fc(row.budget), x, y, OPENAI_COLS[3], ROW_H, { color: row.budget > 0 ? C.dark : C.muted, align: 'right' })
-    x += OPENAI_COLS[3]
-    cell(doc, fc(row.spend), x, y, OPENAI_COLS[4], ROW_H, { color: row.spend > 0 ? C.red : C.muted, align: 'right' })
-    x += OPENAI_COLS[4]
-    cell(doc, row.cpc > 0 ? fc(row.cpc) : '—', x, y, OPENAI_COLS[5], ROW_H, { color: C.body, align: 'right' })
-    x += OPENAI_COLS[5]
-    cell(doc, row.impressions > 0 ? row.impressions.toLocaleString('en-US') : '—', x, y, OPENAI_COLS[6], ROW_H, { color: C.body, align: 'right' })
+    cell(doc, fc(row.spend), x, y, OPENAI_COLS[3], ROW_H, { color: C.red, align: 'right' })
 
     setColor(doc, C.border, 'draw')
     doc.setLineWidth(0.1)
@@ -852,7 +871,7 @@ export async function generateOpenAiAdsPdf(params: {
     dateLabel,
     logoDataUrl,
     stats: [
-      { label: 'Total budget', value: fc(rows.reduce((s, r) => s + r.budget, 0)) },
+      { label: 'Total budget', value: openaiBudgetTotal(rows) },
       { label: 'Total spend', value: fc(rows.reduce((s, r) => s + r.spend, 0)) },
       { label: 'Campaigns', value: String(rows.length) },
     ],

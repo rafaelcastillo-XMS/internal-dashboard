@@ -1,4 +1,5 @@
 export interface MonthlyBudgetClient {
+  id?: string
   status: string
   sem_enabled: boolean
   sem_account_id: string | null
@@ -8,7 +9,7 @@ export interface MonthlyBudgetClient {
 /** Keep legacy/unlinked accounts, but respect explicit client activation and
  * dedicated LSA mappings. Historical spend alone does not make an LSA account
  * a Google Ads account. This selection is shared by the table and exports. */
-export function selectMonthlyBudgetAccounts<T extends { id: string }>(
+export function selectMonthlyBudgetAccounts<T extends { id: string; status?: string }>(
   accounts: T[], clients: MonthlyBudgetClient[], adsIds: Set<string>, guaranteeIds: Set<string>,
 ) {
   const disabled = new Set<string>()
@@ -25,7 +26,7 @@ export function selectMonthlyBudgetAccounts<T extends { id: string }>(
       }
     }
   }
-  return accounts.filter(account => !disabled.has(account.id)).map(account => ({
+  return [...new Map(accounts.map(account => [account.id, account])).values()].filter(account => !disabled.has(account.id) && (account.status === undefined || account.status === 'ENABLED')).map(account => ({
     account,
     googleAds: adsIds.has(account.id) && !(dedicatedLsa.has(account.id) && !adsMappings.has(account.id)),
     googleGuarantee: guaranteeIds.has(account.id),
