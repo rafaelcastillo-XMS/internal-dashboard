@@ -1,4 +1,6 @@
 import { jsPDF } from 'jspdf'
+import { renderBudgetTablePdf } from './renderBudgetTablePdf'
+import type { BudgetReportTable } from '../reports/budgetReportTables'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +46,7 @@ const LOGO_ASPECT = 1314 / 370
 let logoPromise: Promise<string | null> | null = null
 
 function loadXmsLogoDataUrl(): Promise<string | null> {
+  if (typeof Image === 'undefined') return Promise.resolve(null)
   if (!logoPromise) {
     logoPromise = new Promise((resolve) => {
       const img = new Image()
@@ -134,17 +137,6 @@ function truncateToWidth(doc: jsPDF, text: string, maxW: number): string {
   return lo === 0 ? ellipsis : text.slice(0, lo).trimEnd() + ellipsis
 }
 
-function drawStatusDot(doc: jsPDF, active: boolean, x: number, cy: number) {
-  const color = active ? C.greenText : C.muted
-  setColor(doc, color, 'fill')
-  // Small filled square as dot
-  doc.rect(x + 3, cy - 1.2, 2.4, 2.4, 'F')
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(7.5)
-  setColor(doc, active ? C.greenText : C.body, 'text')
-  doc.text(active ? 'Active' : 'Inactive', x + 7, cy + 1.2)
-}
-
 function drawSummaryStrip(
   doc: jsPDF,
   y: number,
@@ -176,160 +168,12 @@ function drawSummaryStrip(
   return y + boxH
 }
 
-// ─── Weekly Table ─────────────────────────────────────────────────────────────
-
-const WEEKLY_COLS = [20, 90, 40, 40, 50, 25] as const
-// Total = 265mm
-
-const WEEKLY_HEADERS = ['STATUS', 'ACCOUNT NAME', 'BUDGET', 'PERIOD SPEND', 'REMAINING', '% USED']
-
-const ROW_H  = 8
-const HDR_H  = 9
-const ML     = 16
+const ROW_H = 8
+const HDR_H = 9
+const ML = 16
 const PAGE_W = 297
 const PAGE_H = 210
-const USABLE = PAGE_W - ML * 2  // 265mm
-
-function drawWeeklyTableHeader(doc: jsPDF, y: number, headerColor: [number,number,number]) {
-  setColor(doc, headerColor, 'fill')
-  doc.rect(ML, y, USABLE, HDR_H, 'F')
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(6.5)
-  setColor(doc, C.white, 'text')
-  let x = ML
-  WEEKLY_HEADERS.forEach((h, i) => {
-    doc.text(h, x + 3, y + HDR_H / 2 + 2)
-    x += WEEKLY_COLS[i]
-  })
-}
-
-function drawWeeklyRows(
-  doc: jsPDF,
-  rows: PdfWeeklyRow[],
-  startY: number,
-  pendingCost: boolean,
-): number {
-  let y = startY
-  rows.forEach((row, ri) => {
-    // Check page break
-    if (y + ROW_H > PAGE_H - 14) {
-      doc.addPage()
-      y = 20
-    }
-    const alt = ri % 2 === 1
-    setColor(doc, alt ? C.rowAlt : C.white, 'fill')
-    doc.rect(ML, y, USABLE, ROW_H, 'F')
-
-    const active    = row.status === 'ENABLED'
-    const remaining = !pendingCost && row.budget > 0 ? row.budget - row.cost : null
-    const remNeg    = remaining !== null && remaining < 0
-    const pct       = !pendingCost && row.budget > 0 && row.cost > 0 ? (row.cost / row.budget) * 100 : null
-
-    let x = ML
-    const cy = y + ROW_H / 2
-
-    // Status
-    drawStatusDot(doc, active, x, cy)
-    x += WEEKLY_COLS[0]
-
-    // Account
-    cell(doc, row.accountName, x, y, WEEKLY_COLS[1], ROW_H, { bold: true, color: C.dark })
-    x += WEEKLY_COLS[1]
-
-    // Budget
-    cell(doc, fc(row.budget), x, y, WEEKLY_COLS[2], ROW_H, { color: row.budget > 0 ? C.dark : C.muted, align: 'right' })
-    x += WEEKLY_COLS[2]
-
-    // Period Spend
-    if (pendingCost) {
-      cell(doc, 'Pending', x, y, WEEKLY_COLS[3], ROW_H, { color: C.muted, align: 'right' })
-    } else {
-      cell(doc, fc(row.cost), x, y, WEEKLY_COLS[3], ROW_H, { color: C.red, align: 'right' })
-    }
-    x += WEEKLY_COLS[3]
-
-    // Remaining
-    if (remaining !== null) {
-      cell(doc, fc(Math.abs(remaining)) + (remNeg ? ' ↓' : ''), x, y, WEEKLY_COLS[4], ROW_H, {
-        bold: true, color: remNeg ? C.red : C.greenText, align: 'right',
-      })
-    } else {
-      cell(doc, '—', x, y, WEEKLY_COLS[4], ROW_H, { color: C.muted, align: 'right' })
-    }
-    x += WEEKLY_COLS[4]
-
-    // % Used
-    cell(doc, pct !== null ? `${pct.toFixed(1)}%` : '—', x, y, WEEKLY_COLS[5], ROW_H, {
-      color: pct === null ? C.muted : pct > 90 ? C.red : pct > 70 ? [202, 138, 4] : C.greenText,
-      align: 'right',
-    })
-
-    // Row separator
-    setColor(doc, C.border, 'draw')
-    doc.setLineWidth(0.1)
-    doc.line(ML, y + ROW_H, ML + USABLE, y + ROW_H)
-
-    y += ROW_H
-  })
-  return y
-}
-
-function drawWeeklyTotals(doc: jsPDF, rows: PdfWeeklyRow[], y: number, pendingCost: boolean): number {
-  const totalBudget    = rows.reduce((s, r) => s + r.budget, 0)
-  const totalCost      = rows.reduce((s, r) => s + r.cost, 0)
-  const totalRemaining = !pendingCost && totalBudget > 0 ? totalBudget - totalCost : null
-  const remNeg         = totalRemaining !== null && totalRemaining < 0
-  const totalPct       = !pendingCost && totalBudget > 0 && totalCost > 0 ? (totalCost / totalBudget) * 100 : null
-
-  setColor(doc, C.totals, 'fill')
-  doc.rect(ML, y, USABLE, ROW_H + 1, 'F')
-  setColor(doc, C.greenMid, 'draw')
-  doc.setLineWidth(0.4)
-  doc.line(ML, y, ML + USABLE, y)
-
-  let x = ML
-  cell(doc, 'TOTALS', x + WEEKLY_COLS[0] + 3, y, WEEKLY_COLS[1], ROW_H + 1, { bold: true, color: C.greenText, size: 7 })
-  x += WEEKLY_COLS[0] + WEEKLY_COLS[1]
-
-  cell(doc, totalBudget > 0 ? fc(totalBudget) : '—', x, y, WEEKLY_COLS[2], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
-  x += WEEKLY_COLS[2]
-
-  cell(doc, pendingCost ? 'Pending' : totalCost > 0 ? fc(totalCost) : '—', x, y, WEEKLY_COLS[3], ROW_H + 1, { bold: true, color: pendingCost ? C.muted : C.greenText, align: 'right' })
-  x += WEEKLY_COLS[3]
-
-  if (totalRemaining !== null) {
-    cell(doc, fc(Math.abs(totalRemaining)) + (remNeg ? ' ↓' : ''), x, y, WEEKLY_COLS[4], ROW_H + 1, { bold: true, color: remNeg ? C.red : C.greenText, align: 'right' })
-  } else {
-    cell(doc, '—', x, y, WEEKLY_COLS[4], ROW_H + 1, { bold: true, color: C.muted, align: 'right' })
-  }
-  x += WEEKLY_COLS[4]
-
-  cell(doc, totalPct !== null ? `${totalPct.toFixed(1)}%` : '—', x, y, WEEKLY_COLS[5], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
-
-  return y + ROW_H + 1
-}
-
-function drawLsaTable(doc: jsPDF, rows: PdfWeeklyRow[], startY: number, period: string) {
-  const widths = [60, 65, 30, 30, 20, 30, 30]
-  const headers = ['ACCOUNT', 'PERIOD', 'BUDGET', 'SPEND', 'LEADS', 'COST / LEAD', '% USED']
-  let y = startY
-  const header = () => {
-    setColor(doc, C.blue, 'fill'); doc.rect(ML, y, USABLE, HDR_H, 'F')
-    let x = ML
-    headers.forEach((label, i) => { cell(doc, label, x, y, widths[i], HDR_H, { bold: true, color: C.white, size: 6.5 }); x += widths[i] })
-    y += HDR_H
-  }
-  header()
-  rows.forEach((row, index) => {
-    if (y + ROW_H > PAGE_H - 14) { doc.addPage(); y = 20; header() }
-    setColor(doc, index % 2 ? C.rowAlt : C.white, 'fill'); doc.rect(ML, y, USABLE, ROW_H, 'F')
-    const values = [row.accountName, period, fc(row.budget), fc(row.cost), row.leads === undefined ? '—' : String(row.leads), row.leads ? fc(row.cost / row.leads) : '—', row.budget > 0 ? `${(row.cost / row.budget * 100).toFixed(1)}%` : '—']
-    let x = ML
-    values.forEach((value, i) => { cell(doc, value, x, y, widths[i], ROW_H, { color: C.dark, align: i < 2 ? 'left' : 'right' }); x += widths[i] })
-    y += ROW_H
-  })
-  return y
-}
+const USABLE = PAGE_W - ML * 2
 
 function drawBrandMark(doc: jsPDF, logoDataUrl: string | null) {
   const h = 7
@@ -498,17 +342,6 @@ function drawCoverPage(
 
 // ─── Public: Weekly PDF ───────────────────────────────────────────────────────
 
-function weeklySummaryBoxes(rows: PdfWeeklyRow[], accent: [number, number, number]) {
-  const budget    = rows.reduce((s, r) => s + r.budget, 0)
-  const spend     = rows.reduce((s, r) => s + r.cost, 0)
-  const remaining = budget > 0 ? budget - spend : 0
-  return [
-    { label: 'Total budget', value: fc(budget), color: accent },
-    { label: 'Period spend', value: fc(spend), color: C.red },
-    { label: 'Remaining', value: fc(remaining), color: remaining < 0 ? C.red : accent },
-  ]
-}
-
 function openaiBudgetTotal(rows: PdfOpenAiRow[]) {
   if (!rows.length || !rows.every(row => row.budgetPeriod === rows[0].budgetPeriod)) return 'Mixed periods'
   return `${fc(rows.reduce((sum, row) => sum + row.budget, 0))}${rows[0].budgetPeriod === 'daily' ? '/day' : ' lifetime'}`
@@ -522,287 +355,33 @@ function openaiSummaryBoxes(rows: PdfOpenAiRow[], accent: [number, number, numbe
   ]
 }
 
-const TITLE_WEEKLY = 'Weekly Budget Report'
+export interface WeeklyBudgetPdfParams { dateLabel: string; table: BudgetReportTable }
+export interface MonthlyBudgetPdfParams { monthLabel: string; table: BudgetReportTable }
 
-async function buildWeeklyBudgetPdfDoc(params: {
-  dateLabel: string
-  adsRows: PdfWeeklyRow[]
-  guaranteeRows: PdfWeeklyRow[]
-  openaiRows?: PdfOpenAiRow[]
-}): Promise<{ doc: jsPDF; filename: string }> {
-  const { dateLabel, adsRows, guaranteeRows, openaiRows = [] } = params
+async function buildBudgetPdf(table: BudgetReportTable, period: string, weekly: boolean) {
   const logoDataUrl = await loadXmsLogoDataUrl()
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-
-  const allRows = [...adsRows, ...guaranteeRows]
-  const subtitle = openaiRows.length > 0
-    ? 'Google Ads + Google Guarantee + OpenAI Ads'
-    : 'Google Ads + Google Guarantee'
-  drawCoverPage(doc, {
-    title: TITLE_WEEKLY,
-    subtitle,
-    dateLabel,
-    logoDataUrl,
-    stats: [
-      { label: 'Google monthly budgets', value: fc(allRows.reduce((s, r) => s + r.budget, 0)) },
-      { label: 'Period spend', value: fc(allRows.reduce((s, r) => s + r.cost, 0) + openaiRows.reduce((s, r) => s + r.spend, 0)) },
-      { label: 'Accounts', value: String(allRows.length) },
-    ],
-  })
-  doc.addPage()
-
-  drawPageHeader(doc, TITLE_WEEKLY, dateLabel, logoDataUrl)
-  let y = 32
-
-  if (adsRows.length > 0) {
-    y = drawSummaryStrip(doc, y, weeklySummaryBoxes(adsRows, C.green))
-    y += 6
-    drawSectionLabel(doc, 'GOOGLE ADS', `Period: ${dateLabel} · Google Ads API`, y, 'ads')
-    y += 11
-    drawWeeklyTableHeader(doc, y, C.green)
-    y += HDR_H
-    y = drawWeeklyRows(doc, adsRows, y, false)
-    y = drawWeeklyTotals(doc, adsRows, y, false)
-  }
-
-  if (guaranteeRows.length > 0) {
-    const guaranteeHeight = 21 + HDR_H + guaranteeRows.length * ROW_H + ROW_H + 1 + 22
-    if (adsRows.length === 0) {
-      // Sole section on the page — no need to reserve room below an Ads table.
-      y = drawSummaryStrip(doc, y, weeklySummaryBoxes(guaranteeRows, C.blue))
-      y += 6
-    } else if (PAGE_H - y - 14 < guaranteeHeight) {
-      doc.addPage()
-      drawPageHeader(doc, TITLE_WEEKLY, dateLabel, logoDataUrl, 2)
-      y = 32
-      y = drawSummaryStrip(doc, y, weeklySummaryBoxes(guaranteeRows, C.blue))
-      y += 6
-    } else {
-      y += 8
-      y = drawSummaryStrip(doc, y, weeklySummaryBoxes(guaranteeRows, C.blue))
-      y += 6
-    }
-
-    drawSectionLabel(doc, 'GOOGLE GUARANTEE', `Period: ${dateLabel}`, y, 'guarantee')
-    y += 11
-    y = drawLsaTable(doc, guaranteeRows, y, dateLabel)
-  }
-
-  if (openaiRows.length > 0) {
-    const openaiHeight = 21 + HDR_H + openaiRows.length * ROW_H + 22
-    if (adsRows.length === 0 && guaranteeRows.length === 0) {
-      y = drawSummaryStrip(doc, y, openaiSummaryBoxes(openaiRows, C.green))
-      y += 6
-    } else if (PAGE_H - y - 14 < openaiHeight) {
-      doc.addPage()
-      drawPageHeader(doc, TITLE_WEEKLY, dateLabel, logoDataUrl, doc.getNumberOfPages())
-      y = 32
-      y = drawSummaryStrip(doc, y, openaiSummaryBoxes(openaiRows, C.green))
-      y += 6
-    } else {
-      y += 8
-      y = drawSummaryStrip(doc, y, openaiSummaryBoxes(openaiRows, C.green))
-      y += 6
-    }
-
-    drawSectionLabel(doc, 'OPENAI ADS', `Period: ${dateLabel} · OpenAI Ads API`, y, 'ads')
-    y += 11
-    drawOpenAiTableHeader(doc, y)
-    y += HDR_H
-    y = drawOpenAiRows(doc, openaiRows, y, TITLE_WEEKLY, dateLabel, logoDataUrl)
-  }
-
-  if (adsRows.length === 0 && guaranteeRows.length === 0 && openaiRows.length === 0) {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    setColor(doc, C.muted, 'text')
-    doc.text('No accounts to report for this period.', ML, y + 10)
-  }
-
-  drawFooters(doc, 2)
-
-  const filename = `XMS-Budget-Report-${new Date().toISOString().slice(0, 10)}.pdf`
+  const doc = renderBudgetTablePdf({ table, period, weekly, logoDataUrl, title: weekly ? 'Weekly Budget Report' : 'Monthly Budget Report' })
+  const filename = `XMS-Budget-${weekly ? 'Weekly' : 'Monthly'}-${period.replace(/[^a-zA-Z0-9]+/g, '-').replace(/-$/, '')}.pdf`
   return { doc, filename }
 }
 
-export async function generateWeeklyBudgetPdf(params: {
-  dateLabel: string
-  adsRows: PdfWeeklyRow[]
-  guaranteeRows: PdfWeeklyRow[]
-  openaiRows?: PdfOpenAiRow[]
-}): Promise<void> {
-  const { doc, filename } = await buildWeeklyBudgetPdfDoc(params)
+export async function generateWeeklyBudgetPdf({ dateLabel, table }: WeeklyBudgetPdfParams): Promise<void> {
+  const { doc, filename } = await buildBudgetPdf(table, dateLabel, true)
   doc.save(filename)
 }
 
-// Bytes instead of a browser download — for attaching the same PDF to an email.
-export async function generateWeeklyBudgetPdfBytes(params: {
-  dateLabel: string
-  adsRows: PdfWeeklyRow[]
-  guaranteeRows: PdfWeeklyRow[]
-  openaiRows?: PdfOpenAiRow[]
-}): Promise<{ bytes: Uint8Array; filename: string }> {
-  const { doc, filename } = await buildWeeklyBudgetPdfDoc(params)
+export async function generateWeeklyBudgetPdfBytes({ dateLabel, table }: WeeklyBudgetPdfParams) {
+  const { doc, filename } = await buildBudgetPdf(table, dateLabel, true)
   return { bytes: new Uint8Array(doc.output('arraybuffer')), filename }
 }
 
-const TITLE_MONTHLY = 'Monthly Budget Report'
-
-const MONTHLY_COLS = [18, 55, 30, 34, 28, 28, 34, 38] as const
-const MONTHLY_HEADERS = ['STATUS', 'CLIENT', 'ID', 'PLATFORM', 'BUDGET', 'SPEND', 'CREDITS', 'PAID WITH']
-
-function drawMonthlyTableHeader(doc: jsPDF, y: number) {
-  setColor(doc, C.green, 'fill')
-  doc.rect(ML, y, USABLE, HDR_H, 'F')
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(6.2)
-  setColor(doc, C.white, 'text')
-  let x = ML
-  MONTHLY_HEADERS.forEach((h, i) => {
-    doc.text(h, x + 2.5, y + HDR_H / 2 + 2)
-    x += MONTHLY_COLS[i]
-  })
-}
-
-// ─── Public: Monthly PDF ──────────────────────────────────────────────────────
-
-async function buildMonthlyBudgetPdfDoc(params: {
-  monthLabel: string
-  rows: PdfMonthlyRow[]
-}): Promise<{ doc: jsPDF; filename: string }> {
-  const { monthLabel, rows } = params
-  const logoDataUrl = await loadXmsLogoDataUrl()
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-
-  drawCoverPage(doc, {
-    title: TITLE_MONTHLY,
-    subtitle: 'Google Ads + Google Guarantee + OpenAI Ads',
-    dateLabel: monthLabel,
-    logoDataUrl,
-    stats: [
-      { label: 'Total budget', value: fc(rows.reduce((s, r) => s + (r.budgetPeriod ? 0 : r.budget ?? 0), 0)) },
-      { label: 'Total spend', value: fc(rows.reduce((s, r) => s + (r.spend ?? 0), 0)) },
-      { label: 'Accounts', value: String(rows.length) },
-    ],
-  })
-  doc.addPage()
-
-  drawPageHeader(doc, TITLE_MONTHLY, monthLabel, logoDataUrl)
-  let y = 32
-
-  const totalBudgetHead = rows.reduce((s, r) => s + (r.budgetPeriod ? 0 : r.budget ?? 0), 0)
-  const totalSpendHead  = rows.reduce((s, r) => s + (r.spend ?? 0), 0)
-  y = drawSummaryStrip(doc, y, [
-    { label: 'Total budget', value: fc(totalBudgetHead), color: C.green },
-    { label: 'Total spend', value: fc(totalSpendHead), color: C.red },
-    { label: 'Remaining', value: fc(totalBudgetHead - totalSpendHead), color: totalBudgetHead - totalSpendHead < 0 ? C.red : C.green },
-    { label: 'Credits refunded', value: fc(rows.reduce((s, r) => s + (r.refunded ?? 0), 0)), color: C.green },
-  ])
-  y += 6
-
-  // Section label
-  drawSectionLabel(doc, 'MONTHLY BUDGET', 'Google Ads + Google Guarantee + OpenAI Ads', y, 'ads')
-  y += 11
-
-  // Table header
-  drawMonthlyTableHeader(doc, y)
-  y += HDR_H
-
-  if (rows.length === 0) {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    setColor(doc, C.muted, 'text')
-    doc.text('No accounts to report for this month.', ML, y + 10)
-  }
-
-  // Rows
-  rows.forEach((row, ri) => {
-    if (y + ROW_H > PAGE_H - 14) {
-      doc.addPage()
-      drawPageHeader(doc, TITLE_MONTHLY, monthLabel, logoDataUrl, doc.getNumberOfPages())
-      y = 32
-      drawSectionLabel(doc, 'MONTHLY BUDGET', `Continued · ${monthLabel}`, y, 'ads')
-      y += 11
-      drawMonthlyTableHeader(doc, y)
-      y += HDR_H
-    }
-    setColor(doc, ri % 2 === 1 ? C.rowAlt : C.white, 'fill')
-    doc.rect(ML, y, USABLE, ROW_H, 'F')
-
-    const active   = row.status === 'ENABLED'
-    const refunded = row.refunded ?? 0
-
-    let x = ML
-    const cy = y + ROW_H / 2
-    drawStatusDot(doc, active, x, cy)
-    x += MONTHLY_COLS[0]
-
-    cell(doc, row.accountName, x, y, MONTHLY_COLS[1], ROW_H, { bold: true, color: C.dark })
-    x += MONTHLY_COLS[1]
-
-    cell(doc, row.accountId ?? '—', x, y, MONTHLY_COLS[2], ROW_H, { color: C.body, size: 7 })
-    x += MONTHLY_COLS[2]
-
-    cell(doc, row.platform ?? '—', x, y, MONTHLY_COLS[3], ROW_H, { color: C.dark, size: 7 })
-    x += MONTHLY_COLS[3]
-
-    cell(doc, `${fc(row.budget)}${row.budgetPeriod === 'daily' ? '/day' : row.budgetPeriod === 'lifetime' ? ' lifetime' : ''}`, x, y, MONTHLY_COLS[4], ROW_H, { color: (row.budget ?? 0) > 0 ? C.dark : C.muted, align: 'right' })
-    x += MONTHLY_COLS[4]
-
-    cell(doc, fc(row.spend), x, y, MONTHLY_COLS[5], ROW_H, { color: (row.spend ?? 0) > 0 ? C.body : C.muted, align: 'right' })
-    x += MONTHLY_COLS[5]
-
-    cell(doc, fc(refunded), x, y, MONTHLY_COLS[6], ROW_H, { color: refunded > 0 ? C.dark : C.muted, align: 'right' })
-    x += MONTHLY_COLS[6]
-
-    cell(doc, row.paidWith || '—', x, y, MONTHLY_COLS[7], ROW_H, { color: row.paidWith ? C.body : C.muted, size: 7 })
-
-    setColor(doc, C.border, 'draw')
-    doc.setLineWidth(0.1)
-    doc.line(ML, y + ROW_H, ML + USABLE, y + ROW_H)
-    y += ROW_H
-  })
-
-  // Totals
-  const totalBudget = rows.reduce((s, r) => s + (r.budgetPeriod ? 0 : r.budget ?? 0), 0)
-  const totalSpend  = rows.reduce((s, r) => s + (r.spend ?? 0), 0)
-  const totalRefund = rows.reduce((s, r) => s + (r.refunded ?? 0), 0)
-
-  setColor(doc, C.totals, 'fill')
-  doc.rect(ML, y, USABLE, ROW_H + 1, 'F')
-  setColor(doc, C.greenMid, 'draw')
-  doc.setLineWidth(0.4)
-  doc.line(ML, y, ML + USABLE, y)
-
-  let x = ML
-  cell(doc, 'TOTALS', x + MONTHLY_COLS[0] + 3, y, MONTHLY_COLS[1], ROW_H + 1, { bold: true, color: C.greenText, size: 7 })
-  x += MONTHLY_COLS[0] + MONTHLY_COLS[1] + MONTHLY_COLS[2] + MONTHLY_COLS[3]
-  cell(doc, fc(totalBudget), x, y, MONTHLY_COLS[4], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
-  x += MONTHLY_COLS[4]
-  cell(doc, fc(totalSpend), x, y, MONTHLY_COLS[5], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
-  x += MONTHLY_COLS[5]
-  cell(doc, fc(totalRefund), x, y, MONTHLY_COLS[6], ROW_H + 1, { bold: true, color: C.greenText, align: 'right' })
-
-  drawFooters(doc, 2)
-
-  const filename = `XMS-Budget-Monthly-${monthLabel.replace(/\s/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`
-  return { doc, filename }
-}
-
-export async function generateMonthlyBudgetPdf(params: {
-  monthLabel: string
-  rows: PdfMonthlyRow[]
-}): Promise<void> {
-  const { doc, filename } = await buildMonthlyBudgetPdfDoc(params)
+export async function generateMonthlyBudgetPdf({ monthLabel, table }: MonthlyBudgetPdfParams): Promise<void> {
+  const { doc, filename } = await buildBudgetPdf(table, monthLabel, false)
   doc.save(filename)
 }
 
-// Bytes instead of a browser download — for attaching the same PDF to an email.
-export async function generateMonthlyBudgetPdfBytes(params: {
-  monthLabel: string
-  rows: PdfMonthlyRow[]
-}): Promise<{ bytes: Uint8Array; filename: string }> {
-  const { doc, filename } = await buildMonthlyBudgetPdfDoc(params)
+export async function generateMonthlyBudgetPdfBytes({ monthLabel, table }: MonthlyBudgetPdfParams) {
+  const { doc, filename } = await buildBudgetPdf(table, monthLabel, false)
   return { bytes: new Uint8Array(doc.output('arraybuffer')), filename }
 }
 
@@ -825,8 +404,7 @@ function drawOpenAiTableHeader(doc: jsPDF, y: number) {
   })
 }
 
-// Row loop shared between the standalone OpenAI PDF and the OpenAI section
-// inside the combined weekly PDF — page breaks re-draw the same page header.
+// Standalone OpenAI export retained for its existing callers.
 function drawOpenAiRows(doc: jsPDF, rows: PdfOpenAiRow[], startY: number, title: string, dateLabel: string, logoDataUrl: string | null): number {
   let y = startY
   rows.forEach((row, ri) => {
