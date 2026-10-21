@@ -19,12 +19,12 @@ export function renderBudgetTablePdf({ table, title, period, weekly, logoDataUrl
   const usable = width - 2 * MARGIN
   const bottom = height - 16
   const weights = weekly
-    ? [42, 25, 25, 40, 20, 25, 24, 24, 24, 21, 21, 21, 23, 12, 24, 15]
+    ? [76, 24, 36, 30, 30]
     : [64, 30, 37, 34, 30, 44, 34]
   if (table.headers.length !== weights.length) throw new Error('Report columns do not match the PDF layout')
   const totalWeight = weights.reduce((a, b) => a + b, 0)
   const widths = weights.map(w => w / totalWeight * usable)
-  const rightAligned = (i: number) => weekly ? i === 5 || i >= 7 : i >= 3 && i <= 5
+  const rightAligned = (i: number) => weekly ? i >= 3 : i >= 3 && i <= 5
   let y = 0
   let tableTop = 0
 
@@ -42,7 +42,7 @@ export function renderBudgetTablePdf({ table, title, period, weekly, logoDataUrl
   const rowHeight = (lines: string[][]) => Math.max(8, Math.max(...lines.map(c => c.length)) * LINE + PAD * 2)
 
   function paintRow(lines: string[][], h: number, options: { header?: boolean; total?: boolean; shaded?: boolean } = {}) {
-    doc.setFillColor(...(options.total ? [238, 247, 242] : options.header ? [243, 244, 246] : options.shaded ? [250, 251, 252] : [255, 255, 255]) as [number, number, number])
+    doc.setFillColor(...(options.total ? [238, 247, 242] : options.header ? [243, 244, 246] : options.shaded ? [238, 245, 255] : [255, 255, 255]) as [number, number, number])
     doc.rect(MARGIN, y, usable, h, 'F')
     let x = MARGIN
     lines.forEach((cell, i) => {
@@ -132,13 +132,33 @@ export function renderBudgetTablePdf({ table, title, period, weekly, logoDataUrl
     }
   }
 
-  table.groups.forEach((group, index) => {
-    const groupHeight = group.rows.reduce((sum, row) => sum + rowHeight(wrap(row.cells)), 0)
+  function drawGroupHeader(name: string) {
+    setFont(true)
+    const lines = doc.splitTextToSize(name, usable - PAD * 2) as string[]
+    const h = Math.max(7, lines.length * LINE + PAD * 2)
+    if (y > tableTop && y + h > bottom) newPage()
+    doc.setFillColor(238, 245, 255)
+    doc.rect(MARGIN, y, usable, h, 'F')
+    doc.setTextColor(...INK)
+    doc.text(lines, MARGIN + PAD, y + PAD + 2.8, { lineHeightFactor: LINE / (FONT * 25.4 / 72) })
+    y += h
+  }
+
+  table.groups.forEach(group => {
+    const groupHeaderHeight = weekly ? Math.max(7, (doc.splitTextToSize(group.name, usable - PAD * 2) as string[]).length * LINE + PAD * 2) : 0
+    const groupHeight = groupHeaderHeight + group.rows.reduce((sum, row) => sum + rowHeight(wrap(row.cells)), 0)
     // Keep normal client groups together; oversized groups continue with their name.
     const continuationHeaderHeight = rowHeight(wrap(table.headers, true))
     const fullPageSpace = bottom - 35 - continuationHeaderHeight
     if (y > tableTop && y + groupHeight > bottom && groupHeight <= fullPageSpace) newPage()
-    group.rows.forEach(row => drawRow(row, group.name, index % 2 === 1))
+    if (weekly) drawGroupHeader(group.name)
+    group.rows.forEach((row, rowIndex) => {
+      if (weekly && y > tableTop && y + rowHeight(wrap(row.cells)) > bottom) {
+        newPage()
+        drawGroupHeader(`${group.name} (continued)`)
+      }
+      drawRow(row, group.name, !weekly && rowIndex === 0)
+    })
   })
   if (!table.groups.length) {
     setFont()

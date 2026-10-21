@@ -296,9 +296,7 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
 
   const [loadingSpend, setLoadingSpend] = useState(false)
   const [spendErrors, setSpendErrors] = useState<string[]>([])
-  // Hide this account only in Monthly Budget, including its exports.
-  const selectedAccounts = useMemo(() => selectMonthlyBudgetAccounts(accounts, clients, adsIds, ggIds)
-    .filter(row => row.account.id !== '4101522507'), [accounts, clients, adsIds, ggIds])
+  const selectedAccounts = useMemo(() => selectMonthlyBudgetAccounts(accounts, clients, adsIds, ggIds), [accounts, clients, adsIds, ggIds])
 
   const openai = useOpenAiBudgetReport(toYMD(new Date(year, month, 1)), toYMD(new Date(year, month + 1, 0)))
 
@@ -418,10 +416,10 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
     })
     .filter(g => g.items.length > 0)
 
-  for (const result of openai.results.filter(r => ['holts-garage', 'xperience-ai-marketing'].includes(r.clientId))) {
+  for (const result of openai.results) {
     const client = clients.find(c => c.id === result.clientId)
     const summary = summarizeOpenAiBudget(result)
-    const item: MonthlyItem = { platform: 'OpenAI Ads', ...summary, clientId: result.clientId, note: result.error ?? result.insightsError ?? undefined }
+    const item: MonthlyItem = { platform: 'OpenAI Ads', ...summary, clientId: result.clientId, note: summary.spend === null ? result.error ?? result.insightsError ?? undefined : undefined }
     const group = accountGroups.find(g => g.acct.id === client?.sem_account_id)
     if (group) group.items.push(item)
     else accountGroups.push({ acct: { id: result.clientId, name: result.clientName, status: 'ENABLED' }, items: [item] })
@@ -452,7 +450,7 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
     items: items.map(it => ({ accountId: fmtAccountId(it.acct.id), platform: it.platform, budget: it.budget, budgetPeriod: it.budgetPeriod, spend: it.spend,
       refunded: cells[`${it.acct.id}:${it.platform}`]?.refunded ?? 0, paidWith: cells[`${it.acct.id}:${it.platform}`]?.paid_with ?? '' })),
   })))
-  const monthlyExportBlocked = reportLoading || Object.values(metadataErrors).some(Boolean) || spendErrors.length > 0 || !!openai.error || openai.results.some(r => !!r.error || !!r.insightsError)
+  const monthlyExportBlocked = reportLoading || Object.values(metadataErrors).some(Boolean) || spendErrors.length > 0 || !!openai.error || openai.results.some(r => summarizeOpenAiBudget(r).spend === null)
 
   async function handleExportMonthly() {
     if (monthlyExportBlocked) return
@@ -461,38 +459,29 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
     finally { setExporting(false) }
   }
 
-  const monthlyTableHeaders = ['Client', 'ID', 'Budget', 'Spend', 'Credits Refunded', 'Paid With']
-  const rowsToTable = (platformRows: PdfMonthlyRow[]) => platformRows.map(r => [
-    r.accountName,
-    r.accountId ?? '—',
-    (r.budget ?? 0) > 0 ? `${fmtCurrency(r.budget!)}${r.budgetPeriod === 'daily' ? '/day' : r.budgetPeriod === 'lifetime' ? ' lifetime' : ''}` : '—',
-    r.spend !== null ? fmtCurrency(r.spend) : '—',
-    (r.refunded ?? 0) > 0 ? fmtCurrency(r.refunded ?? 0) : '—',
-    r.paidWith || '—',
-  ])
-
   async function handleOpenEmailModal() {
     if (monthlyExportBlocked) return
     setPreparingEmail(true)
     try {
       const rows = buildMonthlyRows()
-      const adsRows = rows.filter(r => r.platform === 'Google Ads')
-      const guaranteeRows = rows.filter(r => r.platform === 'Google Guarantee')
-      const [adsImage, guaranteeImage, openaiImage, pdf] = await Promise.all([
-        captureTableAsImage({ title: 'Google Ads Budget Report', headers: monthlyTableHeaders, rows: rowsToTable(adsRows) }),
-        captureTableAsImage({ title: 'Google Guarantee (LSA) Budget Report', headers: monthlyTableHeaders, rows: rowsToTable(guaranteeRows) }),
-        captureTableAsImage({ title: 'OpenAI Ads Budget Report', headers: monthlyTableHeaders, rows: rowsToTable(rows.filter(r => r.platform === 'OpenAI Ads')) }),
+      const emailRows = monthlyTable.groups.flatMap(group => group.rows.map((row, rowIndex) => ({
+        cells: row.cells.map(String),
+        background: rowIndex === 0 ? '#eef5ff' : '#ffffff',
+      })))
+      const [monthlyImage, pdf] = await Promise.all([
+        captureTableAsImage({
+          title: 'Monthly Budget Report',
+          headers: monthlyTable.headers,
+          rows: emailRows.map(row => row.cells),
+          rowBackgrounds: emailRows.map(row => row.background),
+        }),
         generateMonthlyBudgetPdfBytes({ monthLabel, table: monthlyTable }),
       ])
       setEmailPayload({
         kind: 'monthly',
         monthLabel,
         rows,
-        images: [
-          { label: 'Google Ads Budget Report', ...adsImage },
-          { label: 'Google Guarantee (LSA) Budget Report', ...guaranteeImage },
-          { label: 'OpenAI Ads Budget Report', ...openaiImage },
-        ],
+        images: [{ label: 'Monthly Budget Report', ...monthlyImage }],
         pdfBase64: uint8ToBase64(pdf.bytes),
         pdfFilename: pdf.filename,
       })
@@ -547,7 +536,7 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
 
       {Object.entries(metadataErrors).filter(([, error]) => error).map(([source, error]) => <p key={source} role="alert" className="mb-3 text-sm text-red-500">{source}: {error}</p>)}
       {spendErrors.length > 0 && <div role="alert" className="mb-3 text-sm text-red-500">{spendErrors.map(message => <p key={message}>{message}</p>)}</div>}
-      {openai.results.filter(r => r.error || r.insightsError).map(r => <p key={r.clientId} role="alert" className="mb-3 text-sm text-red-500">{r.clientName}: {r.error ?? r.insightsError}</p>)}
+      {openai.results.filter(r => summarizeOpenAiBudget(r).spend === null).map(r => <p key={r.clientId} role="alert" className="mb-3 text-sm text-red-500">{r.clientName}: {r.error ?? r.insightsError}</p>)}
       {openai.error && <p role="alert" className="mb-3 text-sm text-red-500">{openai.error}</p>}
       {reportLoading ? <BudgetTableSkeleton /> : <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
         <table className="w-full text-sm">
@@ -574,7 +563,7 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
                     const cell = cells[`${it.acct.id}:${it.platform}`]
                     return (
                       <tr key={`${it.acct.id}:${it.platform}`} title={(it.budget ?? 0) > 0 ? it.note : `No ${it.platform} budget set for this client`}
-                        className={`transition-opacity hover:bg-gray-2 dark:hover:bg-meta-4 ${(it.budget ?? 0) > 0 ? '' : 'opacity-40'}`}>
+                        className={`transition-opacity ${idx === 0 ? 'bg-[#eef5ff] hover:bg-[#e4efff] dark:bg-[#17233a] dark:hover:bg-[#20304d]' : 'hover:bg-gray-2 dark:hover:bg-meta-4'} ${(it.budget ?? 0) > 0 ? '' : 'opacity-40'}`}>
                         <td className="max-w-[220px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={acct.name}>
                           {display[0]}
                         </td>
@@ -642,34 +631,6 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-const WEEKLY_TABLE_HEADERS = ['Status', 'Account Name', 'Budget', 'Period Spend', 'Remaining', '% Used']
-
-function weeklyRowsToTable(rows: PdfWeeklyRow[]): string[][] {
-  return rows.map(r => {
-    const remaining = r.budget > 0 ? r.budget - r.cost : 0
-    const pct = r.budget > 0 ? `${((r.cost / r.budget) * 100).toFixed(1)}%` : '—'
-    return [
-      r.status === 'ENABLED' ? 'Active' : 'Inactive',
-      r.accountName,
-      r.budget > 0 ? fmtCurrency(r.budget) : '—',
-      r.cost > 0 ? fmtCurrency(r.cost) : '—',
-      r.budget > 0 ? fmtCurrency(remaining) : '—',
-      pct,
-    ]
-  })
-}
-
-const OPENAI_TABLE_HEADERS = ['Client', 'Campaign', 'Budget', 'Spend']
-
-function openaiRowsToTable(rows: PdfOpenAiRow[]): string[][] {
-  return rows.map(r => [
-    r.clientName,
-    r.campaignName,
-    `${fmtCurrency(r.budget)}${r.budgetPeriod === 'daily' ? '/day' : ' lifetime'}`,
-    fmtCurrency(r.spend),
-  ])
-}
-
 // The wording adapts to the report period — "reporte mensual" for a whole
 // month, "reporte semanal" for a date range — instead of one fixed sentence.
 function buildEmailBodyTemplate(payload: EmailReportPayload): string {
@@ -705,8 +666,8 @@ function SendEmailModal({ payload, onClose }: { payload: EmailReportPayload | nu
   const subjectPrefix = payload.kind === 'monthly' ? 'Monthly Budget Report' : 'Weekly Budget Report'
   const subject = `${subjectPrefix} — ${label}`
   const attachedNote = payload.kind === 'monthly'
-    ? 'Google Ads + Google Guarantee + OpenAI Ads budget tables (embedded as images below the message) and the Monthly Budget PDF.'
-    : `Google Ads + Google Guarantee${payload.openaiRows.length > 0 ? ' + OpenAI Ads' : ''} budget tables (embedded as images below the message) and the Weekly Budget PDF.`
+    ? 'Combined Google Ads + Google Guarantee + OpenAI Ads budget table (embedded as one image below the message) and the Monthly Budget PDF.'
+    : `Combined Google Ads + Google Guarantee${payload.openaiRows.length > 0 ? ' + OpenAI Ads' : ''} budget table (embedded as one image below the message) and the Weekly Budget PDF.`
 
   const handleSend = async () => {
     setSending(true)
@@ -1211,29 +1172,32 @@ export function SEMReportes() {
     leads: ggPeriod[a.id]?.leads,
   }))
 
-  const weeklyOpenaiRows: PdfOpenAiRow[] = openaiResults.flatMap(r => r.campaigns.map(c => ({
-    clientName: r.clientName,
-    campaignName: c.name,
-    status: c.status,
-    budget: c.budget,
-    budgetPeriod: c.budgetPeriod,
-    spend: c.spend,
-    cpc: c.cpc,
-    impressions: c.impressions,
-  })))
+  const weeklyOpenaiRows: PdfOpenAiRow[] = openaiResults.map(result => {
+    const summary = summarizeOpenAiBudget(result)
+    return {
+      clientName: result.clientName,
+      campaignName: 'All active campaigns',
+      status: 'active',
+      budget: summary.budget ?? 0,
+      budgetPeriod: summary.budgetPeriod,
+      spend: summary.spend ?? 0,
+      cpc: 0,
+      impressions: 0,
+    }
+  })
 
   const groupedWeeklyRows: WeeklyDisplayRow[] = eligible.flatMap(({ account, googleAds, googleGuarantee }) => [
     ...(googleAds ? [{ accountId: account.id, name: account.name, status: account.status, platform: 'Google Ads' as const, budget: adsBudgets[account.id]?.budget ?? 0, spend: adsCost[account.id] ?? null }] : []),
     ...(googleGuarantee ? [{ accountId: account.id, name: account.name, status: account.status, platform: 'Google Guarantee' as const, budget: ggBudgets[account.id]?.budget ?? 0, spend: ggPeriod[account.id]?.spend ?? null, leads: ggPeriod[account.id]?.leads }] : []),
   ])
   for (const result of openaiResults) {
-    const campaigns = result.campaigns.length ? result.campaigns : [null]
-    for (const campaign of campaigns) groupedWeeklyRows.push({ accountId: result.clientId, clientId: result.clientId, name: result.clientName, platform: 'OpenAI Ads', status: campaign?.status ?? '—', campaign: campaign?.name, budget: campaign?.budget ?? null, budgetPeriod: campaign?.budgetPeriod, spend: result.error || result.insightsError ? null : campaign?.spend ?? null, note: result.error ?? result.insightsError ?? undefined })
+    const summary = summarizeOpenAiBudget(result)
+    groupedWeeklyRows.push({ accountId: result.clientId, clientId: result.clientId, name: result.clientName, platform: 'OpenAI Ads', status: 'active', budget: summary.budget, budgetPeriod: summary.budgetPeriod, spend: summary.spend, note: summary.spend === null ? result.error ?? result.insightsError ?? undefined : undefined })
   }
   const weeklyLoading = adsReady !== weeklyKey || ggReady !== weeklyKey || loading || loadingAdsBudgets || loadingGgBudgets || loadingAdsCost || loadingGgPeriod || loadingOpenai
 
   const weeklyTable = buildWeeklyReportTable(groupedWeeklyRows, budgetClients, weekDateLabel)
-  const weeklyExportBlocked = weeklyLoading || !!weeklyError || !!accountsError || !!openaiError || Object.keys(ggErrors).length > 0 || openaiResults.some(r => !!r.error || !!r.insightsError)
+  const weeklyExportBlocked = weeklyLoading || !!weeklyError || !!accountsError || !!openaiError || Object.keys(ggErrors).length > 0 || openaiResults.some(r => summarizeOpenAiBudget(r).spend === null)
 
   const [exportingWeekly, setExportingWeekly] = useState(false)
   const [preparingWeeklyEmail, setPreparingWeeklyEmail] = useState(false)
@@ -1251,13 +1215,18 @@ export function SEMReportes() {
     if (weeklyExportBlocked) return
     setPreparingWeeklyEmail(true)
     try {
-      const hasOpenai = weeklyOpenaiRows.length > 0
-      const [adsImage, guaranteeImage, openaiImage, pdf] = await Promise.all([
-        captureTableAsImage({ title: 'Google Ads Budget Report', headers: WEEKLY_TABLE_HEADERS, rows: weeklyRowsToTable(weeklyAdsRows) }),
-        captureTableAsImage({ title: 'Google Guarantee Budget Report', headers: ['Account', 'Period', 'Budget', 'Spend', 'Leads', 'Cost/Lead', '% Used'], rows: weeklyGuaranteeRows.map(r => [r.accountName, weekDateLabel, fmtCurrency(r.budget), fmtCurrency(r.cost), r.leads === undefined ? '—' : String(r.leads), r.leads ? fmtCurrency(r.cost / r.leads) : '—', r.budget > 0 ? `${(r.cost / r.budget * 100).toFixed(1)}%` : '—']) }),
-        hasOpenai
-          ? captureTableAsImage({ title: 'OpenAI Ads Report', headers: OPENAI_TABLE_HEADERS, rows: openaiRowsToTable(weeklyOpenaiRows) })
-          : Promise.resolve(null),
+      const emailRows = weeklyTable.groups.flatMap(group => [
+        { cells: [group.name, ...Array(weeklyTable.headers.length - 1).fill('')], background: '#eef5ff' },
+        ...group.rows.map(row => ({ cells: row.cells.map(String), background: '#ffffff' })),
+      ])
+      emailRows.push(...weeklyTable.totals.map(row => ({ cells: row.cells.map(String), background: '#eef7f2' })))
+      const [weeklyImage, pdf] = await Promise.all([
+        captureTableAsImage({
+          title: 'Weekly Budget Report',
+          headers: weeklyTable.headers,
+          rows: emailRows.map(row => row.cells),
+          rowBackgrounds: emailRows.map(row => row.background),
+        }),
         generateWeeklyBudgetPdfBytes({ dateLabel: weekDateLabel, table: weeklyTable }),
       ])
       setWeeklyEmailPayload({
@@ -1266,11 +1235,7 @@ export function SEMReportes() {
         adsRows: weeklyAdsRows,
         guaranteeRows: weeklyGuaranteeRows,
         openaiRows: weeklyOpenaiRows,
-        images: [
-          { label: 'Google Ads Budget Report', ...adsImage },
-          { label: 'Google Guarantee Budget Report', ...guaranteeImage },
-          ...(openaiImage ? [{ label: 'OpenAI Ads Report', ...openaiImage }] : []),
-        ],
+        images: [{ label: 'Weekly Budget Report', ...weeklyImage }],
         pdfBase64: uint8ToBase64(pdf.bytes),
         pdfFilename: pdf.filename,
       })
@@ -1340,7 +1305,7 @@ export function SEMReportes() {
 
           {weeklyError && <p role="alert" className="mb-3 text-sm text-red-500">{weeklyError}</p>}
           {openaiError && <p role="alert" className="mb-3 text-sm text-red-500">{openaiError}</p>}
-          {openaiResults.filter(r => r.error || r.insightsError).map(r => <p key={r.clientId} role="alert" className="mb-3 text-sm text-red-500">{r.clientName}: {r.error ?? r.insightsError}</p>)}
+          {openaiResults.filter(r => summarizeOpenAiBudget(r).spend === null).map(r => <p key={r.clientId} role="alert" className="mb-3 text-sm text-red-500">{r.clientName}: {r.error ?? r.insightsError}</p>)}
           {Object.entries(ggErrors).map(([id, error]) => <p key={id} role="alert" className="mb-3 text-sm text-red-500">{ggAccounts.find(a => a.id === id)?.name}: {error}</p>)}
           {accountsError ? <p role="alert" className="text-sm text-red-500">{accountsError}</p> : weeklyLoading ? <BudgetTableSkeleton headers={WEEKLY_HEADERS} /> : (
             <WeeklyGroupedTable table={weeklyTable} />

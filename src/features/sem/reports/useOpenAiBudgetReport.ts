@@ -13,13 +13,19 @@ export interface OpenAiClientResult {
   error?: string; insightsError?: string | null
 }
 
+export function activeOpenAiCampaigns(result: OpenAiClientResult) {
+  return result.campaigns.filter(c => ['active', 'enabled'].includes(c.status.trim().toLowerCase()))
+}
+
 export function summarizeOpenAiBudget(result: OpenAiClientResult) {
-  const campaigns = result.campaigns
+  if (result.error) return { budget: null, budgetPeriod: undefined, spend: null }
+  const campaigns = activeOpenAiCampaigns(result)
+  if (!campaigns.length) return { budget: 0, budgetPeriod: undefined, spend: 0 }
   const periods = new Set(campaigns.map(c => c.budgetPeriod))
   return {
-    budget: !result.error && campaigns.length && periods.size === 1 ? campaigns.reduce((sum, c) => sum + c.budget, 0) : null,
+    budget: periods.size === 1 ? campaigns.reduce((sum, c) => sum + c.budget, 0) : null,
     budgetPeriod: periods.size === 1 ? campaigns[0]?.budgetPeriod : undefined,
-    spend: !result.error && !result.insightsError && campaigns.length ? campaigns.reduce((sum, c) => sum + c.spend, 0) : null,
+    spend: !result.insightsError ? campaigns.reduce((sum, c) => sum + c.spend, 0) : null,
   }
 }
 

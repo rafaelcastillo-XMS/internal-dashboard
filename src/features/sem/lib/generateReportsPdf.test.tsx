@@ -29,13 +29,14 @@ function pageText(doc: ReturnType<typeof renderBudgetTablePdf>) {
 }
 
 describe('Unified report PDF data', () => {
-  it('shares all weekly columns, groups, allocations and platform totals with the dashboard', () => {
+  it('shares account stripes and the five requested weekly columns with the dashboard', () => {
     expect(weekly.headers).toEqual(WEEKLY_HEADERS)
     expect(weekly.groups).toHaveLength(18)
     expect(weekly.groups[0].rows.map(r => r.cells[2])).toEqual(['Google Ads', 'Google Guarantee', 'OpenAI Ads'])
-    expect(weekly.groups[0].rows[0].cells.slice(7, 13)).toEqual(['$440.00', '$2,200.00', '$100.00', '$183.33', '$366.67', '$1,100.00'])
-    expect(weekly.groups[0].rows[1].cells.slice(13)).toEqual([8, '$50.00', '133.3%'])
-    expect(weekly.totals.map(r => r.cells[7])).toEqual(['$7,920.00', '$7,200.00', '$0.00'])
+    expect(weekly.groups[0].name).toBe(rows[0].name)
+    expect(weekly.groups[0].rows[0].cells).toEqual(['', 'ads-0', 'Google Ads', '$2,640.00', '$440.00'])
+    expect(weekly.groups[0].rows[1].cells).toEqual(['', 'lsa-0', 'Google Guarantee', '$300.00', '$400.00'])
+    expect(weekly.totals).toEqual([])
     const html = renderToStaticMarkup(<WeeklyGroupedTable table={weekly} />)
     for (const row of [...weekly.groups.flatMap(g => g.rows), ...weekly.totals]) {
       for (const cell of row.cells) expect(html).toContain(String(cell))
@@ -50,12 +51,12 @@ describe('Unified report PDF data', () => {
     expect(monthly.summary).toContainEqual({ label: 'Google monthly budgets', value: '$52,920.00' })
     expect(monthly.summary).toContainEqual({ label: 'OpenAI daily budget', value: '$450.00' })
   })
-  it('keeps unavailable metrics empty and does not combine mixed budget periods', () => {
+  it('keeps unavailable spend explicit without adding a total row', () => {
     const table = buildWeeklyReportTable([
       { ...rows[0], spend: null }, { ...rows[2], budgetPeriod: 'daily' }, { ...rows[2], campaign: 'Lifetime campaign', budgetPeriod: 'lifetime' },
     ], clients, dateLabel)
-    expect(table.groups[0].rows[0].cells.slice(7, 13)).toEqual(Array(6).fill('—'))
-    expect(table.totals.find(r => r.key === 'OpenAI Ads')?.cells[5]).toBe('—')
+    expect(table.groups[0].rows[0].cells[4]).toBe('—')
+    expect(table.totals).toEqual([])
     expect(table.summary.find(s => s.label.startsWith('Period spend'))?.value).toBe('Unavailable')
   })
 })
@@ -69,9 +70,16 @@ describe('Unified PDF pagination and exports', () => {
     expect(doc.internal.pageSize.getWidth()).toBeCloseTo(isWeekly ? 420 : 297, 0)
     const pages = pageText(doc)
     for (const page of pages) {
-      expect(page).toContain('(Client)')
       expect(page).toContain('(Platform)')
-      if (!isWeekly) expect(page).toContain('(Paid With)')
+      if (!isWeekly) {
+        expect(page).toContain('(Client)')
+        expect(page).toContain('(Paid With)')
+      } else {
+        expect(page).toContain('(Client)')
+        expect(page).toContain('(ID)')
+        expect(page).toContain('(Budget)')
+        expect(page).toContain('(Spend)')
+      }
       expect(page).toContain('2026')
       expect(page).toContain('Page ')
     }
@@ -90,14 +98,14 @@ describe('Unified PDF pagination and exports', () => {
     const pages = pageText(doc)
     expect(pages.length).toBeGreaterThan(2)
     expect(pages.slice(1).some(page => page.includes('continued'))).toBe(true)
-    for (const r of many) expect(pages.join('\n')).toContain(r.campaign)
-    expect(pages[pages.length - 1]).toContain('Totals')
+    expect(pages[pages.length - 1]).not.toContain('(Total)')
     if (process.env.REPORT_PDF_QA_DIR) writeFileSync(join(process.env.REPORT_PDF_QA_DIR, 'weekly-continuation.pdf'), new Uint8Array(doc.output('arraybuffer')))
   })
-  it('wraps a single oversized row across pages and handles empty reports', () => {
+  it('omits removed campaign detail and handles empty reports', () => {
     const table = buildWeeklyReportTable([{ ...rows[2], campaign: 'Long campaign name '.repeat(800) }], clients, dateLabel)
     const doc = renderBudgetTablePdf({ table, title: 'Weekly Budget Report', period: dateLabel, weekly: true })
-    expect(doc.getNumberOfPages()).toBeGreaterThan(1)
+    expect(doc.getNumberOfPages()).toBe(1)
+    expect(pageText(doc).join()).not.toContain('Long campaign name')
     const empty = renderBudgetTablePdf({ table: buildMonthlyReportTable([]), title: 'Monthly Budget Report', period: monthLabel, weekly: false })
     expect(pageText(empty).join()).toContain('No accounts found.')
   })

@@ -24,8 +24,9 @@ export async function captureTableAsImage(opts: {
   title: string
   headers: string[]
   rows: string[][]
+  rowBackgrounds?: string[]
 }): Promise<CapturedTableImage> {
-  const { title, headers, rows } = opts
+  const { title, headers, rows, rowBackgrounds } = opts
   const host = document.createElement('div')
   Object.assign(host.style, {
     position: 'fixed',
@@ -40,7 +41,7 @@ export async function captureTableAsImage(opts: {
     .join('')
 
   const bodyRows = rows.length > 0
-    ? rows.map((row, i) => `<tr style="background:${i % 2 ? '#f9fafb' : '#ffffff'};">${row.map((cell) => `<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;font-size:15px;white-space:nowrap;">${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')
+    ? rows.map((row, i) => `<tr style="background:${rowBackgrounds?.[i] ?? (i % 2 ? '#f9fafb' : '#ffffff')};">${row.map((cell) => `<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;font-size:15px;white-space:nowrap;">${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')
     : `<tr><td colspan="${headers.length}" style="padding:20px;text-align:center;color:#9ca3af;font-size:15px;">No data for this period.</td></tr>`
 
   host.innerHTML = `

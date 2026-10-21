@@ -21,15 +21,30 @@ describe('Grouped budget reports', () => {
     expect(groups[0].items).toEqual([rows[0], rows[2], rows[3]])
     expect(rows[1].name).toBe('Other')
   })
-  it('retains weekly allocation and LSA calculations and distinct platform totals', () => {
-    const html = renderToStaticMarkup(<WeeklyGroupedTable rows={rows} clients={clients} dateLabel="Selected week" />)
-    for (const value of ['$120.00', '$220.00', '$440.00', '$1,320.00', '$25.00', '25.0%', '$20.00/day', '$0.00']) expect(html).toContain(value)
-    expect(html.match(/>Totals</g)).toHaveLength(3)
-    expect(html.indexOf('Campaign</td>')).toBeLessThan(html.indexOf('>Other</td>'))
+  it('keeps the verified Holt Ads and LSA accounts in one client group without client rows', () => {
+    const holtRows: WeeklyDisplayRow[] = [
+      { accountId: '5028132994', name: 'Holt’s Reliable Garage Door & Repair', platform: 'Google Ads', status: 'ENABLED', budget: 1, spend: 0 },
+      { accountId: '4101522507', name: "HOLT'S RELIABLE GARAGE DOOR REPAIR - LSA ACCOUNT", platform: 'Google Guarantee', status: 'ENABLED', budget: 1, spend: 0 },
+    ]
+    const grouped = groupBudgetRows(holtRows, [])
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0]).toMatchObject({ id: 'holts-garage', name: "Holt's Reliable Garage Door Repair" })
+    expect(grouped[0].items.map(row => row.platform)).toEqual(['Google Ads', 'Google Guarantee'])
   })
-  it('does not invent missing LSA metrics or include incomplete LSA totals', () => {
+  it('shows account-name stripes and only the five requested columns', () => {
+    const html = renderToStaticMarkup(<WeeklyGroupedTable rows={rows} clients={clients} dateLabel="Selected week" />)
+    expect(WEEKLY_HEADERS).toEqual(['Client', 'ID', 'Platform', 'Budget', 'Spend'])
+    for (const value of ['Client', 'Other', 'ads', 'lsa', 'Google Ads', 'Google Guarantee', 'OpenAI Ads', '$20.00/day', '$50.00', '$0.00']) expect(html).toContain(value)
+    expect(html).not.toContain('Campaign</th>')
+    expect(html).not.toContain('Remaining</th>')
+    expect(html).toContain('bg-[#eef5ff]')
+    expect(html).toContain('w-[38%]')
+    expect(html).toContain('w-[14%]')
+    expect(html).not.toContain('>Total</td>')
+  })
+  it('does not invent missing LSA metrics', () => {
     const html = renderToStaticMarkup(<WeeklyGroupedTable rows={[{ ...rows[2], spend: null, leads: undefined }]} clients={clients} dateLabel="Week" />)
-    expect(html).not.toContain('>Totals<')
+    expect(html).not.toContain('>Total<')
     expect(html).not.toContain('$0.00')
     expect(html).not.toContain('0.0%')
   })
