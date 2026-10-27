@@ -17,9 +17,9 @@ export function getDateRange(days: number) {
 }
 
 export function formatDateLabel(startDate: string, endDate: string) {
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
-  const s = new Date(startDate).toLocaleDateString('en-US', opts)
-  const e = new Date(endDate).toLocaleDateString('en-US', opts)
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }
+  const s = new Date(`${startDate}T00:00:00Z`).toLocaleDateString('en-US', opts)
+  const e = new Date(`${endDate}T00:00:00Z`).toLocaleDateString('en-US', opts)
   return `${s} – ${e}`
 }
 

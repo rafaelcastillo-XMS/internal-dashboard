@@ -1,10 +1,15 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Download, Trash2, Loader2, FileText } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Download, Trash2, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useSEODashboardState, getDateRange, formatDateLabel } from '@/features/seo/hooks/useSEODashboardState'
+import { QuarterlyReportConfigModal } from '@/features/seo/components/QuarterlyReportConfigModal'
 import { safeDomain } from '@/features/seo/lib/exportQuarterlySeoReport'
 import { buildClientQuarterlyReportBlob } from '@/features/seo/lib/exportClientQuarterlyReport'
 import type { QuarterlyReportData, AhrefsSnapshot, OnPageAuditSummary } from '@/features/seo/lib/exportClientQuarterlyReport'
+import {
+  prepareGbpImageDataUrl,
+  type QuarterlyReportPeriod,
+} from '@/features/seo/lib/quarterlyReportConfig'
 
 interface ReportRow {
   id: number
@@ -24,6 +29,13 @@ export function SEOClientReports() {
   const [generating, setGenerating] = useState(false)
   const [title, setTitle] = useState('')
   const [error, setError] = useState('')
+  const [configOpen, setConfigOpen] = useState(false)
+  const [reportPeriod, setReportPeriod] = useState<QuarterlyReportPeriod | null>(null)
+  const [gbpImageName, setGbpImageName] = useState('')
+  const [gbpImageDataUrl, setGbpImageDataUrl] = useState('')
+  const [preparingImage, setPreparingImage] = useState(false)
+  const [imageError, setImageError] = useState('')
+  const imageRequestId = useRef(0)
 
   const loadReports = useCallback(async () => {
     if (!state.selectedClientId) { setReports([]); return }
@@ -39,12 +51,54 @@ export function SEOClientReports() {
 
   useEffect(() => { loadReports() }, [loadReports])
 
+  function openReportConfig() {
+    setReportPeriod(getDateRange(90))
+    setError('')
+    setImageError('')
+    setConfigOpen(true)
+  }
+
+  function closeReportConfig() {
+    if (generating) return
+    setConfigOpen(false)
+    resetGbpImage()
+  }
+
+  function resetGbpImage() {
+    imageRequestId.current += 1
+    setGbpImageName('')
+    setGbpImageDataUrl('')
+    setPreparingImage(false)
+    setImageError('')
+  }
+
+  async function handleImageChange(file?: File) {
+    if (!file) return
+    const requestId = imageRequestId.current + 1
+    imageRequestId.current = requestId
+    setPreparingImage(true)
+    setImageError('')
+    try {
+      const dataUrl = await prepareGbpImageDataUrl(file)
+      if (requestId !== imageRequestId.current) return
+      setGbpImageName(file.name)
+      setGbpImageDataUrl(dataUrl)
+    } catch (imagePreparationError) {
+      if (requestId !== imageRequestId.current) return
+      setGbpImageName('')
+      setGbpImageDataUrl('')
+      setImageError(imagePreparationError instanceof Error ? imagePreparationError.message : 'The image could not be prepared.')
+    } finally {
+      if (requestId === imageRequestId.current) setPreparingImage(false)
+    }
+  }
+
   async function handleGenerate() {
-    if (!state.selectedClientId || !state.selectedGscSite) return
+    if (!state.selectedClientId || !state.selectedGscSite || !reportPeriod) return
     setGenerating(true)
     setError('')
     try {
-      const { startDate, endDate } = getDateRange(90)
+      const { startDate, endDate } = reportPeriod
       const domain = safeDomain(state.selectedGscSite)
 
       const reportParams = new URLSearchParams({ site: state.selectedGscSite, ga4: state.selectedGa4Id, startDate, endDate })
@@ -74,6 +128,7 @@ export function SEOClientReports() {
         ahrefsSnapshots,
         onPageAudit,
         clientLogoUrl,
+        gbpImageUrl: gbpImageDataUrl || undefined,
       })
 
       const path = `${state.selectedClientId}/${Date.now()}.pdf`
@@ -88,9 +143,14 @@ export function SEOClientReports() {
         end_date: endDate,
         storage_path: path,
       })
-      if (insertError) throw insertError
+      if (insertError) {
+        await supabase.storage.from(BUCKET).remove([path])
+        throw insertError
+      }
 
       setTitle('')
+      resetGbpImage()
+      setConfigOpen(false)
       await loadReports()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not generate the report')
@@ -101,7 +161,7 @@ export function SEOClientReports() {
 
   async function handleDownload(row: ReportRow) {
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(row.storage_path)
-    if (data?.publicUrl) window.open(data.publicUrl, '_blank')
+    if (data?.publicUrl) window.open(data.publicUrl, '_blank', 'noopener,noreferrer')
   }
 
   async function handleDelete(row: ReportRow) {
@@ -120,20 +180,14 @@ export function SEOClientReports() {
         </p>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-stroke bg-white px-5 py-4 dark:border-strokedark dark:bg-boxdark">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Report title (optional, e.g. September Report)"
-          className="min-w-[240px] flex-1 rounded-lg border border-stroke bg-transparent px-3 py-2 text-sm text-black focus:border-[#1A72D9] focus:outline-none dark:border-strokedark dark:text-[#E2E5E9]"
-        />
+      <div className="mb-6 flex justify-end rounded-xl border border-stroke bg-white px-5 py-4 dark:border-strokedark dark:bg-boxdark">
         <button
-          onClick={handleGenerate}
-          disabled={generating || !state.selectedClientId}
+          onClick={openReportConfig}
+          disabled={!state.selectedClientId || !state.selectedGscSite}
           className="flex items-center gap-2 rounded-lg bg-[#1A72D9] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1A72D9]/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-          {generating ? 'Generating report…' : 'Generate Report'}
+          <FileText className="h-4 w-4" />
+          Generate Report
         </button>
       </div>
 
@@ -185,6 +239,24 @@ export function SEOClientReports() {
           </tbody>
         </table>
       </div>
+
+      {configOpen && reportPeriod && (
+        <QuarterlyReportConfigModal
+          period={reportPeriod}
+          title={title}
+          imageName={gbpImageName}
+          imageDataUrl={gbpImageDataUrl}
+          imageError={imageError}
+          reportError={error}
+          preparingImage={preparingImage}
+          generating={generating}
+          onTitleChange={setTitle}
+          onImageChange={(file) => { void handleImageChange(file) }}
+          onRemoveImage={resetGbpImage}
+          onClose={closeReportConfig}
+          onGenerate={() => { void handleGenerate() }}
+        />
+      )}
     </div>
   )
 }

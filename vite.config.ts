@@ -22,12 +22,14 @@ import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail, re
 import { chatPerformanceAi, askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
 import { sanitizePdfFilename, exportPdfBuffer } from "./server/pdfExport.js"
 
-loadDotenv({ path: path.resolve(__dirname, ".env") })
-const localEnvPath = path.resolve(__dirname, ".env.local")
+const projectRoot = import.meta.dirname
+
+loadDotenv({ path: path.resolve(projectRoot, ".env") })
+const localEnvPath = path.resolve(projectRoot, ".env.local")
 if (fs.existsSync(localEnvPath)) loadDotenv({ path: localEnvPath, override: true })
 
 const execFileAsync = promisify(execFile)
-const SEO_AUDIT_PROMPT_PATH = path.resolve(__dirname, "prompts", "seo-audit-history.md")
+const SEO_AUDIT_PROMPT_PATH = path.resolve(projectRoot, "prompts", "seo-audit-history.md")
 
 const DASHBOARD_SUPABASE_URL = "https://sjpvyxdyleebhqlmqscy.supabase.co"
 const DASHBOARD_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcHZ5eGR5bGVlYmhxbG1xc2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzgxODksImV4cCI6MjA4ODc1NDE4OX0.ZvzbBm-L8Jt3FzhmmX3qd7_inwrupjQrfh9JWIlX1ng"
@@ -321,7 +323,7 @@ function seoDevPlugin() {
         if (!(await enforceRequiredGoogleAccount(res, "SEO"))) return
 
         const { searchParams } = new URL(req.url, "http://localhost")
-        const toolsDir = path.resolve(__dirname, "tools")
+        const toolsDir = path.resolve(projectRoot, "tools")
         const psiApiKey = process.env.PSI_API_KEY ?? ""
 
         let script: string
@@ -451,7 +453,7 @@ function seoDevPlugin() {
           const { stdout, stderr } = await execFileAsync(
             "python3",
             [script, ...args],
-            { cwd: __dirname, timeout: 60_000, env: { ...process.env, PSI_API_KEY: psiApiKey } },
+            { cwd: projectRoot, timeout: 60_000, env: { ...process.env, PSI_API_KEY: psiApiKey } },
           )
           if (stderr) {
             const cleaned = stderr.replace(/.*FutureWarning[\s\S]*?warn\(.*\n?/g, "").trim()
@@ -480,7 +482,7 @@ function semDevPlugin() {
         if (!(await enforceRequiredGoogleAccount(res, "SEM"))) return
 
         const { searchParams } = new URL(req.url, "http://localhost")
-        const toolsDir         = path.resolve(__dirname, "tools")
+        const toolsDir         = path.resolve(projectRoot, "tools")
         const adsDeveloperToken = process.env.ADS_DEVELOPER_TOKEN ?? ""
         const adsMccId          = process.env.ADS_MCC_ID          ?? ""
 
@@ -539,7 +541,7 @@ function semDevPlugin() {
             "python3",
             [script, ...args],
             {
-              cwd: __dirname,
+              cwd: projectRoot,
               timeout: 60_000,
               env: {
                 ...process.env,
@@ -831,7 +833,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(projectRoot, "./src"),
     },
   },
 })

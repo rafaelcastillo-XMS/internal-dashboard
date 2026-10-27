@@ -18,7 +18,8 @@ export interface BudgetReportTable {
   summary: { label: string; value: string }[]
 }
 
-export function buildWeeklyReportTable(rows: WeeklyDisplayRow[], clients: MonthlyBudgetClient[], _dateLabel: string): BudgetReportTable {
+export function buildWeeklyReportTable(rows: WeeklyDisplayRow[], clients: MonthlyBudgetClient[], dateLabel: string): BudgetReportTable {
+  void dateLabel // Kept in the public builder contract for existing report exporters.
   const groups = groupBudgetRows(rows, clients)
   const values = (r: WeeklyDisplayRow) => [
     r.platform,

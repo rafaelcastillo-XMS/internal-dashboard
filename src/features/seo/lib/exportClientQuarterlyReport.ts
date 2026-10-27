@@ -3,6 +3,12 @@ import {
   BLUE, BLUE_DARK, CYAN, INK, MUTED, LIGHT,
   clean, formatPeriod, heading, paragraph, metricCard, drawLineChart, addImageContained, imageToDataUrl,
 } from './exportQuarterlySeoReport'
+import {
+  describeClicksTrend,
+  describePositionTrend,
+  getAuditStatusLabel,
+  getSiteSpeedLabel,
+} from './quarterlyReportNarrative'
 
 type Pdf = JsPDF
 
@@ -55,6 +61,7 @@ interface ClientQuarterlyReportOptions {
   onPageAudit?: OnPageAuditSummary | null
   clientLogoUrl?: string
   xmsLogoUrl?: string
+  gbpImageUrl?: string
 }
 
 // ─── Small local helpers ───────────────────────────────────────────────────────
@@ -94,7 +101,7 @@ function pageChrome(pdf: Pdf, period: string, pageNumber: number) {
 }
 
 function deltaColor(delta: number): [number, number, number] {
-  return delta >= 0 ? [52, 168, 83] : [218, 68, 83]
+  return delta >= 0 ? [52, 168, 83] : [244, 124, 32]
 }
 
 function deltaLabel(delta: number, unit = '%') {
@@ -133,7 +140,7 @@ function twoColBars(pdf: Pdf, y: number, rows: { label: string; value: string; p
 export function buildClientQuarterlyPdf(
   options: ClientQuarterlyReportOptions,
   PdfConstructor: typeof JsPDF,
-  assets: { clientLogo?: string; xmsLogo?: string } = {},
+  assets: { clientLogo?: string; xmsLogo?: string; gbpImage?: string } = {},
 ) {
   const { data, clientName, ahrefsSnapshots = [], onPageAudit, psiScore } = options
   const period = formatPeriod(data.period.startDate, data.period.endDate)
@@ -198,9 +205,8 @@ export function buildClientQuarterlyPdf(
 
   // ═══ Executive summary ═══
   const t = data.totals
-  const clicksTrend = t.clicksDelta >= 0 ? `an increase of ${t.clicksDelta}%` : `a decrease of ${Math.abs(t.clicksDelta)}%`
-  const posTrend = t.positionDelta > 0 ? `improved by ${t.positionDelta} positions on average`
-    : t.positionDelta < 0 ? `dropped by ${Math.abs(t.positionDelta)} positions on average` : 'held steady'
+  const clicksTrend = describeClicksTrend(t.clicksDelta)
+  const posTrend = describePositionTrend(t.positionDelta)
   y = addBodyPage('Quarterly Executive Summary')
   y = paragraph(pdf, `During ${period}, ${clientName}'s website earned ${t.clicks} organic clicks from Google, ${clicksTrend} compared to the previous quarter (${t.prevClicks}). The average position in search results ${posTrend}.${data.keywords.newCount > 0 ? ` ${data.keywords.newCount} new keywords began ranking during this period.` : ''}`, y + 5, 168, 11.5)
   metricCard(pdf, 21, y + 10, 51, 'Organic clicks', t.clicks, deltaColor(t.clicksDelta))
@@ -211,7 +217,7 @@ export function buildClientQuarterlyPdf(
   pdf.setTextColor(...MUTED)
   pdf.text(clean(deltaLabel(t.clicksDelta)), 21, y + 43)
   pdf.text(clean(deltaLabel(t.impressionsDelta)), 79.5, y + 43)
-  pdf.text(clean(t.positionDelta === 0 ? 'No change' : `${t.positionDelta > 0 ? 'Improved' : 'Dropped'} by ${Math.abs(t.positionDelta)} positions`), 138, y + 43)
+  pdf.text(clean(t.positionDelta === 0 ? 'Stable position' : t.positionDelta > 0 ? `Improved by ${t.positionDelta} positions` : `Opportunity: ${Math.abs(t.positionDelta)} positions`), 138, y + 43)
 
   // ═══ Organic traffic ═══
   y = addBodyPage('Organic Traffic & Visibility')
@@ -248,7 +254,7 @@ export function buildClientQuarterlyPdf(
     pdf.text(pdf.splitTextToSize(clean(kw.term), 110)[0], 21, rowY)
     pdf.text(String(kw.clicks), 145, rowY, { align: 'right' })
     const change = kw.isNew ? 'NEW' : kw.prevPosition == null ? '—' : kw.position < kw.prevPosition ? `+${(kw.prevPosition - kw.position).toFixed(1)}` : kw.position > kw.prevPosition ? `-${(kw.position - kw.prevPosition).toFixed(1)}` : '='
-    const color = kw.isNew || (kw.prevPosition != null && kw.position < kw.prevPosition) ? [52, 168, 83] : kw.prevPosition != null && kw.position > kw.prevPosition ? [218, 68, 83] : MUTED
+    const color = kw.isNew || (kw.prevPosition != null && kw.position < kw.prevPosition) ? [52, 168, 83] : kw.prevPosition != null && kw.position > kw.prevPosition ? [244, 124, 32] : MUTED
     pdf.setFont('helvetica', 'bold')
     pdf.setTextColor(color[0], color[1], color[2])
     pdf.text(`${kw.position.toFixed(1)} (${change})`, 189, rowY, { align: 'right' })
@@ -269,7 +275,7 @@ export function buildClientQuarterlyPdf(
 
   // ═══ Pages ═══
   y = addBodyPage('Top-Performing Pages')
-  y = paragraph(pdf, 'The pages on your site that received the most organic visits, and which ones gained or lost traffic compared to the previous quarter.', y + 3)
+  y = paragraph(pdf, 'The pages on your site that received the most organic visits, including the strongest gains and the clearest opportunities for the next quarter.', y + 3)
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(8)
   pdf.setTextColor(...MUTED)
@@ -291,8 +297,8 @@ export function buildClientQuarterlyPdf(
   pdf.setFontSize(9)
   pdf.setTextColor(52, 168, 83)
   pdf.text('▲ Gained traffic', 21, y)
-  pdf.setTextColor(218, 68, 83)
-  pdf.text('▼ Lost traffic', 21 + half + 6, y)
+  pdf.setTextColor(244, 124, 32)
+  pdf.text('▼ Pages to strengthen', 21 + half + 6, y)
   const gainRows = data.pages.gainers.slice(0, 4)
   const loseRows = data.pages.losers.slice(0, 4)
   for (let i = 0; i < Math.max(gainRows.length, loseRows.length); i++) {
@@ -308,7 +314,7 @@ export function buildClientQuarterlyPdf(
     if (loseRows[i]) {
       pdf.setTextColor(...INK)
       pdf.text(pdf.splitTextToSize(clean(loseRows[i].page || '/'), 60)[0], 21 + half + 6, rowY2)
-      pdf.setTextColor(218, 68, 83)
+      pdf.setTextColor(244, 124, 32)
       pdf.text(`${loseRows[i].delta}`, 189, rowY2, { align: 'right' })
     }
   }
@@ -353,44 +359,51 @@ export function buildClientQuarterlyPdf(
     metricCard(pdf, 107, y + 41, 82, 'Organic keywords (Ahrefs)', String(latestSnap.organic_keywords ?? '—'))
     if (drDelta != null) paragraph(pdf, `Domain Rating: ${deltaLabel(drDelta, ' pts')}`, y + 78, 168, 9)
   } else {
-    infoBox(pdf, y + 8, 'No domain authority (Ahrefs) snapshot has been recorded for this client yet. This section will populate automatically in future reports.')
+    infoBox(pdf, y + 8, 'Domain authority data is being prepared for this client and will be included as soon as the next Ahrefs snapshot is available.')
   }
 
   // ═══ Core Web Vitals ═══
   y = addBodyPage('Site Speed & Experience')
   y = paragraph(pdf, 'Google measures how fast and stable a website is for its visitors, especially on mobile devices. A good score improves the user experience and helps with search rankings.', y + 3)
   if (typeof psiScore === 'number') {
-    const label = psiScore >= 90 ? 'Excellent' : psiScore >= 50 ? 'Needs improvement' : 'Poor performance'
-    metricCard(pdf, 21, y + 10, 82, 'Mobile speed score', `${psiScore} / 100`, psiScore >= 90 ? [52, 168, 83] : psiScore >= 50 ? [244, 124, 32] : [218, 68, 83])
-    paragraph(pdf, `Diagnosis: ${label}.`, y + 45, 168, 10)
+    const label = getSiteSpeedLabel(psiScore)
+    metricCard(pdf, 21, y + 10, 82, 'Mobile speed score', `${psiScore} / 100`, psiScore >= 90 ? [52, 168, 83] : [244, 124, 32])
+    paragraph(pdf, `Current status: ${label}.`, y + 45, 168, 10)
   } else {
-    infoBox(pdf, y + 8, 'The site speed score could not be calculated for this period. It will be included in the next report.')
+    infoBox(pdf, y + 8, 'The mobile speed score is being refreshed and will be included when the next measurement is available.')
   }
 
   // ═══ Technical status (on-page audit) ═══
   y = addBodyPage('Technical Site Status')
   y = paragraph(pdf, 'Summary of the latest on-page technical audit performed on the site, which reviews aspects such as structure, metadata and crawl errors.', y + 3)
   if (onPageAudit) {
-    const statusLabel = onPageAudit.status === 'completed' ? 'Audit completed' : onPageAudit.status === 'error' ? 'Audit had errors' : 'Audit in progress'
-    const statusColor: [number, number, number] = onPageAudit.status === 'completed' ? [52, 168, 83] : onPageAudit.status === 'error' ? [218, 68, 83] : [244, 124, 32]
+    const statusLabel = getAuditStatusLabel(onPageAudit.status)
+    const statusColor: [number, number, number] = onPageAudit.status === 'completed' ? [52, 168, 83] : [244, 124, 32]
     const dateLabel = new Date(onPageAudit.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
     metricCard(pdf, 21, y + 10, 82, 'Audit status', statusLabel, statusColor)
     metricCard(pdf, 107, y + 10, 82, 'Run date', dateLabel)
     paragraph(pdf, `Page audited: ${onPageAudit.landing_page_url}`, y + 48, 168, 9)
   } else {
-    infoBox(pdf, y + 8, 'No on-page technical audit has been run for this client yet.')
+    infoBox(pdf, y + 8, 'The next on-page technical review is being prepared and will appear here once completed.')
   }
 
-  // ═══ Google Business Profile — placeholder ═══
+  // ═══ Google Business Profile ═══
   y = addBodyPage('Google Business Profile')
   y = paragraph(pdf, 'Your Google Business Profile is the information that appears on Google Maps and in local search results: reviews, hours, calls and direction requests.', y + 3)
-  pdf.setFillColor(...LIGHT)
-  pdf.roundedRect(21, y + 9, 168, 40, 4, 4, 'F')
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(10)
-  pdf.setTextColor(...BLUE_DARK)
-  pdf.text('COMING SOON TO THIS REPORT', 29, y + 22)
-  paragraph(pdf, "We're integrating your Google Business Profile data (interactions, calls, views and posts). Once the connection is active, this section will include those results automatically.", y + 30, 152, 9.5)
+  if (assets.gbpImage) {
+    pdf.setFillColor(247, 250, 253)
+    pdf.setDrawColor(218, 228, 239)
+    pdf.roundedRect(21, y + 9, 168, 166, 4, 4, 'FD')
+    addImageContained(pdf, assets.gbpImage, 27, y + 15, 156, 154)
+  } else {
+    pdf.setFillColor(...LIGHT)
+    pdf.roundedRect(21, y + 9, 168, 40, 4, 4, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10)
+    pdf.setTextColor(...BLUE_DARK)
+    pdf.text('COMING SOON TO THIS REPORT', 29, y + 22)
+    paragraph(pdf, "We're integrating your Google Business Profile data (interactions, calls, views and posts). Once the connection is active, this section will include those results automatically.", y + 30, 152, 9.5)
+  }
 
   // ═══ Closing ═══
   pdf.addPage()
@@ -429,10 +442,11 @@ export function buildClientQuarterlyPdf(
 
 export async function buildClientQuarterlyReportBlob(options: ClientQuarterlyReportOptions) {
   const { jsPDF } = await import('jspdf')
-  const [clientLogo, xmsLogo] = await Promise.all([
+  const [clientLogo, xmsLogo, gbpImage] = await Promise.all([
     imageToDataUrl(options.clientLogoUrl),
     imageToDataUrl(options.xmsLogoUrl ?? '/XMS LOGO - BLACK BACKGROUND.png'),
+    imageToDataUrl(options.gbpImageUrl),
   ])
-  const pdf = buildClientQuarterlyPdf(options, jsPDF, { clientLogo, xmsLogo })
+  const pdf = buildClientQuarterlyPdf(options, jsPDF, { clientLogo, xmsLogo, gbpImage })
   return pdf.output('blob') as Blob
 }
