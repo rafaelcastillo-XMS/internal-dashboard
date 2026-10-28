@@ -4,6 +4,7 @@ import { describeClicksTrend, describePositionTrend, getAuditStatusLabel, getSit
 import { QuarterlyReportLayout, REPORT, type ReportFonts } from './quarterlyReportDesign'
 import { loadQuarterlyReportFonts } from './quarterlyReportFonts'
 import { MAX_GBP_IMAGES } from './quarterlyReportConfig'
+import coverPhotoUrl from '../assets/quarterly-cover.jpg?url'
 
 export interface QuarterlyReportTotals {
   clicks: string; impressions: string; ctr: string; position: string
@@ -47,7 +48,7 @@ interface ClientQuarterlyReportOptions {
   gbpImageUrl?: string
   gbpImageUrls?: string[]
 }
-interface ReportAssets { clientLogo?: string; xmsLogo?: string; gbpImage?: string; gbpImages?: string[]; fonts?: ReportFonts }
+interface ReportAssets { clientLogo?: string; xmsLogo?: string; xmsCoverLogo?: string; coverPhoto?: string; gbpImage?: string; gbpImages?: string[]; fonts?: ReportFonts }
 
 function deltaColor(delta: number) { return delta >= 0 ? REPORT.teal : REPORT.amber }
 function deltaLabel(delta: number, unit = '%') { return `${delta > 0 ? '+' : ''}${delta}${unit} vs. previous quarter` }
@@ -56,43 +57,72 @@ function brand(layout: QuarterlyReportLayout, logo?: string) {
   layout.pdf.setFillColor(...REPORT.white)
   layout.pdf.rect(0, 0, 210, 37, 'F')
   if (!addImageContained(layout.pdf, logo, 22, 7, 73, 23)) {
-    layout.text('XMS', 22, 23, 50, 19, REPORT.navy, 'bold')
-    layout.text('Xperience Marketing Solutions', 48, 22, 130, 9, REPORT.navy)
+    layout.text('XMS', 22, 23, 50, 19, REPORT.brandBlue, 'bold')
+    layout.text('Xperience Marketing Solutions', 48, 22, 130, 9, REPORT.brandBlue)
   }
-  layout.label('QUARTERLY / SEO', 148, 22, REPORT.navy)
+  layout.label('QUARTERLY / SEO', 148, 22, REPORT.brandBlue)
 }
 
 function cover(layout: QuarterlyReportLayout, options: ClientQuarterlyReportOptions, assets: ReportAssets) {
   const { pdf } = layout
-  pdf.setFillColor(...REPORT.navy)
+  pdf.setFillColor(...REPORT.brandBlue)
   pdf.rect(0, 0, 210, 297, 'F')
-  brand(layout, assets.xmsLogo)
-  // Architectural linework is decoration, not a chart of invented results.
-  pdf.setDrawColor(35, 62, 84)
-  pdf.setLineWidth(0.3)
-  for (let i = 0; i < 8; i++) {
-    pdf.line(136 + i * 8, 37, 136 + i * 8, 170)
-    pdf.line(136, 53 + i * 15, 210, 53 + i * 15)
+  if (assets.coverPhoto) {
+    pdf.saveGraphicsState()
+    try {
+      const dimensions = pdf.getImageProperties(assets.coverPhoto)
+      const scale = Math.max(210 / dimensions.width, 297 / dimensions.height)
+      const width = dimensions.width * scale
+      const height = dimensions.height * scale
+      pdf.addImage(assets.coverPhoto, dimensions.fileType, (210 - width) / 2, (297 - height) / 2, width, height)
+    } catch {
+      // A missing or unreadable decorative photo leaves the solid brand-blue cover.
+    }
+    pdf.setGState(pdf.GState({ opacity: 0.86 }))
+    pdf.setFillColor(...REPORT.brandBlue)
+    pdf.rect(0, 0, 210, 297, 'F')
+    pdf.restoreGraphicsState()
   }
-  pdf.setFillColor(...REPORT.blue)
-  pdf.rect(22, 58, 16, 1.6, 'F')
-  layout.label('ORGANIC SEO / PERFORMANCE REVIEW', 22, 74, [145, 207, 237])
-  layout.title('Organic search.\nA clearer view.', 22, 103, 166, 40, REPORT.white)
-  layout.text('SEO Quarterly Report', 22, 157, 145, 15, REPORT.white, 'bold')
-  layout.text('Results, insights and opportunities\nfor your next stage of growth.', 22, 168, 135, 11, [184, 203, 217])
-  pdf.setDrawColor(65, 86, 106)
-  pdf.line(22, 194, 188, 194)
-  layout.label('PREPARED FOR', 22, 206, [145, 207, 237])
-  const nameEnd = layout.fittedTitle(options.clientName, 22, 220, assets.clientLogo ? 119 : 166, 28, 24, REPORT.white)
-  layout.singleLine(options.data.domain, 22, nameEnd + 2, 119, 9.5, [184, 203, 217])
-  if (assets.clientLogo) {
-    pdf.setFillColor(...REPORT.white)
-    pdf.rect(153, 202, 35, 35, 'F')
-    addImageContained(pdf, assets.clientLogo, 156, 205, 29, 29)
+
+  pdf.setFont(layout.sans, 'bold')
+  pdf.setFontSize(11)
+  pdf.setTextColor(...REPORT.white)
+  pdf.text(clean(layout.period.replace(' to ', ' - ').toUpperCase()), 188, 25, { align: 'right' })
+  pdf.setFontSize(38)
+  pdf.text('ORGANIC SEO', 105, 87, { align: 'center' })
+  pdf.setFontSize(24)
+  pdf.text('REPORT', 105, 101, { align: 'center' })
+
+  pdf.setFillColor(...REPORT.white)
+  pdf.circle(105, 149, 27, 'F')
+  if (!addImageContained(pdf, assets.clientLogo, 87, 131, 36, 36)) {
+    const initials = options.clientName.split(/\s+/).map(word => word[0]).join('').slice(0, 3).toUpperCase()
+    pdf.setTextColor(...REPORT.brandBlue)
+    pdf.setFontSize(25)
+    pdf.text(clean(initials), 105, 152, { align: 'center' })
   }
-  layout.label('REPORTING PERIOD', 22, 264, [145, 207, 237])
-  layout.text(layout.period, 22, 276, 166, 13, REPORT.white)
-  layout.text('XPERIENCE MARKETING SOLUTIONS', 22, 289, 166, 7, [184, 203, 217])
+
+  let nameSize = 24
+  const name = clean(options.clientName.toUpperCase())
+  while (nameSize > 10) {
+    pdf.setFontSize(nameSize)
+    if (pdf.splitTextToSize(name, 166).length <= 2) break
+    nameSize -= 1
+  }
+  pdf.setTextColor(...REPORT.white)
+  pdf.setLineHeightFactor(1.2)
+  pdf.text(pdf.splitTextToSize(name, 166), 105, 205, { align: 'center' })
+  pdf.setFont(layout.sans, 'normal')
+  pdf.setFontSize(9)
+  pdf.text(clean(options.data.domain), 105, 229, { align: 'center', maxWidth: 166 })
+  if (!addImageContained(pdf, assets.xmsCoverLogo, 61, 257, 88, 27)) {
+    pdf.setFont(layout.sans, 'bold')
+    pdf.setFontSize(12)
+    pdf.text('XPERIENCE', 105, 269, { align: 'center' })
+    pdf.setFont(layout.sans, 'normal')
+    pdf.setFontSize(8)
+    pdf.text('Marketing Solutions', 105, 277, { align: 'center' })
+  }
 }
 
 export function buildClientQuarterlyPdf(options: ClientQuarterlyReportOptions, PdfConstructor: typeof JsPDF, assets: ReportAssets = {}) {
@@ -192,7 +222,7 @@ export function buildClientQuarterlyPdf(options: ClientQuarterlyReportOptions, P
 
   y = layout.page('Performance by device & location', '03 / CONTENT & AUDIENCE')
   y = layout.paragraph('Where your organic search audience comes from and the devices people use to reach your website.', y)
-  y = layout.label('DEVICE MIX', 22, y + 3, REPORT.blue) + 7
+  y = layout.label('DEVICE MIX', 22, y + 3, REPORT.brandBlue) + 7
   if (!data.devices.length) y = layout.panel('Device detail', 'No device breakdown is available for this reporting period.', y)
   for (const device of data.devices) {
     y = layout.ensure(y, 24)
@@ -203,12 +233,12 @@ export function buildClientQuarterlyPdf(options: ClientQuarterlyReportOptions, P
     pdf.text(clean(`${device.clicks} clicks / ${device.pct}%`), 188, y, { align: 'right' })
     pdf.setFillColor(...REPORT.line)
     pdf.rect(22, y + 4, 166, 3, 'F')
-    pdf.setFillColor(...REPORT.blue)
+    pdf.setFillColor(...REPORT.brandBlue)
     pdf.rect(22, y + 4, 166 * Math.max(0, Math.min(100, device.pct)) / 100, 3, 'F')
     y += 21
   }
   y = layout.ensure(y + 6, 40)
-  y = layout.label('TOP COUNTRIES', 22, y, REPORT.blue) + 6
+  y = layout.label('TOP COUNTRIES', 22, y, REPORT.brandBlue) + 6
   if (data.countries.length) y = layout.table(['COUNTRY', 'CLICKS', 'IMPRESSIONS'], data.countries.slice(0, 5).map(c => [c.country, String(c.clicks), String(c.impressions)]), [94, 32, 40], y)
   else y = layout.panel('Location detail', 'No country breakdown is available for this reporting period.', y)
   layout.paragraph('Read audience data alongside your service area and customer enquiries when choosing which experiences to prioritize.', y, 9)
@@ -235,8 +265,8 @@ export function buildClientQuarterlyPdf(options: ClientQuarterlyReportOptions, P
   y = layout.paragraph('A faster, more stable mobile experience makes it easier for visitors to explore your website and take the next step. This page shows the latest available mobile performance measurement.', y, 12)
   if (typeof psiScore === 'number') {
     y = layout.performanceScore(psiScore, getSiteSpeedLabel(psiScore), y + 7)
-    y = layout.label('PERFORMANCE SCALE', 22, y, REPORT.blue) + 8
-    const zones = [{ label: '0-49 / Priority', color: REPORT.amber }, { label: '50-89 / Optimize', color: REPORT.blue }, { label: '90-100 / Strong', color: REPORT.teal }]
+    y = layout.label('PERFORMANCE SCALE', 22, y, REPORT.brandBlue) + 8
+    const zones = [{ label: '0-49 / Priority', color: REPORT.amber }, { label: '50-89 / Optimize', color: REPORT.brandBlue }, { label: '90-100 / Strong', color: REPORT.teal }]
     zones.forEach((zone, i) => {
       pdf.setFillColor(...zone.color)
       pdf.rect(22 + i * 56, y, 54, 2, 'F')
@@ -283,19 +313,19 @@ export function buildClientQuarterlyPdf(options: ClientQuarterlyReportOptions, P
   if (!gbpImages.length) layout.panel('Local performance', 'Google Business Profile metrics are not connected to this report yet. Local interactions, calls, views and posts will be included when the connection is available.', y + 6)
 
   pdf.addPage()
-  pdf.setFillColor(...REPORT.navy)
+  pdf.setFillColor(...REPORT.brandBlue)
   pdf.rect(0, 0, 210, 297, 'F')
   brand(layout, assets.xmsLogo)
-  layout.label('THE NEXT CHAPTER', 22, 74, [145, 207, 237])
+  layout.label('THE NEXT CHAPTER', 22, 74, REPORT.white)
   layout.title('Thank you for\nyour partnership.', 22, 105, 166, 38, REPORT.white)
-  layout.text('A clearer understanding today.\nA stronger direction for tomorrow.', 22, 152, 166, 13, [184, 203, 217])
-  pdf.setDrawColor(65, 86, 106)
+  layout.text('A clearer understanding today.\nA stronger direction for tomorrow.', 22, 152, 166, 13, REPORT.white)
+  pdf.setDrawColor(...REPORT.white)
   pdf.line(22, 186, 188, 186)
   layout.text('Let\'s discuss your next quarter.', 22, 203, 166, 14, REPORT.white, 'bold')
-  layout.text('Contact your team to review these findings\nand align the next priorities for your business.', 22, 215, 166, 11, [184, 203, 217])
+  layout.text('Contact your team to review these findings\nand align the next priorities for your business.', 22, 215, 166, 11, REPORT.white)
   layout.text('(772) 905-3005', 22, 249, 166, 19, REPORT.white)
   layout.text('info@xperienceusa.com', 22, 263, 166, 11, REPORT.white)
-  layout.text('www.xperiencemarketingsolutions.com', 22, 276, 166, 9, [184, 203, 217])
+  layout.text('www.xperiencemarketingsolutions.com', 22, 276, 166, 9, REPORT.white)
   pdf.link(22, 257, 95, 9, { url: 'mailto:info@xperienceusa.com' })
   pdf.link(22, 270, 166, 9, { url: 'https://www.xperiencemarketingsolutions.com' })
   layout.finish()
@@ -306,11 +336,13 @@ export function buildClientQuarterlyPdf(options: ClientQuarterlyReportOptions, P
 export async function buildClientQuarterlyReportBlob(options: ClientQuarterlyReportOptions) {
   const { jsPDF } = await import('jspdf')
   const imageUrls = (options.gbpImageUrls ?? (options.gbpImageUrl ? [options.gbpImageUrl] : [])).slice(0, MAX_GBP_IMAGES)
-  const [clientLogo, xmsLogo, gbpImages, fonts] = await Promise.all([
+  const [clientLogo, xmsLogo, xmsCoverLogo, coverPhoto, gbpImages, fonts] = await Promise.all([
     imageToDataUrl(options.clientLogoUrl),
     imageToDataUrl(options.xmsLogoUrl ?? '/XMS LOGO - WHITE BACKGROUND.png'),
+    imageToDataUrl(options.xmsLogoUrl ?? '/XMS LOGO - BLACK BACKGROUND.png'),
+    imageToDataUrl(coverPhotoUrl),
     Promise.all(imageUrls.map(url => imageToDataUrl(url))),
     loadQuarterlyReportFonts(),
   ])
-  return buildClientQuarterlyPdf(options, jsPDF, { clientLogo, xmsLogo, gbpImages: gbpImages.filter((image): image is string => !!image), fonts }).output('blob') as Blob
+  return buildClientQuarterlyPdf(options, jsPDF, { clientLogo, xmsLogo, xmsCoverLogo, coverPhoto, gbpImages: gbpImages.filter((image): image is string => !!image), fonts }).output('blob') as Blob
 }

@@ -14,6 +14,8 @@ try {
   const { buildClientQuarterlyPdf } = await server.ssrLoadModule('/src/features/seo/lib/exportClientQuarterlyReport.ts')
   const font = async name => (await readFile(resolve(root, 'src/features/seo/assets/fonts', name))).toString('base64')
   const xmsLogo = `data:image/png;base64,${(await readFile(resolve(root, 'public/XMS LOGO - WHITE BACKGROUND.png'))).toString('base64')}`
+  const xmsCoverLogo = `data:image/png;base64,${(await readFile(resolve(root, 'public/XMS LOGO - BLACK BACKGROUND.png'))).toString('base64')}`
+  const coverPhoto = `data:image/jpeg;base64,${(await readFile(resolve(root, 'src/features/seo/assets/quarterly-cover.jpg'))).toString('base64')}`
   const gbpPaths = process.argv.filter(arg => arg.startsWith('--gbp=')).map(arg => arg.slice(6))
   const gbpImages = await Promise.all(gbpPaths.map(async path => `data:image/png;base64,${(await readFile(path)).toString('base64')}`))
   const clientLogoPath = process.argv.find(arg => arg.startsWith('--client-logo='))?.slice(14)
@@ -51,12 +53,12 @@ try {
       { snapshot_date: '2026-04-30', domain_rating: 22, backlinks: 1140, referring_domains: 171, organic_keywords: 412, organic_traffic: 692 },
     ],
     onPageAudit: { status: 'completed', landing_page_url: 'https://allstarsunrooms.com/', created_at: '2026-07-28T12:00:00Z' },
-  }, jsPDF, { xmsLogo, gbpImages, clientLogo, fonts: { regular: await font('Lato-Regular.ttf'), bold: await font('Lato-Bold.ttf'), display: await font('DMSerifDisplay-Regular.ttf') } })
+  }, jsPDF, { xmsLogo, xmsCoverLogo, coverPhoto, gbpImages, clientLogo, fonts: { regular: await font('Lato-Regular.ttf'), bold: await font('Lato-Bold.ttf'), display: await font('DMSerifDisplay-Regular.ttf') } })
   pdf.setPage(1)
   pdf.setFont('ReportSans', 'bold')
   pdf.setFontSize(7)
-  pdf.setTextColor(145, 207, 237)
-  pdf.text('DESIGN PREVIEW / ILLUSTRATIVE METRICS', 22, 252)
+  pdf.setTextColor(255, 255, 255)
+  pdf.text('DESIGN PREVIEW / ILLUSTRATIVE METRICS', 105, 244, { align: 'center' })
   const outDir = resolve(root, 'output/pdf')
   await mkdir(outDir, { recursive: true })
   const outPath = resolve(outDir, 'seo-quarterly-design-preview.pdf')

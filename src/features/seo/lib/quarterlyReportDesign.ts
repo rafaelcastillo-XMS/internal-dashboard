@@ -3,8 +3,8 @@ import { clean } from './exportQuarterlySeoReport'
 
 type RGB = [number, number, number]
 export const REPORT = {
-  navy: [15, 35, 55] as RGB,
-  blue: [26, 103, 196] as RGB,
+  // Matches the xms-blue brand token in tailwind.config.js (#1A72D9).
+  brandBlue: [26, 114, 217] as RGB,
   teal: [20, 116, 110] as RGB,
   amber: [153, 92, 33] as RGB,
   ink: [30, 46, 62] as RGB,
@@ -58,7 +58,7 @@ export class QuarterlyReportLayout {
     return this.text(text.toUpperCase(), x, y, REPORT.width, 8, color, 'bold')
   }
 
-  title(text: string, x: number, y: number, width = REPORT.width, size = 29, color = REPORT.navy) {
+  title(text: string, x: number, y: number, width = REPORT.width, size = 29, color = REPORT.brandBlue) {
     this.pdf.setFont(this.display, 'normal')
     this.pdf.setFontSize(size)
     this.pdf.setTextColor(...color)
@@ -68,7 +68,7 @@ export class QuarterlyReportLayout {
     return y + lines.length * size * 0.3528 * 1.12
   }
 
-  fittedTitle(text: string, x: number, y: number, width: number, height: number, size: number, color = REPORT.navy) {
+  fittedTitle(text: string, x: number, y: number, width: number, height: number, size: number, color = REPORT.brandBlue) {
     this.pdf.setFont(this.display, 'normal')
     while (size > 9) {
       this.pdf.setFontSize(size)
@@ -96,9 +96,9 @@ export class QuarterlyReportLayout {
     pdf.addPage()
     pdf.setFillColor(...REPORT.paper)
     pdf.rect(0, 0, 210, 297, 'F')
-    pdf.setFillColor(...REPORT.navy)
+    pdf.setFillColor(...REPORT.brandBlue)
     pdf.rect(0, 0, 5, 297, 'F')
-    this.label('XMS / SEARCH INTELLIGENCE', 22, 16, REPORT.navy)
+    this.label('XMS / SEARCH INTELLIGENCE', 22, 16, REPORT.brandBlue)
     pdf.setFont(this.sans, 'normal')
     pdf.setFontSize(7.5)
     pdf.setTextColor(...REPORT.muted)
@@ -106,7 +106,7 @@ export class QuarterlyReportLayout {
     pdf.setDrawColor(...REPORT.line)
     pdf.setLineWidth(0.25)
     pdf.line(22, 23, 188, 23)
-    this.label(`${label}${continued ? ' / CONTINUED' : ''}`, 22, 35, REPORT.blue)
+    this.label(`${label}${continued ? ' / CONTINUED' : ''}`, 22, 35, REPORT.brandBlue)
     return this.title(title, 22, 50) + 7
   }
 
@@ -132,11 +132,11 @@ export class QuarterlyReportLayout {
     const lines: string[] = this.pdf.splitTextToSize(clean(text), 148)
     const height = 23 + lines.length * 5.3
     y = this.ensure(y, height + 7)
-    this.pdf.setFillColor(...(dark ? REPORT.navy : REPORT.pale))
+    this.pdf.setFillColor(...(dark ? REPORT.brandBlue : REPORT.pale))
     this.pdf.rect(22, y, REPORT.width, height, 'F')
-    this.pdf.setFillColor(...REPORT.blue)
+    this.pdf.setFillColor(...REPORT.brandBlue)
     this.pdf.rect(22, y, 1.2, height, 'F')
-    this.label(label, 30, y + 10, dark ? [145, 207, 237] : REPORT.blue)
+    this.label(label, 30, y + 10, dark ? REPORT.white : REPORT.brandBlue)
     this.text(text, 30, y + 20, 148, 10, dark ? REPORT.white : REPORT.ink)
     return y + height + 9
   }
@@ -153,13 +153,13 @@ export class QuarterlyReportLayout {
       const x = 22 + i * (width + gap)
       this.pdf.setFillColor(...REPORT.white)
       this.pdf.rect(x, y, width, height, 'F')
-      this.pdf.setFillColor(...(item.color ?? REPORT.blue))
+      this.pdf.setFillColor(...(item.color ?? REPORT.brandBlue))
       this.pdf.rect(x, y, width, 0.9, 'F')
       // Fit large values instead of allowing them to cross into the adjacent card.
       this.pdf.setFont(this.sans, 'bold')
       this.pdf.setFontSize(26)
       const valueSize = Math.min(26, 26 * (width - 14) / Math.max(this.pdf.getTextWidth(clean(item.value)), 1))
-      this.text(item.value, x + 7, y + 20, width - 14, valueSize, REPORT.navy, 'bold')
+      this.text(item.value, x + 7, y + 20, width - 14, valueSize, REPORT.brandBlue, 'bold')
       this.text(item.label, x + 7, y + 29, width - 14, 9, REPORT.ink, 'bold')
       if (item.detail) this.text(item.detail, x + 7, y + 40, width - 14, 8, item.color ?? REPORT.muted)
     })
@@ -169,7 +169,7 @@ export class QuarterlyReportLayout {
   table(headers: string[], rows: string[][], widths: number[], y: number, accents?: (RGB | undefined)[], origin = 22) {
     const tableWidth = widths.reduce((sum, width) => sum + width, 0)
     const header = (top: number) => {
-      this.pdf.setFillColor(...REPORT.navy)
+      this.pdf.setFillColor(...REPORT.brandBlue)
       this.pdf.rect(origin, top, tableWidth, 11, 'F')
       let x = origin + 4
       headers.forEach((label, i) => {
@@ -213,7 +213,7 @@ export class QuarterlyReportLayout {
     const { pdf } = this
     pdf.setFillColor(...REPORT.white)
     pdf.rect(22, y, REPORT.width, 93, 'F')
-    this.label('ORGANIC CLICKS / REPORTING PERIOD', 30, y + 11, REPORT.navy)
+    this.label('ORGANIC CLICKS / REPORTING PERIOD', 30, y + 11, REPORT.brandBlue)
     const left = 41, top = y + 24, width = 134, height = 48
     const max = Math.max(...values.filter(Number.isFinite), 1)
     const magnitude = 10 ** Math.floor(Math.log10(max))
@@ -232,7 +232,7 @@ export class QuarterlyReportLayout {
       x: left + (values.length === 1 ? width / 2 : width * i / (values.length - 1)),
       y: top + height * (1 - (Number.isFinite(value) ? value : 0) / ceiling),
     }))
-    pdf.setDrawColor(...REPORT.blue)
+    pdf.setDrawColor(...REPORT.brandBlue)
     pdf.setLineWidth(0.85)
     points.slice(1).forEach((p, i) => pdf.line(points[i].x, points[i].y, p.x, p.y))
     // Sparse markers keep daily series readable; label positions follow the value series.
@@ -271,13 +271,13 @@ export class QuarterlyReportLayout {
     }
     pdf.setFont(this.sans, 'bold')
     pdf.setFontSize(28)
-    pdf.setTextColor(...REPORT.navy)
+    pdf.setTextColor(...REPORT.brandBlue)
     pdf.text(clean(String(score)), cx, cy + 2, { align: 'center' })
     pdf.setFont(this.sans, 'normal')
     pdf.setFontSize(9)
     pdf.setTextColor(...REPORT.muted)
     pdf.text('/ 100', cx, cy + 10, { align: 'center' })
-    this.label('MOBILE PERFORMANCE', 98, y + 22, REPORT.blue)
+    this.label('MOBILE PERFORMANCE', 98, y + 22, REPORT.brandBlue)
     this.text(status, 98, y + 35, 79, 14, accent, 'bold')
     this.text('Latest available measurement', 98, y + 59, 79, 9, REPORT.muted)
     pdf.setLineCap('butt')
