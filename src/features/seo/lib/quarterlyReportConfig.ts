@@ -20,7 +20,34 @@ export function getQuarterlyMonthLabels(endDate: string, locale = 'en-US') {
 
 export const GBP_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const
 export const MAX_GBP_IMAGE_BYTES = 10 * 1024 * 1024
+export const MAX_GBP_IMAGES = 3
 const MAX_GBP_IMAGE_SIDE = 2000
+
+export interface GbpReportImage {
+  id: string
+  name: string
+  dataUrl: string
+}
+
+/** Prepare a selection atomically so a failed file never discards existing previews. */
+export async function prepareGbpImageSelection(
+  files: File[],
+  existing: GbpReportImage[],
+  replaceId?: string,
+  prepare: (file: File) => Promise<string> = prepareGbpImageDataUrl,
+): Promise<GbpReportImage[]> {
+  if (!files.length) return existing
+  if (replaceId && !existing.some(image => image.id === replaceId)) throw new Error('The image to replace is no longer available.')
+  if (replaceId ? files.length !== 1 : existing.length + files.length > MAX_GBP_IMAGES) {
+    throw new Error(replaceId ? 'Choose one replacement image.' : `You can add up to ${MAX_GBP_IMAGES} Google Business Profile images.`)
+  }
+  const prepared: GbpReportImage[] = []
+  // Decode sequentially to bound memory usage for multiple large local files.
+  for (const file of files) {
+    prepared.push({ id: replaceId ?? crypto.randomUUID(), name: file.name, dataUrl: await prepare(file) })
+  }
+  return replaceId ? existing.map(image => image.id === replaceId ? prepared[0] : image) : [...existing, ...prepared]
+}
 
 export function isSupportedGbpImage(file: Pick<Blob, 'type'>) {
   return GBP_IMAGE_TYPES.includes(file.type as (typeof GBP_IMAGE_TYPES)[number])

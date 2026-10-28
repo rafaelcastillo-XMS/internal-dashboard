@@ -7,7 +7,8 @@ import { safeDomain } from '@/features/seo/lib/exportQuarterlySeoReport'
 import { buildClientQuarterlyReportBlob } from '@/features/seo/lib/exportClientQuarterlyReport'
 import type { QuarterlyReportData, AhrefsSnapshot, OnPageAuditSummary } from '@/features/seo/lib/exportClientQuarterlyReport'
 import {
-  prepareGbpImageDataUrl,
+  prepareGbpImageSelection,
+  type GbpReportImage,
   type QuarterlyReportPeriod,
 } from '@/features/seo/lib/quarterlyReportConfig'
 
@@ -31,11 +32,11 @@ export function SEOClientReports() {
   const [error, setError] = useState('')
   const [configOpen, setConfigOpen] = useState(false)
   const [reportPeriod, setReportPeriod] = useState<QuarterlyReportPeriod | null>(null)
-  const [gbpImageName, setGbpImageName] = useState('')
-  const [gbpImageDataUrl, setGbpImageDataUrl] = useState('')
+  const [gbpImages, setGbpImages] = useState<GbpReportImage[]>([])
   const [preparingImage, setPreparingImage] = useState(false)
   const [imageError, setImageError] = useState('')
   const imageRequestId = useRef(0)
+  const imageBusy = useRef(false)
 
   const loadReports = useCallback(async () => {
     if (!state.selectedClientId) { setReports([]); return }
@@ -61,40 +62,47 @@ export function SEOClientReports() {
   function closeReportConfig() {
     if (generating) return
     setConfigOpen(false)
-    resetGbpImage()
+    resetGbpImages()
   }
 
-  function resetGbpImage() {
+  function resetGbpImages() {
     imageRequestId.current += 1
-    setGbpImageName('')
-    setGbpImageDataUrl('')
+    imageBusy.current = false
+    setGbpImages([])
     setPreparingImage(false)
     setImageError('')
   }
 
-  async function handleImageChange(file?: File) {
-    if (!file) return
+  function removeGbpImage(id: string) {
+    if (generating || imageBusy.current) return
+    setGbpImages(current => current.filter(image => image.id !== id))
+    setImageError('')
+  }
+
+  async function handleImageChange(files: File[], replaceId?: string) {
+    if (!files.length || generating || imageBusy.current) return
     const requestId = imageRequestId.current + 1
     imageRequestId.current = requestId
+    imageBusy.current = true
     setPreparingImage(true)
     setImageError('')
     try {
-      const dataUrl = await prepareGbpImageDataUrl(file)
+      const images = await prepareGbpImageSelection(files, gbpImages, replaceId)
       if (requestId !== imageRequestId.current) return
-      setGbpImageName(file.name)
-      setGbpImageDataUrl(dataUrl)
+      setGbpImages(images)
     } catch (imagePreparationError) {
       if (requestId !== imageRequestId.current) return
-      setGbpImageName('')
-      setGbpImageDataUrl('')
       setImageError(imagePreparationError instanceof Error ? imagePreparationError.message : 'The image could not be prepared.')
     } finally {
-      if (requestId === imageRequestId.current) setPreparingImage(false)
+      if (requestId === imageRequestId.current) {
+        imageBusy.current = false
+        setPreparingImage(false)
+      }
     }
   }
 
   async function handleGenerate() {
-    if (!state.selectedClientId || !state.selectedGscSite || !reportPeriod) return
+    if (!state.selectedClientId || !state.selectedGscSite || !reportPeriod || generating || imageBusy.current) return
     setGenerating(true)
     setError('')
     try {
@@ -128,7 +136,7 @@ export function SEOClientReports() {
         ahrefsSnapshots,
         onPageAudit,
         clientLogoUrl,
-        gbpImageUrl: gbpImageDataUrl || undefined,
+        gbpImageUrls: gbpImages.map(image => image.dataUrl),
       })
 
       const path = `${state.selectedClientId}/${Date.now()}.pdf`
@@ -149,7 +157,7 @@ export function SEOClientReports() {
       }
 
       setTitle('')
-      resetGbpImage()
+      resetGbpImages()
       setConfigOpen(false)
       await loadReports()
     } catch (err) {
@@ -244,15 +252,14 @@ export function SEOClientReports() {
         <QuarterlyReportConfigModal
           period={reportPeriod}
           title={title}
-          imageName={gbpImageName}
-          imageDataUrl={gbpImageDataUrl}
+          images={gbpImages}
           imageError={imageError}
           reportError={error}
           preparingImage={preparingImage}
           generating={generating}
           onTitleChange={setTitle}
-          onImageChange={(file) => { void handleImageChange(file) }}
-          onRemoveImage={resetGbpImage}
+          onImageChange={(files, replaceId) => { void handleImageChange(files, replaceId) }}
+          onRemoveImage={removeGbpImage}
           onClose={closeReportConfig}
           onGenerate={() => { void handleGenerate() }}
         />

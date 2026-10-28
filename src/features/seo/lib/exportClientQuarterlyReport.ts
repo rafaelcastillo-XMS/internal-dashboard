@@ -1,18 +1,9 @@
 import type { jsPDF as JsPDF } from 'jspdf'
-import {
-  BLUE, BLUE_DARK, CYAN, INK, MUTED, LIGHT,
-  clean, formatPeriod, heading, paragraph, metricCard, drawLineChart, addImageContained, imageToDataUrl,
-} from './exportQuarterlySeoReport'
-import {
-  describeClicksTrend,
-  describePositionTrend,
-  getAuditStatusLabel,
-  getSiteSpeedLabel,
-} from './quarterlyReportNarrative'
-
-type Pdf = JsPDF
-
-// ─── Data shapes (mirrors /api/seo/quarterly-report + Supabase extras) ────────
+import { clean, formatPeriod, addImageContained, imageToDataUrl } from './exportQuarterlySeoReport'
+import { describeClicksTrend, describePositionTrend, getAuditStatusLabel, getSiteSpeedLabel } from './quarterlyReportNarrative'
+import { QuarterlyReportLayout, REPORT, type ReportFonts } from './quarterlyReportDesign'
+import { loadQuarterlyReportFonts } from './quarterlyReportFonts'
+import { MAX_GBP_IMAGES } from './quarterlyReportConfig'
 
 export interface QuarterlyReportTotals {
   clicks: string; impressions: string; ctr: string; position: string
@@ -24,7 +15,6 @@ export interface QuarterlyReportKeyword { term: string; clicks: number; position
 export interface QuarterlyReportPage { page: string; clicks: number; prevClicks: number; delta: number }
 export interface QuarterlyReportDevice { device: string; clicks: number; pct: number }
 export interface QuarterlyReportCountry { country: string; clicks: number; impressions: number }
-
 export interface QuarterlyReportData {
   period: { startDate: string; endDate: string }
   domain: string
@@ -36,7 +26,6 @@ export interface QuarterlyReportData {
   conversions: { current: number; previous: number; delta: number } | null
   users: { current: number; previous: number; delta: number } | null
 }
-
 export interface AhrefsSnapshot {
   snapshot_date: string | null
   domain_rating: number | null
@@ -45,13 +34,7 @@ export interface AhrefsSnapshot {
   backlinks: number | null
   referring_domains: number | null
 }
-
-export interface OnPageAuditSummary {
-  status: string
-  landing_page_url: string
-  created_at: string
-}
-
+export interface OnPageAuditSummary { status: string; landing_page_url: string; created_at: string }
 interface ClientQuarterlyReportOptions {
   data: QuarterlyReportData
   clientName: string
@@ -62,391 +45,272 @@ interface ClientQuarterlyReportOptions {
   clientLogoUrl?: string
   xmsLogoUrl?: string
   gbpImageUrl?: string
+  gbpImageUrls?: string[]
+}
+interface ReportAssets { clientLogo?: string; xmsLogo?: string; gbpImage?: string; gbpImages?: string[]; fonts?: ReportFonts }
+
+function deltaColor(delta: number) { return delta >= 0 ? REPORT.teal : REPORT.amber }
+function deltaLabel(delta: number, unit = '%') { return `${delta > 0 ? '+' : ''}${delta}${unit} vs. previous quarter` }
+
+function brand(layout: QuarterlyReportLayout, logo?: string) {
+  layout.pdf.setFillColor(...REPORT.white)
+  layout.pdf.rect(0, 0, 210, 37, 'F')
+  if (!addImageContained(layout.pdf, logo, 22, 7, 73, 23)) {
+    layout.text('XMS', 22, 23, 50, 19, REPORT.navy, 'bold')
+    layout.text('Xperience Marketing Solutions', 48, 22, 130, 9, REPORT.navy)
+  }
+  layout.label('QUARTERLY / SEO', 148, 22, REPORT.navy)
 }
 
-// ─── Small local helpers ───────────────────────────────────────────────────────
-
-function pageChrome(pdf: Pdf, period: string, pageNumber: number) {
-  const w = pdf.internal.pageSize.getWidth()
-  const h = pdf.internal.pageSize.getHeight()
-
-  pdf.setFillColor(255, 255, 255)
-  pdf.rect(0, 0, w, h, 'F')
-  pdf.setFillColor(...BLUE_DARK)
-  pdf.rect(0, 0, w, 15, 'F')
-  pdf.setFillColor(...CYAN)
-  pdf.rect(0, 8, w, 7, 'F')
-  pdf.setFillColor(255, 255, 255)
-  pdf.ellipse(w / 2, 22, w * 0.6, 12, 'F')
-
-  pdf.setFillColor(...BLUE_DARK)
-  pdf.rect(0, h - 15, w, 15, 'F')
-  pdf.setFillColor(...CYAN)
-  pdf.rect(0, h - 15, w, 8, 'F')
-  pdf.setFillColor(255, 255, 255)
-  pdf.ellipse(w / 2, h - 22, w * 0.62, 11, 'F')
-
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8.5)
-  pdf.setTextColor(...INK)
-  pdf.text('SEO Quarterly Report', 21, 25)
-  pdf.setDrawColor(...BLUE)
-  pdf.line(63, 21.5, 63, 26)
-  pdf.text(clean(period), 68, 25)
-
-  pdf.setFontSize(7.5)
-  pdf.setTextColor(255, 255, 255)
-  pdf.text('www.xperiencemarketingsolutions.com', 8, h - 4.5)
-  pdf.text(String(pageNumber), w - 10, h - 4.5, { align: 'right' })
+function cover(layout: QuarterlyReportLayout, options: ClientQuarterlyReportOptions, assets: ReportAssets) {
+  const { pdf } = layout
+  pdf.setFillColor(...REPORT.navy)
+  pdf.rect(0, 0, 210, 297, 'F')
+  brand(layout, assets.xmsLogo)
+  // Architectural linework is decoration, not a chart of invented results.
+  pdf.setDrawColor(35, 62, 84)
+  pdf.setLineWidth(0.3)
+  for (let i = 0; i < 8; i++) {
+    pdf.line(136 + i * 8, 37, 136 + i * 8, 170)
+    pdf.line(136, 53 + i * 15, 210, 53 + i * 15)
+  }
+  pdf.setFillColor(...REPORT.blue)
+  pdf.rect(22, 58, 16, 1.6, 'F')
+  layout.label('ORGANIC SEO / PERFORMANCE REVIEW', 22, 74, [145, 207, 237])
+  layout.title('Organic search.\nA clearer view.', 22, 103, 166, 40, REPORT.white)
+  layout.text('SEO Quarterly Report', 22, 157, 145, 15, REPORT.white, 'bold')
+  layout.text('Results, insights and opportunities\nfor your next stage of growth.', 22, 168, 135, 11, [184, 203, 217])
+  pdf.setDrawColor(65, 86, 106)
+  pdf.line(22, 194, 188, 194)
+  layout.label('PREPARED FOR', 22, 206, [145, 207, 237])
+  const nameEnd = layout.fittedTitle(options.clientName, 22, 220, assets.clientLogo ? 119 : 166, 28, 24, REPORT.white)
+  layout.singleLine(options.data.domain, 22, nameEnd + 2, 119, 9.5, [184, 203, 217])
+  if (assets.clientLogo) {
+    pdf.setFillColor(...REPORT.white)
+    pdf.rect(153, 202, 35, 35, 'F')
+    addImageContained(pdf, assets.clientLogo, 156, 205, 29, 29)
+  }
+  layout.label('REPORTING PERIOD', 22, 264, [145, 207, 237])
+  layout.text(layout.period, 22, 276, 166, 13, REPORT.white)
+  layout.text('XPERIENCE MARKETING SOLUTIONS', 22, 289, 166, 7, [184, 203, 217])
 }
 
-function deltaColor(delta: number): [number, number, number] {
-  return delta >= 0 ? [52, 168, 83] : [244, 124, 32]
-}
-
-function deltaLabel(delta: number, unit = '%') {
-  const arrow = delta >= 0 ? '+' : ''
-  return `${arrow}${delta}${unit} vs. previous quarter`
-}
-
-function infoBox(pdf: Pdf, y: number, text: string) {
-  pdf.setFillColor(...LIGHT)
-  pdf.roundedRect(21, y, 168, 26, 4, 4, 'F')
-  paragraph(pdf, text, y + 11, 156, 10)
-  return y + 34
-}
-
-function twoColBars(pdf: Pdf, y: number, rows: { label: string; value: string; pct: number }[], accent: [number, number, number] = BLUE) {
-  let rowY = y
-  rows.forEach((row) => {
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(9)
-    pdf.setTextColor(...INK)
-    pdf.text(clean(row.label), 21, rowY)
-    pdf.setFont('helvetica', 'normal')
-    pdf.setTextColor(...MUTED)
-    pdf.text(clean(row.value), 189, rowY, { align: 'right' })
-    pdf.setFillColor(232, 238, 245)
-    pdf.roundedRect(21, rowY + 3, 168, 4.5, 2, 2, 'F')
-    pdf.setFillColor(...accent)
-    pdf.roundedRect(21, rowY + 3, Math.max(3, 168 * row.pct / 100), 4.5, 2, 2, 'F')
-    rowY += 15
-  })
-  return rowY
-}
-
-// ─── Builder ────────────────────────────────────────────────────────────────
-
-export function buildClientQuarterlyPdf(
-  options: ClientQuarterlyReportOptions,
-  PdfConstructor: typeof JsPDF,
-  assets: { clientLogo?: string; xmsLogo?: string; gbpImage?: string } = {},
-) {
+export function buildClientQuarterlyPdf(options: ClientQuarterlyReportOptions, PdfConstructor: typeof JsPDF, assets: ReportAssets = {}) {
   const { data, clientName, ahrefsSnapshots = [], onPageAudit, psiScore } = options
   const period = formatPeriod(data.period.startDate, data.period.endDate)
   const pdf = new PdfConstructor({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
-  const w = pdf.internal.pageSize.getWidth()
-  const h = pdf.internal.pageSize.getHeight()
-  let pageNumber = 1
-
-  const addBodyPage = (title: string) => {
-    pdf.addPage()
-    pageNumber += 1
-    pageChrome(pdf, period, pageNumber)
-    return heading(pdf, title)
-  }
-
-  // ═══ Cover ═══
-  pdf.setFillColor(...BLUE_DARK)
-  pdf.rect(0, 0, w, h, 'F')
-  pdf.setFillColor(...BLUE)
-  pdf.circle(w * 0.18, h * 0.25, 75, 'F')
-  pdf.setFillColor(...CYAN)
-  pdf.circle(w * 0.78, h * 0.83, 92, 'F')
-  pdf.setFillColor(18, 91, 165)
-  for (let i = 0; i < 7; i++) pdf.circle(24 + i * 29, 92 + (i % 2) * 17, 15 + i * 2, 'F')
-
-  addImageContained(pdf, assets.xmsLogo, 56, 252, 98, 25)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setTextColor(255, 255, 255)
-  pdf.setFontSize(12)
-  pdf.text(clean(period.toUpperCase()), w / 2, 23, { align: 'center' })
-  pdf.setFontSize(30)
-  pdf.text('QUARTERLY REPORT', w / 2, 85, { align: 'center' })
-  pdf.setFontSize(20)
-  pdf.text('SEO PERFORMANCE', w / 2, 99, { align: 'center' })
-
-  pdf.setFillColor(255, 255, 255)
-  pdf.circle(w / 2, 143, 30, 'F')
-  if (!addImageContained(pdf, assets.clientLogo, w / 2 - 24, 119, 48, 48)) {
-    pdf.setTextColor(...BLUE_DARK)
-    pdf.setFontSize(24)
-    pdf.text(clientName.split(/\s+/).map((word) => word[0]).join('').slice(0, 3).toUpperCase(), w / 2, 149, { align: 'center' })
-  }
-  pdf.setTextColor(255, 255, 255)
-  pdf.setFontSize(18)
-  pdf.text(clean(clientName.toUpperCase()), w / 2, 190, { align: 'center', maxWidth: 175 })
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(10)
-  pdf.text(clean(data.domain), w / 2, 201, { align: 'center' })
-
-  // ═══ Purpose / intro ═══
-  let y = addBodyPage('About This Report')
-  y = paragraph(pdf, `This report summarizes the search engine optimization (SEO) work completed for ${clientName} during the period below. Our goal is to show you, clearly and without technical jargon, how your website's visibility on Google evolved and what concrete results the team's work delivered.`, y + 5)
-  y = paragraph(pdf, 'Below you will find the traffic generated, the keywords driving your business, how your pages performed, and the overall technical health of your site.', y + 8)
-  pdf.setFillColor(...LIGHT)
-  pdf.roundedRect(21, y + 9, 168, 34, 4, 4, 'F')
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(10)
-  pdf.setTextColor(...BLUE_DARK)
-  pdf.text('REPORTING PERIOD', 29, y + 22)
-  pdf.setFontSize(15)
-  pdf.text(clean(period), 29, y + 33)
-
-  // ═══ Executive summary ═══
+  const layout = new QuarterlyReportLayout(pdf, period, clientName, assets.fonts)
   const t = data.totals
-  const clicksTrend = describeClicksTrend(t.clicksDelta)
-  const posTrend = describePositionTrend(t.positionDelta)
-  y = addBodyPage('Quarterly Executive Summary')
-  y = paragraph(pdf, `During ${period}, ${clientName}'s website earned ${t.clicks} organic clicks from Google, ${clicksTrend} compared to the previous quarter (${t.prevClicks}). The average position in search results ${posTrend}.${data.keywords.newCount > 0 ? ` ${data.keywords.newCount} new keywords began ranking during this period.` : ''}`, y + 5, 168, 11.5)
-  metricCard(pdf, 21, y + 10, 51, 'Organic clicks', t.clicks, deltaColor(t.clicksDelta))
-  metricCard(pdf, 79.5, y + 10, 51, 'Impressions', t.impressions, deltaColor(t.impressionsDelta))
-  metricCard(pdf, 138, y + 10, 51, 'Average position', t.position, deltaColor(t.positionDelta))
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8)
-  pdf.setTextColor(...MUTED)
-  pdf.text(clean(deltaLabel(t.clicksDelta)), 21, y + 43)
-  pdf.text(clean(deltaLabel(t.impressionsDelta)), 79.5, y + 43)
-  pdf.text(clean(t.positionDelta === 0 ? 'Stable position' : t.positionDelta > 0 ? `Improved by ${t.positionDelta} positions` : `Opportunity: ${Math.abs(t.positionDelta)} positions`), 138, y + 43)
+  cover(layout, options, assets)
 
-  // ═══ Organic traffic ═══
-  y = addBodyPage('Organic Traffic & Visibility')
-  y = paragraph(pdf, 'Organic traffic is the visits your site receives directly from Google search results, with no paid advertising. Impressions show how many times your site appeared to someone searching for something related to your business.', y + 3)
-  drawLineChart(pdf, t.series, t.labels, 21, y + 8, 168, 78, BLUE)
-  y = paragraph(pdf, `The average click-through rate (CTR) was ${t.ctr} during this quarter.`, y + 92)
+  let y = layout.page('About this report', '01 / THE OVERVIEW')
+  y = layout.paragraph(`A quarterly perspective on search visibility for ${clientName}: how people discovered your website, which content attracted their attention, and where the next opportunities lie.`, y, 12)
+  y = layout.panel('The reporting period', period, y + 5, true)
+  y = layout.paragraph('Start with the executive summary for the main results, then explore the detail behind each area of performance.', y)
+  y = layout.table(['IN THIS REPORT', 'WHAT IT TELLS YOU'], [
+    ['Search performance', 'Visibility, organic clicks and valuable visitor actions'],
+    ['Content & audience', 'Search terms, leading pages, devices and locations'],
+    ['Website foundations', 'Backlinks, mobile speed and technical review status'],
+    ['Local presence', 'Google Business Profile and available visual evidence'],
+  ], [59, 107], y + 5)
+  layout.paragraph('Comparisons use the previous reporting period. Technical scores and backlink metrics reflect the latest available measurements, which may fall outside this quarter.', y + 2, 9)
 
-  // ═══ Conversions (only if GA4 connected) ═══
+  y = layout.page('Quarterly executive summary', '01 / THE OVERVIEW')
+  y = layout.paragraph(`During ${period}, your website earned ${t.clicks} organic clicks from Google, ${describeClicksTrend(t.clicksDelta)} compared with the previous quarter (${t.prevClicks}).`, y, 12)
+  y = layout.metrics([
+    { label: 'Organic clicks', value: t.clicks, detail: deltaLabel(t.clicksDelta), color: deltaColor(t.clicksDelta) },
+    { label: 'Search impressions', value: t.impressions, detail: deltaLabel(t.impressionsDelta), color: deltaColor(t.impressionsDelta) },
+    { label: 'Average position', value: t.position, detail: t.positionDelta === 0 ? 'Stable position' : `${Math.abs(t.positionDelta)} positions ${t.positionDelta > 0 ? 'improved' : 'to recover'}`, color: deltaColor(t.positionDelta) },
+  ], y + 6)
+  y = layout.panel('The ranking perspective', `Your average search position ${describePositionTrend(t.positionDelta)}.${data.keywords.newCount > 0 ? ` ${data.keywords.newCount} new keywords began ranking during this period.` : ''}`, y)
+  layout.panel('What to focus on', 'Use the keyword and page results that follow to identify content worth strengthening. Read changes alongside lead quality and business outcomes, rather than treating visibility alone as success.', y, true)
+
+  y = layout.page('Organic traffic & visibility', '02 / SEARCH PERFORMANCE')
+  y = layout.paragraph('Impressions measure how often your website appeared in Google search results. Organic clicks measure how often someone selected your website from those results.', y)
+  y = layout.chart(t.series, t.labels, y + 3)
+  y = layout.metrics([
+    { label: 'Average click-through rate', value: t.ctr, detail: 'Share of impressions that became clicks' },
+    { label: 'Previous quarter impressions', value: t.prevImpressions, detail: 'Comparison period' },
+  ], y)
+
   if (data.conversions) {
     const c = data.conversions
-    y = addBodyPage('Conversions Generated from SEO')
-    y = paragraph(pdf, 'Conversions represent valuable actions completed by visitors who arrived from an organic Google search: for example, a submitted form, a call initiated, or a purchase made.', y + 3)
-    metricCard(pdf, 21, y + 10, 82, 'Conversions from SEO', String(c.current), deltaColor(c.delta))
-    metricCard(pdf, 107, y + 10, 82, 'Previous quarter', String(c.previous))
-    y = paragraph(pdf, deltaLabel(c.delta), y + 48, 168, 9)
+    y = layout.page('Conversions generated from SEO', '02 / SEARCH PERFORMANCE')
+    y = layout.paragraph('Conversions are the valuable actions recorded for visitors who arrived from organic Google search, such as an enquiry, an initiated call or a purchase. The actions included depend on your analytics configuration.', y, 12)
+    y = layout.metrics([
+      { label: 'Conversions from SEO', value: String(c.current), detail: deltaLabel(c.delta), color: deltaColor(c.delta) },
+      { label: 'Previous quarter', value: String(c.previous), detail: 'Recorded conversions' },
+    ], y + 8)
+    layout.panel('From attention to action', 'These recorded actions help connect search visibility with business interest. They are analytics events; they should not be interpreted as confirmed sales unless your tracking specifically measures sales.', y, true)
   }
 
-  // ═══ Keywords ═══
-  y = addBodyPage('Top Keywords')
-  y = paragraph(pdf, 'These are the searches that drove the most traffic to your site, and how their Google ranking changed compared to the previous quarter.', y + 3)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(8)
-  pdf.setTextColor(...MUTED)
-  pdf.text('KEYWORD', 21, y + 10)
-  pdf.text('CLICKS', 145, y + 10, { align: 'right' })
-  pdf.text('POSITION', 189, y + 10, { align: 'right' })
-  pdf.setDrawColor(220, 228, 238)
-  pdf.line(21, y + 12.5, 189, y + 12.5)
-  let rowY = y + 20
-  data.keywords.top.slice(0, 10).forEach((kw) => {
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(9)
-    pdf.setTextColor(...INK)
-    pdf.text(pdf.splitTextToSize(clean(kw.term), 110)[0], 21, rowY)
-    pdf.text(String(kw.clicks), 145, rowY, { align: 'right' })
-    const change = kw.isNew ? 'NEW' : kw.prevPosition == null ? '—' : kw.position < kw.prevPosition ? `+${(kw.prevPosition - kw.position).toFixed(1)}` : kw.position > kw.prevPosition ? `-${(kw.position - kw.prevPosition).toFixed(1)}` : '='
-    const color = kw.isNew || (kw.prevPosition != null && kw.position < kw.prevPosition) ? [52, 168, 83] : kw.prevPosition != null && kw.position > kw.prevPosition ? [244, 124, 32] : MUTED
-    pdf.setFont('helvetica', 'bold')
-    pdf.setTextColor(color[0], color[1], color[2])
-    pdf.text(`${kw.position.toFixed(1)} (${change})`, 189, rowY, { align: 'right' })
-    rowY += 9
-  })
-  if (data.keywords.newTerms.length > 0) {
-    y = rowY + 6
-    pdf.setFillColor(...LIGHT)
-    pdf.roundedRect(21, y, 168, 8 + Math.ceil(data.keywords.newTerms.length / 2) * 6, 4, 4, 'F')
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(9)
-    pdf.setTextColor(...BLUE_DARK)
-    pdf.text(`New keywords that started ranking (${data.keywords.newCount}):`, 27, y + 8)
-    pdf.setFont('helvetica', 'normal')
-    pdf.setTextColor(...INK)
-    pdf.text(pdf.splitTextToSize(clean(data.keywords.newTerms.join('  ·  ')), 156), 27, y + 15)
+  y = layout.page('Top keywords', '03 / CONTENT & AUDIENCE')
+  y = layout.paragraph('The searches that brought the most organic clicks to your website. A lower position number means a higher placement in Google results.', y)
+  if (data.keywords.top.length) {
+    const keywords = data.keywords.top.slice(0, 10)
+    y = layout.table(['SEARCH TERM', 'CLICKS', 'POSITION / CHANGE'], keywords.map(kw => {
+      const change = kw.isNew ? 'NEW' : kw.prevPosition == null ? 'N/A' : kw.position < kw.prevPosition ? `+${(kw.prevPosition - kw.position).toFixed(1)}` : kw.position > kw.prevPosition ? `-${(kw.position - kw.prevPosition).toFixed(1)}` : 'Stable'
+      return [kw.term, String(kw.clicks), `${kw.position.toFixed(1)} / ${change}`]
+    }), [96, 24, 46], y + 3, keywords.map(kw => kw.isNew || (kw.prevPosition != null && kw.position < kw.prevPosition) ? REPORT.teal : REPORT.ink))
+  } else y = layout.panel('Search term detail', 'No keyword-level results are available for this reporting period.', y)
+  if (data.keywords.newTerms.length) {
+    y = layout.ensure(y + 3, 25)
+    y = layout.paragraph(`New keywords that started ranking (${data.keywords.newCount})`, y, 11)
+    y = layout.paragraph(data.keywords.newTerms.join('  /  '), y, 9)
   }
+  layout.paragraph('Positive change = improved ranking. NEW = newly present in the comparison data. N/A = no prior position available.', y, 8)
 
-  // ═══ Pages ═══
-  y = addBodyPage('Top-Performing Pages')
-  y = paragraph(pdf, 'The pages on your site that received the most organic visits, including the strongest gains and the clearest opportunities for the next quarter.', y + 3)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(8)
-  pdf.setTextColor(...MUTED)
-  pdf.text('PAGE', 21, y + 10)
-  pdf.text('CLICKS', 189, y + 10, { align: 'right' })
-  pdf.line(21, y + 12.5, 189, y + 12.5)
-  rowY = y + 20
-  data.pages.top.slice(0, 6).forEach((p) => {
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(9)
-    pdf.setTextColor(...INK)
-    pdf.text(pdf.splitTextToSize(clean(p.page || '/'), 130)[0], 21, rowY)
-    pdf.text(String(p.clicks), 189, rowY, { align: 'right' })
-    rowY += 9
-  })
-  y = rowY + 8
-  const half = 82
-  pdf.setFont('helvetica', 'bold')
+  y = layout.page('Top-performing pages', '03 / CONTENT & AUDIENCE')
+  y = layout.paragraph('The pages receiving the most organic clicks, followed by the strongest gains and the pages that present an opportunity to strengthen performance.', y)
+  if (data.pages.top.length) y = layout.table(['PAGE', 'ORGANIC CLICKS'], data.pages.top.slice(0, 6).map(p => [p.page || '/', String(p.clicks)]), [131, 35], y + 3)
+  else y = layout.panel('Page performance', 'No page-level results are available for this reporting period.', y)
+  const pageGroups = [
+    { title: 'Gained traffic', rows: data.pages.gainers, color: REPORT.teal },
+    { title: 'Pages to strengthen', rows: data.pages.losers, color: REPORT.amber },
+  ]
+  pdf.setFont(layout.sans, 'normal')
   pdf.setFontSize(9)
-  pdf.setTextColor(52, 168, 83)
-  pdf.text('▲ Gained traffic', 21, y)
-  pdf.setTextColor(244, 124, 32)
-  pdf.text('▼ Pages to strengthen', 21 + half + 6, y)
-  const gainRows = data.pages.gainers.slice(0, 4)
-  const loseRows = data.pages.losers.slice(0, 4)
-  for (let i = 0; i < Math.max(gainRows.length, loseRows.length); i++) {
-    const rowY2 = y + 8 + i * 8
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(8)
-    if (gainRows[i]) {
-      pdf.setTextColor(...INK)
-      pdf.text(pdf.splitTextToSize(clean(gainRows[i].page || '/'), 60)[0], 21, rowY2)
-      pdf.setTextColor(52, 168, 83)
-      pdf.text(`+${gainRows[i].delta}`, 21 + half - 4, rowY2, { align: 'right' })
-    }
-    if (loseRows[i]) {
-      pdf.setTextColor(...INK)
-      pdf.text(pdf.splitTextToSize(clean(loseRows[i].page || '/'), 60)[0], 21 + half + 6, rowY2)
-      pdf.setTextColor(244, 124, 32)
-      pdf.text(`${loseRows[i].delta}`, 189, rowY2, { align: 'right' })
+  const groupHeight = (rows: QuarterlyReportPage[]) => 33 + rows.slice(0, 4).reduce((height, p) => height + Math.max(10.5, pdf.splitTextToSize(clean(p.page || '/'), 52).length * 4.76 + 5), 0)
+  const sideBySide = y + Math.max(...pageGroups.map(group => groupHeight(group.rows))) <= REPORT.bottom
+  if (!sideBySide) {
+    for (const group of pageGroups) {
+      if (!group.rows.length) continue
+      y = layout.ensure(y + 2, 40)
+      y = layout.label(group.title, 22, y, group.color) + 4
+      const rows = group.rows.slice(0, 4)
+      y = layout.table(['PAGE', 'CLICK CHANGE'], rows.map(p => [p.page || '/', `${p.delta > 0 ? '+' : ''}${p.delta}`]), [131, 35], y, rows.map(() => group.color))
     }
   }
-
-  // ═══ Device + Country ═══
-  y = addBodyPage('Performance by Device & Location')
-  y = paragraph(pdf, 'How your organic visits break down by the type of device your visitors used.', y + 3)
-  y = twoColBars(pdf, y + 10, data.devices.map((d) => ({
-    label: d.device.charAt(0) + d.device.slice(1).toLowerCase(),
-    value: `${d.clicks} clicks · ${d.pct}%`,
-    pct: d.pct,
-  })))
-  y = paragraph(pdf, 'Top countries your organic visitors came from.', y + 8)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(8)
-  pdf.setTextColor(...MUTED)
-  pdf.text('COUNTRY', 21, y + 10)
-  pdf.text('CLICKS', 145, y + 10, { align: 'right' })
-  pdf.text('IMPRESSIONS', 189, y + 10, { align: 'right' })
-  pdf.line(21, y + 12.5, 189, y + 12.5)
-  rowY = y + 20
-  data.countries.slice(0, 5).forEach((c) => {
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(9)
-    pdf.setTextColor(...INK)
-    pdf.text(clean(c.country), 21, rowY)
-    pdf.text(String(c.clicks), 145, rowY, { align: 'right' })
-    pdf.text(String(c.impressions), 189, rowY, { align: 'right' })
-    rowY += 9
+  // Use full-width flowing tables for unusually long paths; normal reports use a balanced two-column comparison.
+  if (sideBySide) pageGroups.forEach((group, index) => {
+    if (!group.rows.length) return
+    const x = 22 + index * 86
+    const top = layout.label(group.title, x, y, group.color) + 4
+    const rows = group.rows.slice(0, 4)
+    layout.table(['PAGE', 'CHANGE'], rows.map(p => [p.page || '/', `${p.delta > 0 ? '+' : ''}${p.delta}`]), [60, 20], top, rows.map(() => group.color), x)
   })
 
-  // ═══ Backlinks / authority ═══
-  y = addBodyPage('Domain Authority & Backlinks')
-  y = paragraph(pdf, 'Backlinks are links from other websites pointing to yours. The more quality sites that link to your page, the more authority your domain earns with Google, which helps you rank better over time.', y + 3)
+  y = layout.page('Performance by device & location', '03 / CONTENT & AUDIENCE')
+  y = layout.paragraph('Where your organic search audience comes from and the devices people use to reach your website.', y)
+  y = layout.label('DEVICE MIX', 22, y + 3, REPORT.blue) + 7
+  if (!data.devices.length) y = layout.panel('Device detail', 'No device breakdown is available for this reporting period.', y)
+  for (const device of data.devices) {
+    y = layout.ensure(y, 24)
+    layout.text(device.device.charAt(0) + device.device.slice(1).toLowerCase(), 22, y, 72, 10, REPORT.ink, 'bold')
+    pdf.setFont(layout.sans, 'normal')
+    pdf.setFontSize(9)
+    pdf.setTextColor(...REPORT.muted)
+    pdf.text(clean(`${device.clicks} clicks / ${device.pct}%`), 188, y, { align: 'right' })
+    pdf.setFillColor(...REPORT.line)
+    pdf.rect(22, y + 4, 166, 3, 'F')
+    pdf.setFillColor(...REPORT.blue)
+    pdf.rect(22, y + 4, 166 * Math.max(0, Math.min(100, device.pct)) / 100, 3, 'F')
+    y += 21
+  }
+  y = layout.ensure(y + 6, 40)
+  y = layout.label('TOP COUNTRIES', 22, y, REPORT.blue) + 6
+  if (data.countries.length) y = layout.table(['COUNTRY', 'CLICKS', 'IMPRESSIONS'], data.countries.slice(0, 5).map(c => [c.country, String(c.clicks), String(c.impressions)]), [94, 32, 40], y)
+  else y = layout.panel('Location detail', 'No country breakdown is available for this reporting period.', y)
+  layout.paragraph('Read audience data alongside your service area and customer enquiries when choosing which experiences to prioritize.', y, 9)
+
+  y = layout.page('Domain authority & backlinks', '04 / WEBSITE FOUNDATIONS')
+  y = layout.paragraph('Backlinks are links from other websites to yours. Relevant, reputable links can support discoverability. Domain Rating is an Ahrefs metric, rather than a score assigned by Google.', y)
   const [latestSnap, prevSnap] = ahrefsSnapshots
   if (latestSnap) {
     const drDelta = prevSnap?.domain_rating != null && latestSnap.domain_rating != null ? Math.round((latestSnap.domain_rating - prevSnap.domain_rating) * 10) / 10 : null
     const blDelta = prevSnap?.backlinks != null && latestSnap.backlinks != null ? latestSnap.backlinks - prevSnap.backlinks : null
-    metricCard(pdf, 21, y + 10, 82, 'Domain Rating (Ahrefs)', String(latestSnap.domain_rating ?? '—'), drDelta != null ? deltaColor(drDelta) : BLUE)
-    metricCard(pdf, 107, y + 10, 82, 'Total backlinks', String(latestSnap.backlinks ?? '—'), blDelta != null ? deltaColor(blDelta) : BLUE)
-    metricCard(pdf, 21, y + 41, 82, 'Referring domains', String(latestSnap.referring_domains ?? '—'))
-    metricCard(pdf, 107, y + 41, 82, 'Organic keywords (Ahrefs)', String(latestSnap.organic_keywords ?? '—'))
-    if (drDelta != null) paragraph(pdf, `Domain Rating: ${deltaLabel(drDelta, ' pts')}`, y + 78, 168, 9)
-  } else {
-    infoBox(pdf, y + 8, 'Domain authority data is being prepared for this client and will be included as soon as the next Ahrefs snapshot is available.')
-  }
+    y = layout.metrics([
+      { label: 'Domain Rating / Ahrefs', value: String(latestSnap.domain_rating ?? '-'), detail: drDelta == null ? 'Latest available snapshot' : deltaLabel(drDelta, ' pts').replace('previous quarter', 'previous snapshot') },
+      { label: 'Total backlinks', value: String(latestSnap.backlinks ?? '-'), detail: blDelta == null ? 'Latest available snapshot' : deltaLabel(blDelta, ' links').replace('previous quarter', 'previous snapshot') },
+    ], y + 6)
+    y = layout.metrics([
+      { label: 'Referring domains', value: String(latestSnap.referring_domains ?? '-') },
+      { label: 'Organic keywords / Ahrefs', value: String(latestSnap.organic_keywords ?? '-') },
+    ], y)
+    if (latestSnap.snapshot_date) y = layout.paragraph(`Latest snapshot: ${latestSnap.snapshot_date}`, y, 9)
+    layout.panel('Quality over volume', 'Link relevance and quality matter more than the total alone. Changes here compare the available Ahrefs snapshots and may not match the reporting-quarter boundaries.', y)
+  } else layout.panel('Data availability', 'Domain authority data will appear when an Ahrefs snapshot is available for this client.', y + 6)
 
-  // ═══ Core Web Vitals ═══
-  y = addBodyPage('Site Speed & Experience')
-  y = paragraph(pdf, 'Google measures how fast and stable a website is for its visitors, especially on mobile devices. A good score improves the user experience and helps with search rankings.', y + 3)
+  y = layout.page('Site speed & experience', '04 / WEBSITE FOUNDATIONS')
+  y = layout.paragraph('A faster, more stable mobile experience makes it easier for visitors to explore your website and take the next step. This page shows the latest available mobile performance measurement.', y, 12)
   if (typeof psiScore === 'number') {
-    const label = getSiteSpeedLabel(psiScore)
-    metricCard(pdf, 21, y + 10, 82, 'Mobile speed score', `${psiScore} / 100`, psiScore >= 90 ? [52, 168, 83] : [244, 124, 32])
-    paragraph(pdf, `Current status: ${label}.`, y + 45, 168, 10)
-  } else {
-    infoBox(pdf, y + 8, 'The mobile speed score is being refreshed and will be included when the next measurement is available.')
-  }
+    y = layout.performanceScore(psiScore, getSiteSpeedLabel(psiScore), y + 7)
+    y = layout.label('PERFORMANCE SCALE', 22, y, REPORT.blue) + 8
+    const zones = [{ label: '0-49 / Priority', color: REPORT.amber }, { label: '50-89 / Optimize', color: REPORT.blue }, { label: '90-100 / Strong', color: REPORT.teal }]
+    zones.forEach((zone, i) => {
+      pdf.setFillColor(...zone.color)
+      pdf.rect(22 + i * 56, y, 54, 2, 'F')
+      layout.text(zone.label, 22 + i * 56, y + 9, 54, 8, REPORT.muted)
+    })
+    layout.panel('How to interpret this score', 'This is a performance diagnostic, not a direct ranking score. Lab measurements can vary between runs; use repeated measurements to assess the effect of optimizations.', y + 18, true)
+  } else layout.panel('Measurement availability', 'The mobile speed measurement is being refreshed. A score will appear when a measurement is available.', y + 6)
 
-  // ═══ Technical status (on-page audit) ═══
-  y = addBodyPage('Technical Site Status')
-  y = paragraph(pdf, 'Summary of the latest on-page technical audit performed on the site, which reviews aspects such as structure, metadata and crawl errors.', y + 3)
+  y = layout.page('Technical site status', '04 / WEBSITE FOUNDATIONS')
+  y = layout.paragraph('A focused view of the latest on-page review, covering page structure, metadata and crawl issues. Use the review findings to guide the next technical improvements.', y, 12)
   if (onPageAudit) {
-    const statusLabel = getAuditStatusLabel(onPageAudit.status)
-    const statusColor: [number, number, number] = onPageAudit.status === 'completed' ? [52, 168, 83] : [244, 124, 32]
     const dateLabel = new Date(onPageAudit.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
-    metricCard(pdf, 21, y + 10, 82, 'Audit status', statusLabel, statusColor)
-    metricCard(pdf, 107, y + 10, 82, 'Run date', dateLabel)
-    paragraph(pdf, `Page audited: ${onPageAudit.landing_page_url}`, y + 48, 168, 9)
-  } else {
-    infoBox(pdf, y + 8, 'The next on-page technical review is being prepared and will appear here once completed.')
-  }
+    y = layout.panel('Review status', getAuditStatusLabel(onPageAudit.status), y + 6, true)
+    y = layout.paragraph(`Run date: ${dateLabel}`, y, 10)
+    y = layout.paragraph(`Page audited: ${onPageAudit.landing_page_url}`, y, 10)
+    layout.panel('Review scope', 'Completed means that the audit process has finished. Its detailed findings identify which improvements have been completed and which opportunities require follow-up.', y + 7)
+  } else layout.panel('Review availability', 'Technical review details will appear once an on-page audit is available for this client.', y + 6)
 
-  // ═══ Google Business Profile ═══
-  y = addBodyPage('Google Business Profile')
-  y = paragraph(pdf, 'Your Google Business Profile is the information that appears on Google Maps and in local search results: reviews, hours, calls and direction requests.', y + 3)
-  if (assets.gbpImage) {
-    pdf.setFillColor(247, 250, 253)
-    pdf.setDrawColor(218, 228, 239)
-    pdf.roundedRect(21, y + 9, 168, 166, 4, 4, 'FD')
-    addImageContained(pdf, assets.gbpImage, 27, y + 15, 156, 154)
-  } else {
-    pdf.setFillColor(...LIGHT)
-    pdf.roundedRect(21, y + 9, 168, 40, 4, 4, 'F')
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(10)
-    pdf.setTextColor(...BLUE_DARK)
-    pdf.text('COMING SOON TO THIS REPORT', 29, y + 22)
-    paragraph(pdf, "We're integrating your Google Business Profile data (interactions, calls, views and posts). Once the connection is active, this section will include those results automatically.", y + 30, 152, 9.5)
-  }
-
-  // ═══ Closing ═══
-  pdf.addPage()
-  pageNumber += 1
-  pdf.setFillColor(...BLUE_DARK)
-  pdf.rect(0, 0, w, h, 'F')
-  pdf.setFillColor(...BLUE)
-  pdf.circle(28, 45, 75, 'F')
-  pdf.setFillColor(...CYAN)
-  pdf.circle(w - 10, h - 35, 95, 'F')
-  addImageContained(pdf, assets.xmsLogo, 52, 19, 106, 28)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(29)
-  pdf.setTextColor(255, 255, 255)
-  pdf.text(['THANK YOU FOR', 'YOUR BUSINESS!'], w / 2, 123, { align: 'center' })
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(14)
-  pdf.text('We look forward to continuing to grow your business.', w / 2, 155, { align: 'center' })
-  pdf.setFontSize(11)
-  pdf.text(['If you have any questions about this report or would like', 'to schedule a call, please reach out anytime.'], w / 2, 205, { align: 'center' })
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(18)
-  pdf.text('(772) 905-3005', w / 2, 238, { align: 'center' })
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(10)
-  pdf.text('www.xperiencemarketingsolutions.com', w / 2, 254, { align: 'center' })
-  pdf.text('info@xperienceusa.com', w / 2, 263, { align: 'center' })
-
-  pdf.setProperties({
-    title: `${clientName} - SEO Quarterly Report - ${period}`,
-    subject: 'Quarterly SEO performance report',
-    author: 'Xperience Marketing Solutions',
+  y = layout.page('Google Business Profile', '05 / LOCAL PRESENCE')
+  y = layout.paragraph('Your Google Business Profile helps customers find your business in Google Search and Maps, check opening hours, read reviews and choose how to get in touch.', y)
+  const gbpImages = (assets.gbpImages ?? (assets.gbpImage ? [assets.gbpImage] : []))
+    .slice(0, MAX_GBP_IMAGES).flatMap(source => {
+      try {
+        const dimensions = pdf.getImageProperties(source)
+        return dimensions.width > 0 && dimensions.height > 0 ? [{ source, dimensions }] : []
+      } catch {
+        return []
+      }
+    })
+  gbpImages.forEach(({ source, dimensions }, index) => {
+    // Full-width evidence gets its own page so screenshots stay legible at print size.
+    if (index > 0) {
+      y = layout.page('Google Business Profile', '05 / LOCAL PRESENCE')
+      y = layout.paragraph('A closer look at your local presence in Google Search and Maps.', y)
+    }
+    const imageY = y + 6
+    const imageHeight = Math.min(163, REPORT.bottom - imageY - 17, 158 * dimensions.height / dimensions.width + 8)
+    addImageContained(pdf, source, 26, imageY + 4, 158, imageHeight - 8)
+    pdf.setDrawColor(...REPORT.line)
+    pdf.setLineWidth(0.3)
+    pdf.rect(22, imageY, 166, imageHeight)
+    layout.text(`GOOGLE BUSINESS PROFILE / VISUAL ${index + 1} OF ${gbpImages.length}`, 22, imageY + imageHeight + 8, 166, 7.5, REPORT.muted)
   })
+  if (!gbpImages.length) layout.panel('Local performance', 'Google Business Profile metrics are not connected to this report yet. Local interactions, calls, views and posts will be included when the connection is available.', y + 6)
+
+  pdf.addPage()
+  pdf.setFillColor(...REPORT.navy)
+  pdf.rect(0, 0, 210, 297, 'F')
+  brand(layout, assets.xmsLogo)
+  layout.label('THE NEXT CHAPTER', 22, 74, [145, 207, 237])
+  layout.title('Thank you for\nyour partnership.', 22, 105, 166, 38, REPORT.white)
+  layout.text('A clearer understanding today.\nA stronger direction for tomorrow.', 22, 152, 166, 13, [184, 203, 217])
+  pdf.setDrawColor(65, 86, 106)
+  pdf.line(22, 186, 188, 186)
+  layout.text('Let\'s discuss your next quarter.', 22, 203, 166, 14, REPORT.white, 'bold')
+  layout.text('Contact your team to review these findings\nand align the next priorities for your business.', 22, 215, 166, 11, [184, 203, 217])
+  layout.text('(772) 905-3005', 22, 249, 166, 19, REPORT.white)
+  layout.text('info@xperienceusa.com', 22, 263, 166, 11, REPORT.white)
+  layout.text('www.xperiencemarketingsolutions.com', 22, 276, 166, 9, [184, 203, 217])
+  pdf.link(22, 257, 95, 9, { url: 'mailto:info@xperienceusa.com' })
+  pdf.link(22, 270, 166, 9, { url: 'https://www.xperiencemarketingsolutions.com' })
+  layout.finish()
+  pdf.setProperties({ title: `${clientName} - SEO Quarterly Report - ${period}`, subject: 'Quarterly SEO performance report', author: 'Xperience Marketing Solutions' })
   return pdf
 }
 
 export async function buildClientQuarterlyReportBlob(options: ClientQuarterlyReportOptions) {
   const { jsPDF } = await import('jspdf')
-  const [clientLogo, xmsLogo, gbpImage] = await Promise.all([
+  const imageUrls = (options.gbpImageUrls ?? (options.gbpImageUrl ? [options.gbpImageUrl] : [])).slice(0, MAX_GBP_IMAGES)
+  const [clientLogo, xmsLogo, gbpImages, fonts] = await Promise.all([
     imageToDataUrl(options.clientLogoUrl),
-    imageToDataUrl(options.xmsLogoUrl ?? '/XMS LOGO - BLACK BACKGROUND.png'),
-    imageToDataUrl(options.gbpImageUrl),
+    imageToDataUrl(options.xmsLogoUrl ?? '/XMS LOGO - WHITE BACKGROUND.png'),
+    Promise.all(imageUrls.map(url => imageToDataUrl(url))),
+    loadQuarterlyReportFonts(),
   ])
-  const pdf = buildClientQuarterlyPdf(options, jsPDF, { clientLogo, xmsLogo, gbpImage })
-  return pdf.output('blob') as Blob
+  return buildClientQuarterlyPdf(options, jsPDF, { clientLogo, xmsLogo, gbpImages: gbpImages.filter((image): image is string => !!image), fonts }).output('blob') as Blob
 }

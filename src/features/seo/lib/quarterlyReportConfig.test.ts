@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   MAX_GBP_IMAGE_BYTES,
   getQuarterlyMonthLabels,
   isSupportedGbpImage,
   validateGbpImageFile,
+  prepareGbpImageSelection,
 } from './quarterlyReportConfig'
 
 describe('quarterly report configuration', () => {
@@ -50,5 +51,43 @@ describe('quarterly report configuration', () => {
       slice: () => new Blob(),
     } as Blob
     await expect(validateGbpImageFile(oversized)).resolves.toBe('The image must be 10 MB or smaller.')
+  })
+
+  const files = ['views.png', 'calls.png', 'searches.png'].map(name => new File(['image'], name, { type: 'image/png' }))
+  const existing = [{ id: 'existing', name: 'original.png', dataUrl: 'original-data' }]
+
+  it('appends a batch of images in selection order and supports adding up to three', async () => {
+    const prepare = vi.fn(async (file: File) => `prepared-${file.name}`)
+    const result = await prepareGbpImageSelection(files.slice(0, 2), existing, undefined, prepare)
+    expect(result.map(image => image.name)).toEqual(['original.png', 'views.png', 'calls.png'])
+    expect(result.map(image => image.dataUrl)).toEqual(['original-data', 'prepared-views.png', 'prepared-calls.png'])
+    expect(new Set(result.map(image => image.id)).size).toBe(3)
+    expect(existing).toEqual([{ id: 'existing', name: 'original.png', dataUrl: 'original-data' }])
+  })
+
+  it('rejects excess images before preparing files or changing the selection', async () => {
+    const prepare = vi.fn()
+    await expect(prepareGbpImageSelection(files, existing, undefined, prepare)).rejects.toThrow('up to 3')
+    expect(prepare).not.toHaveBeenCalled()
+  })
+
+  it('replaces only the targeted image while preserving its position and id', async () => {
+    const selected = [...existing, { id: 'second', name: 'second.png', dataUrl: 'second-data' }, { id: 'third', name: 'third.png', dataUrl: 'third-data' }]
+    const result = await prepareGbpImageSelection([files[0]], selected, 'second', async () => 'replacement-data')
+    expect(result).toEqual([existing[0], { id: 'second', name: 'views.png', dataUrl: 'replacement-data' }, selected[2]])
+    await expect(prepareGbpImageSelection(files, selected, 'second')).rejects.toThrow('one replacement')
+  })
+
+  it('preserves existing images if any file in a batch fails preparation', async () => {
+    const prepare = vi.fn().mockResolvedValueOnce('first-prepared').mockRejectedValueOnce(new Error('Invalid image'))
+    await expect(prepareGbpImageSelection(files.slice(0, 2), existing, undefined, prepare)).rejects.toThrow('Invalid image')
+    expect(existing).toEqual([{ id: 'existing', name: 'original.png', dataUrl: 'original-data' }])
+  })
+
+  it('ignores a cancelled picker and rejects an unavailable replacement target', async () => {
+    const prepare = vi.fn()
+    await expect(prepareGbpImageSelection([], existing, undefined, prepare)).resolves.toBe(existing)
+    await expect(prepareGbpImageSelection([files[0]], existing, 'missing', prepare)).rejects.toThrow('no longer available')
+    expect(prepare).not.toHaveBeenCalled()
   })
 })

@@ -1,20 +1,19 @@
 import { useEffect } from 'react'
 import { FileText, ImagePlus, Loader2, Trash2, X } from 'lucide-react'
 import { formatDateLabel } from '@/features/seo/hooks/useSEODashboardState'
-import { getQuarterlyMonthLabels, type QuarterlyReportPeriod } from '@/features/seo/lib/quarterlyReportConfig'
+import { getQuarterlyMonthLabels, MAX_GBP_IMAGES, type GbpReportImage, type QuarterlyReportPeriod } from '@/features/seo/lib/quarterlyReportConfig'
 
 interface QuarterlyReportConfigModalProps {
   period: QuarterlyReportPeriod
   title: string
-  imageName: string
-  imageDataUrl: string
+  images: GbpReportImage[]
   imageError: string
   reportError: string
   preparingImage: boolean
   generating: boolean
   onTitleChange: (title: string) => void
-  onImageChange: (file?: File) => void
-  onRemoveImage: () => void
+  onImageChange: (files: File[], replaceId?: string) => void
+  onRemoveImage: (id: string) => void
   onClose: () => void
   onGenerate: () => void
 }
@@ -22,8 +21,7 @@ interface QuarterlyReportConfigModalProps {
 export function QuarterlyReportConfigModal({
   period,
   title,
-  imageName,
-  imageDataUrl,
+  images,
   imageError,
   reportError,
   preparingImage,
@@ -34,6 +32,7 @@ export function QuarterlyReportConfigModal({
   onClose,
   onGenerate,
 }: QuarterlyReportConfigModalProps) {
+  const imageControlsDisabled = generating || preparingImage
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -107,54 +106,76 @@ export function QuarterlyReportConfigModal({
 
           <div>
             <div className="mb-2">
-              <p className="text-sm font-semibold text-black dark:text-[#E2E5E9]">Google Business Profile Image <span className="font-normal text-body dark:text-bodydark">(Optional)</span></p>
-              <p className="mt-0.5 text-xs text-body dark:text-bodydark">PNG, JPG, or WEBP up to 10 MB. Used only for this generated report.</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-black dark:text-[#E2E5E9]">Google Business Profile Images <span className="font-normal text-body dark:text-bodydark">(Optional)</span></p>
+                <span className="shrink-0 rounded-full bg-[#1A72D9]/10 px-2 py-0.5 text-xs font-semibold text-[#1A72D9]" aria-live="polite">{images.length}/{MAX_GBP_IMAGES}</span>
+              </div>
+              <p className="mt-0.5 text-xs text-body dark:text-bodydark">Up to 3 images: PNG, JPG, or WEBP up to 10 MB each. Used only for this generated report.</p>
             </div>
 
-            {imageDataUrl ? (
-              <div className="overflow-hidden rounded-xl border border-stroke bg-[var(--bg-subtle)] dark:border-strokedark">
-                <div className="flex h-64 items-center justify-center p-3">
-                  <img src={imageDataUrl} alt="Google Business Profile preview" className="max-h-full max-w-full object-contain" />
-                </div>
-                <div className="flex items-center justify-between border-t border-stroke bg-white px-3 py-2.5 dark:border-strokedark dark:bg-boxdark">
-                  <p className="min-w-0 truncate pr-3 text-xs text-body dark:text-bodydark">{imageName}</p>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <label htmlFor="quarterly-gbp-image" className="cursor-pointer rounded-lg border border-stroke px-3 py-1.5 text-xs font-semibold text-[#1A72D9] transition-colors hover:bg-[var(--bg-subtle)] dark:border-strokedark">
-                      Replace
-                    </label>
-                    <button
-                      type="button"
-                      onClick={onRemoveImage}
-                      disabled={generating}
-                      className="rounded-lg border border-stroke p-1.5 text-body transition-colors hover:border-danger/40 hover:text-danger disabled:opacity-50 dark:border-strokedark dark:text-bodydark"
-                      aria-label="Remove Google Business Profile image"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+            {images.length > 0 && (
+              <div className="mb-3 grid gap-3 sm:grid-cols-2">
+                {images.map((image, index) => (
+                  <div key={image.id} className="overflow-hidden rounded-xl border border-stroke bg-[var(--bg-subtle)] dark:border-strokedark">
+                    <div className="flex h-40 items-center justify-center p-3">
+                      <img src={image.dataUrl} alt={`Google Business Profile preview ${index + 1}`} className="max-h-full max-w-full object-contain" />
+                    </div>
+                    <div className="border-t border-stroke bg-white px-3 py-2.5 dark:border-strokedark dark:bg-boxdark">
+                      <p title={image.name} className="mb-2 truncate text-xs text-body dark:text-bodydark">{image.name}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <label className={`rounded-lg border border-stroke px-3 py-1.5 text-xs font-semibold text-[#1A72D9] transition-colors focus-within:ring-2 focus-within:ring-[#1A72D9] dark:border-strokedark ${imageControlsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[var(--bg-subtle)]'}`}>
+                          Replace
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            disabled={imageControlsDisabled}
+                            className="sr-only"
+                            aria-label={`Replace Google Business Profile image ${index + 1}`}
+                            onChange={(event) => {
+                              onImageChange(Array.from(event.target.files ?? []), image.id)
+                              event.currentTarget.value = ''
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveImage(image.id)}
+                          disabled={imageControlsDisabled}
+                          className="rounded-lg border border-stroke p-1.5 text-body transition-colors hover:border-danger/40 hover:text-danger disabled:opacity-50 dark:border-strokedark dark:text-bodydark"
+                          aria-label={`Remove Google Business Profile image ${index + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ) : (
-              <label htmlFor="quarterly-gbp-image" className="flex h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#1A72D9]/50 bg-[#1A72D9]/5 px-6 text-center text-[#1A72D9] transition-colors hover:bg-[#1A72D9]/10">
+            )}
+            {images.length < MAX_GBP_IMAGES ? (
+              <label className={`flex h-32 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#1A72D9]/50 bg-[#1A72D9]/5 px-6 text-center text-[#1A72D9] transition-colors focus-within:ring-2 focus-within:ring-[#1A72D9] ${imageControlsDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-[#1A72D9]/10'}`}>
                 <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-sm dark:bg-boxdark">
                   {preparingImage ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImagePlus className="h-5 w-5" />}
                 </span>
-                <span className="text-sm font-semibold">{preparingImage ? 'Preparing image…' : 'Choose an image'}</span>
-                <span className="text-xs text-body dark:text-bodydark">Select a file from your computer</span>
+                <span className="text-sm font-semibold">{preparingImage ? 'Preparing images…' : images.length ? 'Add more images' : 'Choose images'}</span>
+                <span className="text-xs text-body dark:text-bodydark">Select up to {MAX_GBP_IMAGES - images.length} {MAX_GBP_IMAGES - images.length === 1 ? 'file' : 'files'} from your computer</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/png,image/jpeg,image/webp"
+                  disabled={imageControlsDisabled}
+                  className="sr-only"
+                  aria-label="Add Google Business Profile images"
+                  onChange={(event) => {
+                    onImageChange(Array.from(event.target.files ?? []))
+                    event.currentTarget.value = ''
+                  }}
+                />
               </label>
+            ) : (
+              <p className="text-xs text-body dark:text-bodydark" role="status">All 3 images are ready. You can replace or remove any image before generating.</p>
             )}
-            <input
-              id="quarterly-gbp-image"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              disabled={generating}
-              className="sr-only"
-              onChange={(event) => {
-                onImageChange(event.target.files?.[0])
-                event.currentTarget.value = ''
-              }}
-            />
-            {imageError && <p className="mt-2 text-xs text-danger">{imageError}</p>}
+            {imageError && <p className="mt-2 text-xs text-danger" role="alert">{imageError}</p>}
           </div>
 
           {reportError && (
