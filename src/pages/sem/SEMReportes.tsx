@@ -1,11 +1,9 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { Download, Mail } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { edgeFetch } from '@/lib/edgeFetch'
 import { generateMonthlyBudgetPdf, generateMonthlyBudgetPdfBytes, generateOpenAiAdsPdf, generateWeeklyBudgetPdf, generateWeeklyBudgetPdfBytes } from '@/features/sem/lib/generateReportsPdf'
 import type { PdfMonthlyRow, PdfOpenAiRow, PdfWeeklyRow } from '@/features/sem/lib/generateReportsPdf'
 import { captureTableAsImage } from '@/features/sem/lib/tableToImage'
-import { selectMonthlyBudgetAccounts, type MonthlyBudgetClient } from '@/features/sem/reports/monthlyBudgetAccounts'
 
 import { useOpenAiBudgetReport, summarizeOpenAiBudget, type OpenAiClientResult } from '@/features/sem/reports/useOpenAiBudgetReport'
 
@@ -14,7 +12,9 @@ import { WeeklyGroupedTable, type WeeklyDisplayRow } from '@/features/sem/report
 import { groupBudgetRows } from '@/features/sem/reports/groupBudgetRows'
 import { reportRequest } from '@/features/sem/reports/reportLoading'
 import { BudgetTableSkeleton } from '@/features/sem/reports/BudgetTableSkeleton'
-import { MONTHLY_HEADERS, WEEKLY_HEADERS, LSA_HEADERS, OPENAI_HEADERS } from '@/features/sem/reports/reportTableHeaders'
+import { MONTHLY_HEADERS, LSA_HEADERS, OPENAI_HEADERS } from '@/features/sem/reports/reportTableHeaders'
+import { useBudgetReportData, type BudgetReportData } from '@/features/sem/reports/useBudgetReportData'
+import { reportMonthWeeks, resolveReportBudget, weekSpend } from '@/features/sem/reports/budgetReportData'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,61 +24,7 @@ interface BudgetRow { budget: number }
 
 type BudgetStore = Record<string, BudgetRow>
 
-// ─── Storage ──────────────────────────────────────────────────────────────────
-
-async function fetchSupabaseBudgets(reportType: string): Promise<Record<string, number>> {
-  const { data, error } = await reportRequest(supabase
-    .from('sem_report_budgets')
-    .select('account_id, budget')
-    .eq('report_type', reportType))
-  if (error) throw error
-  const map: Record<string, number> = {}
-  for (const r of data ?? []) map[r.account_id] = Number(r.budget)
-  return map
-}
-
 // ─── Date range helpers ───────────────────────────────────────────────────────
-
-const toYMD = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-// Weeks run Monday – Sunday
-function getCurrentWeekRange(): { from: string; to: string } {
-  const today = new Date()
-  const start = new Date(today)
-  start.setDate(today.getDate() - ((today.getDay() + 6) % 7))
-  const end = new Date(start)
-  end.setDate(start.getDate() + 6)
-  return { from: toYMD(start), to: toYMD(end) }
-}
-
-function shiftWeek(from: string, days: number): { from: string; to: string } {
-  const start = new Date(from + 'T00:00:00')
-  start.setDate(start.getDate() + days)
-  const end = new Date(start)
-  end.setDate(start.getDate() + 6)
-  return { from: toYMD(start), to: toYMD(end) }
-}
-
-const fmtWeekDay = (ymd: string) =>
-  new Date(ymd + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-
-const weekLabel = (from: string, to: string) =>
-  `${fmtWeekDay(from)} – ${fmtWeekDay(to)}, ${new Date(to + 'T00:00:00').getFullYear()}`
-
-// Weeks of the calendar grid for a given month (each week runs Monday – Sunday)
-function monthWeeks(year: number, month: number): Date[][] {
-  const first = new Date(year, month, 1)
-  const d = new Date(first)
-  d.setDate(1 - ((first.getDay() + 6) % 7))
-  const weeks: Date[][] = []
-  do {
-    const week: Date[] = []
-    for (let i = 0; i < 7; i++) { week.push(new Date(d)); d.setDate(d.getDate() + 1) }
-    weeks.push(week)
-  } while (d.getMonth() === month && d.getFullYear() === year)
-  return weeks
-}
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
@@ -108,7 +54,7 @@ const parseCurrency = (v: string) => parseFloat(v.replace(/[$,]/g, '')) || 0
 
 // ─── EditableCell ─────────────────────────────────────────────────────────────
 
-function EditableCell({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function EditableCell({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [raw, setRaw] = useState('')
   const start = () => { setRaw(value === 0 ? '' : value.toFixed(2)); setEditing(true) }
@@ -123,7 +69,7 @@ function EditableCell({ value, onChange }: { value: number; onChange: (v: number
     />
   )
   return (
-    <button onClick={start} title="Click to edit"
+    <button onClick={start} disabled={disabled} title="Click to edit"
       className="group flex items-center gap-1 rounded px-1 py-0.5 text-left tabular-nums hover:bg-[#16a34a]/10 transition-colors text-xs font-medium text-black dark:text-[#E2E5E9]"
     >
       {value > 0
@@ -134,131 +80,6 @@ function EditableCell({ value, onChange }: { value: number; onChange: (v: number
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
       </svg>
     </button>
-  )
-}
-
-// ─── WeekPicker ───────────────────────────────────────────────────────────────
-
-function WeekPicker({
-  from, to, onChange, accentColor = '#16a34a',
-}: {
-  from: string
-  to: string
-  onChange: (from: string, to: string) => void
-  accentColor?: string
-}) {
-  const [open, setOpen] = useState(false)
-  const [view, setView] = useState(() => {
-    const d = new Date(from + 'T00:00:00')
-    return { year: d.getFullYear(), month: d.getMonth() }
-  })
-  const isCurrentWeek = getCurrentWeekRange().from === from
-  const todayYMD = toYMD(new Date())
-  const move = (days: number) => { const r = shiftWeek(from, days); onChange(r.from, r.to) }
-  const openCalendar = () => {
-    const d = new Date(from + 'T00:00:00')
-    setView({ year: d.getFullYear(), month: d.getMonth() })
-    setOpen(o => !o)
-  }
-  const moveView = (delta: number) => setView(v => {
-    const d = new Date(v.year, v.month + delta, 1)
-    return { year: d.getFullYear(), month: d.getMonth() }
-  })
-
-  return (
-    <div className="relative flex flex-wrap items-center gap-2">
-      <svg className="h-4 w-4 shrink-0" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-      </svg>
-      <span className="text-xs text-body dark:text-bodydark">Week</span>
-      <div className="flex h-9 items-center gap-1 rounded-lg border border-stroke bg-white px-1 dark:border-strokedark dark:bg-boxdark">
-        <button onClick={() => move(-7)} aria-label="Previous week"
-          className="rounded-md p-1 text-body transition-colors hover:bg-gray-2 hover:text-black dark:text-bodydark dark:hover:bg-meta-4 dark:hover:text-white">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-          </svg>
-        </button>
-        <button onClick={openCalendar}
-          className="flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium tabular-nums text-black transition-colors hover:bg-gray-2 dark:text-[#E2E5E9] dark:hover:bg-meta-4">
-          {weekLabel(from, to)}
-          <svg className={`h-3 w-3 text-body transition-transform dark:text-bodydark ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-          </svg>
-        </button>
-        <button onClick={() => move(7)} disabled={isCurrentWeek} aria-label="Next week"
-          className="rounded-md p-1 text-body transition-colors hover:bg-gray-2 hover:text-black disabled:cursor-not-allowed disabled:opacity-30 dark:text-bodydark dark:hover:bg-meta-4 dark:hover:text-white">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-          </svg>
-        </button>
-      </div>
-      {!isCurrentWeek && (
-        <button onClick={() => { const r = getCurrentWeekRange(); onChange(r.from, r.to) }}
-          className="text-xs font-semibold transition-opacity hover:opacity-70" style={{ color: accentColor }}>
-          Current week
-        </button>
-      )}
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-xl border border-stroke bg-white p-3 shadow-2xl dark:border-strokedark dark:bg-boxdark">
-            <div className="mb-2 flex items-center justify-between">
-              <button onClick={() => moveView(-1)} aria-label="Previous month"
-                className="rounded-md p-1 text-body transition-colors hover:bg-gray-2 hover:text-black dark:text-bodydark dark:hover:bg-meta-4 dark:hover:text-white">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                </svg>
-              </button>
-              <span className="text-sm font-semibold text-black dark:text-[#E2E5E9]">
-                {MONTH_NAMES[view.month]} {view.year}
-              </span>
-              <button onClick={() => moveView(1)} aria-label="Next month"
-                className="rounded-md p-1 text-body transition-colors hover:bg-gray-2 hover:text-black dark:text-bodydark dark:hover:bg-meta-4 dark:hover:text-white">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                </svg>
-              </button>
-            </div>
-            <div className="mb-1 flex px-1">
-              {['Mo','Tu','We','Th','Fr','Sa','Su'].map(d => (
-                <span key={d} className="flex-1 text-center text-[10px] font-semibold uppercase text-body dark:text-bodydark">{d}</span>
-              ))}
-            </div>
-            <div className="space-y-0.5">
-              {monthWeeks(view.year, view.month).map(week => {
-                const wkFrom    = toYMD(week[0])
-                const selected  = wkFrom === from
-                const future    = wkFrom > todayYMD
-                return (
-                  <button key={wkFrom} disabled={future}
-                    onClick={() => { onChange(wkFrom, toYMD(week[6])); setOpen(false) }}
-                    className={`flex w-full rounded-lg px-1 transition-colors
-                      ${selected ? 'text-white' : 'hover:bg-gray-2 dark:hover:bg-meta-4'}
-                      disabled:cursor-not-allowed disabled:opacity-30`}
-                    style={selected ? { backgroundColor: accentColor } : undefined}
-                    title={`Week ${weekLabel(wkFrom, toYMD(week[6]))}`}
-                  >
-                    {week.map(d => (
-                      <span key={d.getDate() + '-' + d.getMonth()}
-                        className={`flex-1 py-1.5 text-center text-xs tabular-nums
-                          ${selected ? '' : d.getMonth() !== view.month ? 'text-body/40 dark:text-bodydark/40' : 'text-black dark:text-[#E2E5E9]'}
-                          ${!selected && toYMD(d) === todayYMD ? 'font-bold' : ''}`}
-                      >
-                        {d.getDate()}
-                      </span>
-                    ))}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="mt-2 border-t border-stroke pt-2 text-center text-[10px] text-body dark:border-strokedark dark:text-bodydark">
-              Click a row to select that week (Mon – Sun)
-            </p>
-          </div>
-        </>
-      )}
-    </div>
   )
 }
 
@@ -278,72 +99,34 @@ interface MonthlyCell { refunded: number; paid_with: string }
 const fmtAccountId = (id: string) =>
   /^\d{10}$/.test(id) ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id
 
-function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { accounts: AdsAccount[]; clients: MonthlyBudgetClient[]; accentColor?: string }) {
-  const now = new Date()
-  const [month, setMonth]         = useState(now.getMonth())
-  const [year, setYear]           = useState(now.getFullYear())
-  const [adsIds, setAdsIds]       = useState<Set<string>>(new Set())
-  const [ggIds, setGgIds]         = useState<Set<string>>(new Set())
-  const [adsSpend, setAdsSpend]   = useState<Record<string, number>>({})
-  const [ggSpend, setGgSpend]     = useState<Record<string, number>>({})
-  const [adsBudget, setAdsBudget] = useState<Record<string, number>>({})
-  const [ggBudget, setGgBudget]   = useState<Record<string, number>>({})
-  const [cells, setCells]         = useState<Record<string, MonthlyCell>>({})
-  const [loading, setLoading]     = useState(true)
+export function MonthlyReport({ report, openai, month, year, onChangePeriod }: {
+  report: BudgetReportData
+  openai: ReturnType<typeof useOpenAiBudgetReport>
+  month: number
+  year: number
+  onChangePeriod: (year: number, month: number) => void
+}) {
+  const { clients, eligible: selectedAccounts } = report
+  const accentColor = '#16a34a'
+  const setMonth = (value: number) => onChangePeriod(year, value)
+  const setYear = (value: number) => onChangePeriod(value, month)
+  const [storedCells, setCells] = useState<Record<string, MonthlyCell>>({})
+  const [loading, setLoading] = useState(true)
+  const [cellsReady, setCellsReady] = useState('')
+  const cells = cellsReady === `${year}:${month}` ? storedCells : {}
+  const [paymentRevision, setPaymentRevision] = useState(0)
+  const [metadataErrors, setMetadataErrors] = useState<Record<string, string>>({})
   const [exporting, setExporting] = useState(false)
   const [preparingEmail, setPreparingEmail] = useState(false)
   const [emailPayload, setEmailPayload] = useState<EmailReportPayload | null>(null)
-
-  const [loadingSpend, setLoadingSpend] = useState(false)
-  const [spendErrors, setSpendErrors] = useState<string[]>([])
-  const selectedAccounts = useMemo(() => selectMonthlyBudgetAccounts(accounts, clients, adsIds, ggIds), [accounts, clients, adsIds, ggIds])
-
-  const openai = useOpenAiBudgetReport(toYMD(new Date(year, month, 1)), toYMD(new Date(year, month + 1, 0)))
-
-  const [budgetReady, setBudgetReady] = useState(false)
-  const [yearReady, setYearReady] = useState<number | null>(null)
-  const [cellsReady, setCellsReady] = useState('')
-  const [metadataErrors, setMetadataErrors] = useState<Record<string, string>>({})
   const reportMetadataError = (source: string, error: unknown) => setMetadataErrors(prev => ({ ...prev, [source]: error instanceof Error ? error.message : String(error) }))
 
   useEffect(() => {
+    const controller = new AbortController()
     let cancelled = false
-    reportRequest(supabase.from('sem_report_budgets').select('account_id, report_type, budget').in('report_type', ['ads_monthly', 'guarantee_monthly']))
-      .then(({ data, error }) => {
-        if (error) throw new Error(error.message)
-        if (cancelled) return
-        const a: Record<string, number> = {}, g: Record<string, number> = {}
-        for (const r of data ?? []) (r.report_type === 'ads_monthly' ? a : g)[r.account_id] = Number(r.budget)
-        setAdsBudget(a); setGgBudget(g)
-      }).catch(error => { if (!cancelled) reportMetadataError('Budgets', error) })
-      .finally(() => { if (!cancelled) setBudgetReady(true) })
-    return () => { cancelled = true }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    setMetadataErrors(prev => ({ ...prev, Accounts: '' }))
-    Promise.allSettled([
-      reportRequest(supabase.from('sem_yearly_ads').select('account_id').eq('year', year)),
-      reportRequest(supabase.from('sem_yearly_guarantee').select('account_id').eq('year', year)),
-    ]).then(results => {
-      if (cancelled) return
-      results.forEach((result, index) => {
-        const response = result.status === 'fulfilled' ? result.value : null
-        if (result.status === 'rejected' || response?.error) reportMetadataError('Accounts', result.status === 'rejected' ? result.reason : new Error(response!.error!.message))
-        ;(index === 0 ? setAdsIds : setGgIds)(new Set((response?.data ?? []).map(r => r.account_id)))
-      })
-      setYearReady(year)
-    })
-    return () => { cancelled = true }
-  }, [year])
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setCells({})
-    setMetadataErrors(prev => ({ ...prev, Payments: '' }))
-    reportRequest(supabase.from('sem_monthly_cells').select('account_id, platform, refunded, paid_with').eq('year', year).eq('month_index', month))
+    setLoading(true); setCells({})
+    setMetadataErrors({})
+    reportRequest(supabase.from('sem_monthly_cells').select('account_id, platform, refunded, paid_with').eq('year', year).eq('month_index', month).abortSignal(controller.signal), 12000)
       .then(({ data, error }) => {
         if (error) throw new Error(error.message)
         if (cancelled) return
@@ -351,49 +134,29 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
         for (const row of data ?? []) next[`${row.account_id}:${row.platform}`] = { refunded: Number(row.refunded), paid_with: row.paid_with ?? '' }
         setCells(next)
       }).catch(error => { if (!cancelled) reportMetadataError('Payments', error) })
-      .finally(() => { if (!cancelled) { setLoading(false); setCellsReady(`${year}:${month}`) } })
-    return () => { cancelled = true }
-  }, [year, month])
+      .finally(() => { if (!cancelled) { setLoading(false); setCellsReady(`${year}:${month}`); controller.abort() } })
+    return () => { cancelled = true; controller.abort() }
+  }, [year, month, paymentRevision])
 
-  const [spendReady, setSpendReady] = useState('')
-  const spendKey = `${year}:${month}:${selectedAccounts.map(r => `${r.account.id}-${r.googleAds}-${r.googleGuarantee}`).join(',')}`
-  const reportLoading = loading || !budgetReady || yearReady !== year || cellsReady !== `${year}:${month}` || loadingSpend || spendReady !== spendKey || openai.loading
-
-  // Annual import tables are not a current spend source. Query each platform
-  // for the selected calendar month; cancellation prevents stale-month results.
-  useEffect(() => {
-    if (yearReady !== year) return
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 45000)
-    let cancelled = false
-    setAdsSpend({}); setGgSpend({}); setSpendErrors([]); setLoadingSpend(true)
-    const requests = selectedAccounts.flatMap(({ account, googleAds, googleGuarantee }) => [
-      ...(googleAds ? [{ account, platform: 'ads' }] : []),
-      ...(googleGuarantee ? [{ account, platform: 'guarantee' }] : []),
-    ])
-    async function load() {
-      for (let i = 0; i < requests.length && !cancelled; i += 3) {
-        await Promise.all(requests.slice(i, i + 3).map(async ({ account, platform }) => {
-          try {
-            const params = new URLSearchParams({ accountId: account.id, platform, startDate: toYMD(new Date(year, month, 1)), endDate: toYMD(new Date(year, month + 1, 0)) })
-            const response = await edgeFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sem/budget-spend?${params}`, { signal: controller.signal })
-            const body = await response.json()
-            if (!response.ok || body.error) throw new Error(body.error ?? `HTTP ${response.status}`)
-            if (!Number.isFinite(body.spend)) throw new Error('Invalid spend response')
-            if (!cancelled) (platform === 'ads' ? setAdsSpend : setGgSpend)(prev => ({ ...prev, [account.id]: body.spend }))
-          } catch (error) {
-            if (!cancelled) setSpendErrors(prev => [...prev, `${account.name} (${platform}): ${error instanceof Error ? error.message : String(error)}`])
-          }
-        }))
-      }
-      if (!cancelled) { setLoadingSpend(false); setSpendReady(spendKey) }
-      clearTimeout(timeout)
+  const adsSpend: Record<string, number | null> = {}
+  const ggSpend: Record<string, number | null> = {}
+  const adsBudget: Record<string, number | null> = {}
+  const ggBudget: Record<string, number | null> = {}
+  for (const { account, googleAds, googleGuarantee } of selectedAccounts) {
+    if (googleAds) {
+      adsSpend[account.id] = report.stateFor(account.id, 'ads').data?.spend ?? null
+      adsBudget[account.id] = resolveReportBudget(account.id, 'Google Ads', clients, report.budgets)
     }
-    void load()
-    return () => { cancelled = true; clearTimeout(timeout); controller.abort() }
-  }, [selectedAccounts, year, month, yearReady, spendKey])
+    if (googleGuarantee) {
+      ggSpend[account.id] = report.stateFor(account.id, 'guarantee').data?.spend ?? null
+      ggBudget[account.id] = resolveReportBudget(account.id, 'Google Guarantee', clients, report.budgets)
+    }
+  }
+  const spendErrors = report.errors
+  const reportLoading = report.metadataLoading && !selectedAccounts.length && !openai.results.length
 
   const patchCell = (accountId: string, platform: MonthlyPlatform, patch: Partial<MonthlyCell>) => {
+    if (loading || cellsReady !== `${year}:${month}` || metadataErrors.Payments) return
     const key = `${accountId}:${platform}`
     const current: MonthlyCell = cells[key] ?? { refunded: 0, paid_with: '' }
     const merged: MonthlyCell = { ...current, ...patch }
@@ -403,15 +166,15 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
         { account_id: accountId, platform, year, month_index: month, refunded: merged.refunded, paid_with: merged.paid_with, updated_at: new Date().toISOString() },
         { onConflict: 'account_id,platform,year,month_index' },
       )
-      .then(() => {})
+      .then(({ error }) => { if (error) reportMetadataError('Payments', new Error(error.message)) })
   }
 
   // Use activation and explicit LSA mappings before building table/export rows.
   const accountGroups = selectedAccounts
     .map(({ account: acct, googleAds, googleGuarantee }) => {
       const items: MonthlyItem[] = []
-      if (googleAds) items.push({ platform: 'Google Ads', budget: adsBudget[acct.id] ?? 0, spend: adsSpend[acct.id] ?? null })
-      if (googleGuarantee) items.push({ platform: 'Google Guarantee', budget: ggBudget[acct.id] ?? 0, spend: ggSpend[acct.id] ?? null })
+      if (googleAds) items.push({ platform: 'Google Ads', budget: adsBudget[acct.id] ?? null, spend: adsSpend[acct.id] ?? null })
+      if (googleGuarantee) items.push({ platform: 'Google Guarantee', budget: ggBudget[acct.id] ?? null, spend: ggSpend[acct.id] ?? null })
       return { acct, items }
     })
     .filter(g => g.items.length > 0)
@@ -450,7 +213,7 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
     items: items.map(it => ({ accountId: fmtAccountId(it.acct.id), platform: it.platform, budget: it.budget, budgetPeriod: it.budgetPeriod, spend: it.spend,
       refunded: cells[`${it.acct.id}:${it.platform}`]?.refunded ?? 0, paidWith: cells[`${it.acct.id}:${it.platform}`]?.paid_with ?? '' })),
   })))
-  const monthlyExportBlocked = reportLoading || Object.values(metadataErrors).some(Boolean) || spendErrors.length > 0 || !!openai.error || openai.results.some(r => summarizeOpenAiBudget(r).spend === null)
+  const monthlyExportBlocked = report.loading || loading || cellsReady !== `${year}:${month}` || openai.loading || Object.values(metadataErrors).some(Boolean) || spendErrors.length > 0 || !!openai.error || openai.results.some(r => summarizeOpenAiBudget(r).spend === null)
 
   async function handleExportMonthly() {
     if (monthlyExportBlocked) return
@@ -495,6 +258,10 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
   return (
     <div>
       <SendEmailModal payload={emailPayload} onClose={() => setEmailPayload(null)} />
+      <div className="mb-3 flex items-center justify-between gap-3 text-xs text-body dark:text-bodydark">
+        <p>{report.loading || openai.loading ? 'Loading spend — completed accounts remain visible.' : 'Monthly spend from the same daily data used by the weekly report.'}</p>
+        <button type="button" onClick={() => { report.retry(); openai.retry(); setPaymentRevision(value => value + 1) }} className="font-semibold text-[#16a34a]">Refresh data</button>
+      </div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <svg aria-hidden="true" className="h-4 w-4 shrink-0" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -507,7 +274,7 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
           </select>
           <select value={year} onChange={e => setYear(Number(e.target.value))}
             className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm font-medium outline-none dark:border-strokedark dark:bg-boxdark dark:text-[#E2E5E9]">
-            {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+            {Array.from({ length: new Date().getFullYear() - 2024 + 2 }, (_, i) => 2024 + i).map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           {loading && (
             <svg className="h-4 w-4 animate-spin" style={{ color: accentColor }} fill="none" viewBox="0 0 24 24">
@@ -536,7 +303,7 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
 
       {Object.entries(metadataErrors).filter(([, error]) => error).map(([source, error]) => <p key={source} role="alert" className="mb-3 text-sm text-red-500">{source}: {error}</p>)}
       {spendErrors.length > 0 && <div role="alert" className="mb-3 text-sm text-red-500">{spendErrors.map(message => <p key={message}>{message}</p>)}</div>}
-      {openai.results.filter(r => summarizeOpenAiBudget(r).spend === null).map(r => <p key={r.clientId} role="alert" className="mb-3 text-sm text-red-500">{r.clientName}: {r.error ?? r.insightsError}</p>)}
+      {openai.results.filter(r => !r.pending && summarizeOpenAiBudget(r).spend === null).map(r => <p key={r.clientId} role="alert" className="mb-3 text-sm text-red-500">{r.clientName}: {r.error ?? r.insightsError}</p>)}
       {openai.error && <p role="alert" className="mb-3 text-sm text-red-500">{openai.error}</p>}
       {reportLoading ? <BudgetTableSkeleton /> : <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
         <table className="w-full text-sm">
@@ -563,7 +330,7 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
                     const cell = cells[`${it.acct.id}:${it.platform}`]
                     return (
                       <tr key={`${it.acct.id}:${it.platform}`} title={(it.budget ?? 0) > 0 ? it.note : `No ${it.platform} budget set for this client`}
-                        className={`transition-opacity ${idx === 0 ? 'bg-[#eef5ff] hover:bg-[#e4efff] dark:bg-[#17233a] dark:hover:bg-[#20304d]' : 'hover:bg-gray-2 dark:hover:bg-meta-4'} ${(it.budget ?? 0) > 0 ? '' : 'opacity-40'}`}>
+                        className={idx === 0 ? 'bg-[#eef5ff] hover:bg-[#e4efff] dark:bg-[#17233a] dark:hover:bg-[#20304d]' : 'hover:bg-gray-2 dark:hover:bg-meta-4'}>
                         <td className="max-w-[220px] truncate px-5 py-4 font-semibold text-black dark:text-[#E2E5E9]" title={acct.name}>
                           {display[0]}
                         </td>
@@ -573,13 +340,14 @@ function MonthlyReport({ accounts, clients, accentColor = '#16a34a' }: { account
                           {(it.budget ?? 0) > 0 ? display[3] : <span className="opacity-40 text-body dark:text-bodydark">—</span>}
                         </td>
                         <td className="px-5 py-4 tabular-nums font-semibold text-black dark:text-[#E2E5E9]">
-                          {(it.platform === 'OpenAI Ads' ? openai.loading : loadingSpend)
-                            ? <span className="text-xs italic font-normal text-body/50 dark:text-bodydark/50">Loading…</span>
-                            : it.spend !== null ? display[4] : <span className="opacity-40 font-normal text-body dark:text-bodydark">—</span>}
+                          {it.spend !== null ? display[4]
+                            : (it.platform === 'OpenAI Ads' ? openai.results.find(row => row.clientId === it.clientId)?.pending : report.stateFor(it.acct.id, it.platform === 'Google Ads' ? 'ads' : 'guarantee').status === 'loading')
+                              ? <span className="inline-flex items-center gap-2 text-xs font-normal text-body dark:text-bodydark"><span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />Loading…</span>
+                              : <span className="text-xs font-normal text-red-500">Unavailable · Retry</span>}
                         </td>
-                        <td className="px-5 py-4">{it.platform === 'OpenAI Ads' ? <span className="opacity-40">—</span> : <EditableCell value={cell?.refunded ?? 0} onChange={v => patchCell(it.acct.id, it.platform, { refunded: v })} />}</td>
+                        <td className="px-5 py-4">{it.platform === 'OpenAI Ads' ? <span className="opacity-40">—</span> : <EditableCell disabled={loading || cellsReady !== `${year}:${month}` || !!metadataErrors.Payments} value={cell?.refunded ?? 0} onChange={v => patchCell(it.acct.id, it.platform, { refunded: v })} />}</td>
                         <td className="px-5 py-4">
-                          {it.platform === 'OpenAI Ads' ? <span className="opacity-40">—</span> : <select value={cell?.paid_with ?? ''} onChange={e => patchCell(it.acct.id, it.platform, { paid_with: e.target.value })} className={selectCls}>
+                          {it.platform === 'OpenAI Ads' ? <span className="opacity-40">—</span> : <select disabled={loading || cellsReady !== `${year}:${month}` || !!metadataErrors.Payments} value={cell?.paid_with ?? ''} onChange={e => patchCell(it.acct.id, it.platform, { paid_with: e.target.value })} className={selectCls}>
                             <option value="">—</option>
                             {PAYMENT_SOURCES.map(p => <option key={p} value={p}>{p}</option>)}
                           </select>}
@@ -1029,175 +797,41 @@ export function OpenAiAdsReport({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function SEMReportes() {
-  const [period, setPeriod]               = useState<ReportPeriod>('weekly')
-  const [accounts, setAccounts]           = useState<AdsAccount[]>([])
-  const [budgetClients, setBudgetClients] = useState<MonthlyBudgetClient[]>([])
-  const [accountsError, setAccountsError] = useState<string | null>(null)
-  const [adsAccountIds, setAdsAccountIds] = useState<Set<string>>(new Set())
-  const [ggAccountIds, setGgAccountIds]   = useState<Set<string>>(new Set())
-  const [loading, setLoading]             = useState(true)
+  const [period, setPeriod] = useState<ReportPeriod>('weekly')
+  const today = new Date()
+  const [month, setMonth] = useState(today.getMonth())
+  const [year, setYear] = useState(today.getFullYear())
+  const weeks = useMemo(() => reportMonthWeeks(year, month), [year, month])
+  const report = useBudgetReportData(year, month)
+  const openai = useOpenAiBudgetReport(report.startDate, report.endDate, weeks)
+  const { clients: budgetClients, eligible } = report
+  const weekDateLabel = `${MONTH_NAMES[month]} ${year} · Weekly spend`
 
-  useEffect(() => {
-    ;(async () => {
-      setLoading(true)
-      try {
-        const year = new Date().getFullYear()
-        const [acctRes, adsRes, ggRes, clientsRes] = await reportRequest(Promise.all([
-          supabase.from('sem_accounts').select('id, name, status').order('name'),
-          supabase.from('sem_yearly_ads').select('account_id').eq('year', year),
-          supabase.from('sem_yearly_guarantee').select('account_id').eq('year', year),
-          supabase.from('clients').select('id, status, sem_account_id, lsa_account_id, sem_enabled'),
-        ]))
-        for (const result of [acctRes, adsRes, ggRes, clientsRes]) {
-          if (result.error) throw new Error(result.error.message)
-        }
-        setBudgetClients(clientsRes.data ?? [])
-        // Accounts whose linked client has Google Ads disabled are hidden from all reports
-        const disabled = new Set(
-          (clientsRes.data ?? [])
-            .filter(c => c.sem_enabled === false && c.sem_account_id)
-            .map(c => c.sem_account_id as string),
-        )
-        setAccounts((acctRes.data ?? []).filter(a => !disabled.has(a.id)))
-        setAdsAccountIds(new Set((adsRes.data ?? []).map(r => r.account_id)))
-        setGgAccountIds(new Set((ggRes.data ?? []).map(r => r.account_id)))
-      } catch (error) {
-        setAccountsError(error instanceof Error ? error.message : 'Unable to load report accounts')
-      } finally { setLoading(false) }
-    })()
-  }, [])
-
-  // ── Shared weekly date range + per-platform budget/spend data ──────────────
-  // All platforms share one week for the grouped table and combined exports.
-  const { from: defaultWeekFrom, to: defaultWeekTo } = getCurrentWeekRange()
-  const [weekFrom, setWeekFrom] = useState(defaultWeekFrom)
-  const [weekTo, setWeekTo]     = useState(defaultWeekTo)
-
-  const eligible = useMemo(() => selectMonthlyBudgetAccounts(accounts, budgetClients, adsAccountIds, ggAccountIds), [accounts, budgetClients, adsAccountIds, ggAccountIds])
-  const adsAccounts = useMemo(() => eligible.filter(r => r.googleAds).map(r => r.account), [eligible])
-  const ggAccounts = useMemo(() => eligible.filter(r => r.googleGuarantee).map(r => r.account), [eligible])
-
-  const weeklyKey = `${weekFrom}:${weekTo}:${adsAccounts.map(a => a.id).join(',')}:${ggAccounts.map(a => a.id).join(',')}`
-  const [adsReady, setAdsReady] = useState('')
-  const [ggReady, setGgReady] = useState('')
-  const [weeklyError, setWeeklyError] = useState<string | null>(null)
-  const [adsBudgets, setAdsBudgets]             = useState<BudgetStore>({})
-  const [loadingAdsBudgets, setLoadingAdsBudgets] = useState(true)
-  const [adsCost, setAdsCost]                   = useState<Record<string, number>>({})
-  const [loadingAdsCost, setLoadingAdsCost]     = useState(false)
-
-  useEffect(() => {
-    if (!adsAccounts.length) { setLoadingAdsBudgets(false); return }
-    setLoadingAdsBudgets(true)
-    fetchSupabaseBudgets('ads_monthly').then(map => {
-      const next: BudgetStore = {}
-      for (const a of adsAccounts) next[a.id] = { budget: map[a.id] ?? 0 }
-      setAdsBudgets(next)
-    }).catch(e => setWeeklyError(e.message)).finally(() => setLoadingAdsBudgets(false))
-  }, [adsAccounts])
-
-  useEffect(() => {
-    let cancelled = false
-    setLoadingAdsCost(true); setAdsCost({}); setWeeklyError(null)
-    async function load() {
-      try {
-        if (!adsAccounts.length) return
-        const { data, error } = await reportRequest(supabase.from('sem_ads_daily').select('account_id, spend').in('account_id', adsAccounts.map(a => a.id)).gte('date', weekFrom).lte('date', weekTo))
-        if (error) throw error
-        const map: Record<string, number> = {}
-        for (const row of data ?? []) map[row.account_id] = (map[row.account_id] ?? 0) + Number(row.spend)
-        if (!cancelled) setAdsCost(map)
-      } catch (e) { if (!cancelled) setWeeklyError(e instanceof Error ? e.message : String(e)) }
-      finally { if (!cancelled) { setLoadingAdsCost(false); setAdsReady(weeklyKey) } }
-    }
-    void load()
-    return () => { cancelled = true }
-  }, [adsAccounts, weekFrom, weekTo, weeklyKey])
-
-  const [ggBudgets, setGgBudgets]               = useState<BudgetStore>({})
-  const [loadingGgBudgets, setLoadingGgBudgets] = useState(true)
-  const [ggPeriod, setGgPeriod]                 = useState<Record<string, { spend: number; leads: number }>>({})
-  const [loadingGgPeriod, setLoadingGgPeriod]   = useState(false)
-
-  useEffect(() => {
-    if (!ggAccounts.length) { setLoadingGgBudgets(false); return }
-    setLoadingGgBudgets(true)
-    fetchSupabaseBudgets('guarantee_monthly').then(map => {
-      const next: BudgetStore = {}
-      for (const a of ggAccounts) next[a.id] = { budget: map[a.id] ?? 0 }
-      setGgBudgets(next)
-    }).catch(e => setWeeklyError(e.message)).finally(() => setLoadingGgBudgets(false))
-  }, [ggAccounts])
-
-  const [ggErrors, setGgErrors] = useState<Record<string, string>>({})
-  useEffect(() => {
-    const controller = new AbortController()
-    let cancelled = false
-    const timeout = setTimeout(() => controller.abort(), 45000)
-    setGgPeriod({}); setGgErrors({}); setLoadingGgPeriod(true)
-    Promise.all(ggAccounts.map(async account => {
-      try {
-        const params = new URLSearchParams({ accountId: account.id, startDate: weekFrom, endDate: weekTo })
-        const res = await edgeFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sem/lsa-performance?${params}`, { signal: controller.signal })
-        const body = await res.json()
-        if (!res.ok || body.error) throw new Error(body.error ?? `HTTP ${res.status}`)
-        if (!Number.isFinite(body.totalSpend) || !Number.isFinite(body.chargedLeads)) throw new Error('Invalid LSA metrics')
-        if (!cancelled) setGgPeriod(prev => ({ ...prev, [account.id]: { spend: body.totalSpend, leads: body.chargedLeads } }))
-      } catch (e) {
-        if (!cancelled) setGgErrors(prev => ({ ...prev, [account.id]: e instanceof Error ? e.message : String(e) }))
+  const groupedWeeklyRows: WeeklyDisplayRow[] = eligible.flatMap(({ account, googleAds, googleGuarantee }) =>
+    (['Google Ads', 'Google Guarantee'] as const).filter(platform => platform === 'Google Ads' ? googleAds : googleGuarantee).map(platform => {
+      const state = report.stateFor(account.id, platform === 'Google Ads' ? 'ads' : 'guarantee')
+      return { accountId: account.id, name: account.name, status: account.status, platform,
+        budget: resolveReportBudget(account.id, platform, budgetClients, report.budgets),
+        spend: state.data?.spend ?? null, weeklySpend: weekSpend(state.data, weeks), loading: state.status === 'loading',
+        note: state.error,
       }
-    })).finally(() => { clearTimeout(timeout); if (!cancelled) { setLoadingGgPeriod(false); setGgReady(weeklyKey) } })
-    return () => { cancelled = true; clearTimeout(timeout); controller.abort() }
-  }, [ggAccounts, weekFrom, weekTo, weeklyKey])
-
-  // OpenAI shares the same week range as Ads/Guarantee so all three can be
-  // combined into a single weekly report, the same way the Ads+Guarantee
-  // combine already works.
-  const { results: openaiResults, loading: loadingOpenai, error: openaiError } = useOpenAiBudgetReport(weekFrom, weekTo)
-
-  const weekDateLabel = `Week ${weekLabel(weekFrom, weekTo)}`
-
-  const weeklyAdsRows: PdfWeeklyRow[] = adsAccounts.map(a => ({
-    status: a.status,
-    accountName: a.name,
-    budget: adsBudgets[a.id]?.budget ?? 0,
-    cost: adsCost[a.id] ?? 0,
-  }))
-
-  const weeklyGuaranteeRows: PdfWeeklyRow[] = ggAccounts.map(a => ({
-    status: a.status,
-    accountName: a.name,
-    budget: ggBudgets[a.id]?.budget ?? 0,
-    cost: ggPeriod[a.id]?.spend ?? 0,
-    leads: ggPeriod[a.id]?.leads,
-  }))
-
-  const weeklyOpenaiRows: PdfOpenAiRow[] = openaiResults.map(result => {
+    }))
+  for (const result of openai.results) {
     const summary = summarizeOpenAiBudget(result)
-    return {
-      clientName: result.clientName,
-      campaignName: 'All active campaigns',
-      status: 'active',
-      budget: summary.budget ?? 0,
-      budgetPeriod: summary.budgetPeriod,
-      spend: summary.spend ?? 0,
-      cpc: 0,
-      impressions: 0,
-    }
-  })
-
-  const groupedWeeklyRows: WeeklyDisplayRow[] = eligible.flatMap(({ account, googleAds, googleGuarantee }) => [
-    ...(googleAds ? [{ accountId: account.id, name: account.name, status: account.status, platform: 'Google Ads' as const, budget: adsBudgets[account.id]?.budget ?? 0, spend: adsCost[account.id] ?? null }] : []),
-    ...(googleGuarantee ? [{ accountId: account.id, name: account.name, status: account.status, platform: 'Google Guarantee' as const, budget: ggBudgets[account.id]?.budget ?? 0, spend: ggPeriod[account.id]?.spend ?? null, leads: ggPeriod[account.id]?.leads }] : []),
-  ])
-  for (const result of openaiResults) {
-    const summary = summarizeOpenAiBudget(result)
-    groupedWeeklyRows.push({ accountId: result.clientId, clientId: result.clientId, name: result.clientName, platform: 'OpenAI Ads', status: 'active', budget: summary.budget, budgetPeriod: summary.budgetPeriod, spend: summary.spend, note: summary.spend === null ? result.error ?? result.insightsError ?? undefined : undefined })
+    groupedWeeklyRows.push({ accountId: result.clientId, clientId: result.clientId, name: result.clientName, platform: 'OpenAI Ads', status: 'active',
+      budget: summary.budget, budgetPeriod: summary.budgetPeriod, spend: summary.spend,
+      weeklySpend: result.weeklySpend, weeklyPending: result.weeklyPending, loading: result.pending,
+      note: result.error || result.insightsError || result.weeklyErrors?.filter(Boolean).join('; ') || undefined,
+    })
   }
-  const weeklyLoading = adsReady !== weeklyKey || ggReady !== weeklyKey || loading || loadingAdsBudgets || loadingGgBudgets || loadingAdsCost || loadingGgPeriod || loadingOpenai
 
-  const weeklyTable = buildWeeklyReportTable(groupedWeeklyRows, budgetClients, weekDateLabel)
-  const weeklyExportBlocked = weeklyLoading || !!weeklyError || !!accountsError || !!openaiError || Object.keys(ggErrors).length > 0 || openaiResults.some(r => summarizeOpenAiBudget(r).spend === null)
+  const weeklyAdsRows: PdfWeeklyRow[] = groupedWeeklyRows.filter(row => row.platform === 'Google Ads').map(row => ({ status: row.status, accountName: row.name, budget: row.budget ?? 0, cost: row.spend ?? 0 }))
+  const weeklyGuaranteeRows: PdfWeeklyRow[] = groupedWeeklyRows.filter(row => row.platform === 'Google Guarantee').map(row => ({ status: row.status, accountName: row.name, budget: row.budget ?? 0, cost: row.spend ?? 0 }))
+  const weeklyOpenaiRows: PdfOpenAiRow[] = groupedWeeklyRows.filter(row => row.platform === 'OpenAI Ads').map(row => ({ clientName: row.name, campaignName: 'All campaigns', status: 'active', budget: row.budget ?? 0, budgetPeriod: row.budgetPeriod, spend: row.spend ?? 0, cpc: 0, impressions: 0 }))
+  const weeklyLoading = report.loading || openai.loading
+  const weeklyTable = buildWeeklyReportTable(groupedWeeklyRows, budgetClients, weekDateLabel, weeks)
+  const weeklyErrors = [...report.errors, ...(openai.error ? [openai.error] : []), ...openai.results.flatMap(row => [row.error, row.insightsError, ...(row.weeklyErrors ?? [])].filter((error): error is string => !!error).map(error => `${row.clientName}: ${error}`))]
+  const weeklyExportBlocked = weeklyLoading || weeklyErrors.length > 0 || groupedWeeklyRows.some(row => row.spend === null || row.weeklySpend?.some(value => value === null))
 
   const [exportingWeekly, setExportingWeekly] = useState(false)
   const [preparingWeeklyEmail, setPreparingWeeklyEmail] = useState(false)
@@ -1276,14 +910,16 @@ export function SEMReportes() {
         ))}
       </div>
 
-      {period === 'monthly' ? (
-        accountsError ? <p role="alert" className="text-sm text-red-500">Unable to load Monthly Budget accounts: {accountsError}</p> : loading ? <BudgetTableSkeleton /> : <MonthlyReport accounts={accounts} clients={budgetClients} />
-      ) : (
-        <>
+      <div hidden={period !== 'monthly'}>
+        <MonthlyReport report={report} openai={openai} month={month} year={year} onChangePeriod={(nextYear, nextMonth) => { setYear(nextYear); setMonth(nextMonth) }} />
+      </div>
+      <div hidden={period !== 'weekly'}>
           <SendEmailModal payload={weeklyEmailPayload} onClose={() => setWeeklyEmailPayload(null)} />
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <WeekPicker from={weekFrom} to={weekTo} onChange={(f, t) => { setWeekFrom(f); setWeekTo(t) }} />
+              <label className="text-xs text-body dark:text-bodydark" htmlFor="weekly-report-month">Month</label>
+              <select id="weekly-report-month" value={month} onChange={event => setMonth(Number(event.target.value))} className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm dark:border-strokedark dark:bg-boxdark dark:text-white">{MONTH_NAMES.map((name, index) => <option key={name} value={index}>{name}</option>)}</select>
+              <select aria-label="Weekly report year" value={year} onChange={event => setYear(Number(event.target.value))} className="h-9 rounded-lg border border-stroke bg-white px-3 text-sm dark:border-strokedark dark:bg-boxdark dark:text-white">{Array.from({ length: new Date().getFullYear() - 2024 + 2 }, (_, index) => 2024 + index).map(value => <option key={value} value={value}>{value}</option>)}</select>
             </div>
             <div className="flex items-center gap-3">
               <button onClick={handleOpenWeeklyEmailModal} disabled={preparingWeeklyEmail || weeklyExportBlocked}
@@ -1303,15 +939,13 @@ export function SEMReportes() {
             </div>
           </div>
 
-          {weeklyError && <p role="alert" className="mb-3 text-sm text-red-500">{weeklyError}</p>}
-          {openaiError && <p role="alert" className="mb-3 text-sm text-red-500">{openaiError}</p>}
-          {openaiResults.filter(r => summarizeOpenAiBudget(r).spend === null).map(r => <p key={r.clientId} role="alert" className="mb-3 text-sm text-red-500">{r.clientName}: {r.error ?? r.insightsError}</p>)}
-          {Object.entries(ggErrors).map(([id, error]) => <p key={id} role="alert" className="mb-3 text-sm text-red-500">{ggAccounts.find(a => a.id === id)?.name}: {error}</p>)}
-          {accountsError ? <p role="alert" className="text-sm text-red-500">{accountsError}</p> : weeklyLoading ? <BudgetTableSkeleton headers={WEEKLY_HEADERS} /> : (
-            <WeeklyGroupedTable table={weeklyTable} />
-          )}
-        </>
-      )}
+          {weeklyErrors.length > 0 && <div role="alert" className="mb-3 text-sm text-red-500">{weeklyErrors.map((error, index) => <p key={index}>{error}</p>)}</div>}
+          <div className="mb-3 flex items-center justify-between gap-3 text-xs text-body dark:text-bodydark">
+            <p>{weeklyLoading ? 'Loading spend — each account appears as soon as it is ready.' : 'Actual spend by week: days 1–7, 8–14, 15–21, 22–28 and 29–end of month.'}</p>
+            <button type="button" onClick={() => { report.retry(); openai.retry() }} className="shrink-0 font-semibold text-[#16a34a]">Refresh data</button>
+          </div>
+          {report.metadataLoading && !groupedWeeklyRows.length ? <BudgetTableSkeleton headers={weeklyTable.headers} /> : <WeeklyGroupedTable table={weeklyTable} />}
+      </div>
     </div>
   )
 }

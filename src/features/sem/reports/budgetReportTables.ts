@@ -1,11 +1,13 @@
 import { groupBudgetRows, type BudgetPlatform } from './groupBudgetRows'
 import { WEEKLY_HEADERS, MONTHLY_HEADERS } from './reportTableHeaders'
 import type { MonthlyBudgetClient } from './monthlyBudgetAccounts'
+import { ymd, type ReportWeek } from './budgetReportData'
 
 export interface WeeklyDisplayRow {
   accountId: string; clientId?: string; name: string; platform: BudgetPlatform
   campaign?: string; status: string; budget: number | null; spend: number | null
   budgetPeriod?: 'daily' | 'lifetime'; leads?: number; note?: string
+  weeklySpend?: (number | null)[]; weeklyPending?: boolean[]; loading?: boolean
 }
 const money = (n: number | null) => n === null ? '—' : n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 
@@ -18,16 +20,22 @@ export interface BudgetReportTable {
   summary: { label: string; value: string }[]
 }
 
-export function buildWeeklyReportTable(rows: WeeklyDisplayRow[], clients: MonthlyBudgetClient[], dateLabel: string): BudgetReportTable {
+export function buildWeeklyReportTable(rows: WeeklyDisplayRow[], clients: MonthlyBudgetClient[], dateLabel: string, weeks?: ReportWeek[]): BudgetReportTable {
   void dateLabel // Kept in the public builder contract for existing report exporters.
   const groups = groupBudgetRows(rows, clients)
+  const headers = weeks ? [...WEEKLY_HEADERS.slice(0, 4), ...weeks.map(week => `${week.label} (${Number(week.from.slice(-2))}–${Number(week.to.slice(-2))})`)] : WEEKLY_HEADERS
   const values = (r: WeeklyDisplayRow) => [
-    r.platform,
-    r.budget ? `${money(r.budget)}${r.budgetPeriod === 'daily' ? '/day' : r.budgetPeriod === 'lifetime' ? ' lifetime' : ''}` : '—',
-    money(r.spend),
-  ]
+      r.platform,
+      r.budget ? `${money(r.budget)}${r.budgetPeriod === 'daily' ? '/day' : r.budgetPeriod === 'lifetime' ? ' lifetime' : ''}` : '—',
+      ...Array.from({ length: headers.length - 4 }, (_, index) => {
+        if (weeks && weeks[index].from > ymd(new Date())) return 'Not started'
+        if (r.loading || r.weeklyPending?.[index]) return 'Loading…'
+        const value = r.weeklySpend?.[index]
+        return value === null || value === undefined ? 'Unavailable' : money(value)
+      }),
+    ]
   return {
-    headers: WEEKLY_HEADERS,
+    headers,
     groups: groups.map(g => ({ id: g.id, name: g.name, rows: g.items.map((r, i) => ({ key: `${g.id}:${r.accountId}:${r.platform}:${i}`, note: r.note, cells: ['', r.accountId, ...values(r)] })) })),
     totals: [],
     summary: financialSummary(rows),

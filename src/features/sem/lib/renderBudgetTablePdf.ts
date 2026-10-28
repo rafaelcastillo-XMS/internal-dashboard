@@ -19,7 +19,7 @@ export function renderBudgetTablePdf({ table, title, period, weekly, logoDataUrl
   const usable = width - 2 * MARGIN
   const bottom = height - 16
   const weights = weekly
-    ? [76, 24, 36, 30, 30]
+    ? [44, 25, 30, 27, ...Array(table.headers.length - 4).fill(28)]
     : [64, 30, 37, 34, 30, 44, 34]
   if (table.headers.length !== weights.length) throw new Error('Report columns do not match the PDF layout')
   const totalWeight = weights.reduce((a, b) => a + b, 0)

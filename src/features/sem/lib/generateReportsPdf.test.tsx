@@ -12,9 +12,9 @@ const dateLabel = 'Week Oct 12 – Oct 18, 2026'
 const monthLabel = 'October 2026'
 const clients = Array.from({ length: 18 }, (_, i) => ({ id: `client-${i}`, sem_account_id: `ads-${i}`, lsa_account_id: `lsa-${i}`, status: 'active', sem_enabled: true }))
 const rows: WeeklyDisplayRow[] = clients.flatMap((c, i) => [
-  { accountId: c.sem_account_id, name: `Client ${i + 1} - Residential and Commercial Garage Door Repair Services`, platform: 'Google Ads', status: 'ENABLED', budget: 2640, spend: 440 },
-  { accountId: c.lsa_account_id, name: `Client ${i + 1} LSA`, platform: 'Google Guarantee', status: 'ENABLED', budget: 300, spend: 400, leads: 8 },
-  { accountId: c.id, clientId: c.id, name: `Client ${i + 1}`, platform: 'OpenAI Ads', status: 'active', campaign: 'Emergency garage door repairs - regional awareness campaign with a long descriptive name', budget: 25, budgetPeriod: 'daily', spend: 0 },
+  { accountId: c.sem_account_id, name: `Client ${i + 1} - Residential and Commercial Garage Door Repair Services`, platform: 'Google Ads', status: 'ENABLED', budget: 2640, spend: 440, weeklySpend: [100, 150, 90, 100, 0] },
+  { accountId: c.lsa_account_id, name: `Client ${i + 1} LSA`, platform: 'Google Guarantee', status: 'ENABLED', budget: 300, spend: 400, leads: 8, weeklySpend: [80, 120, 150, 50, 0] },
+  { accountId: c.id, clientId: c.id, name: `Client ${i + 1}`, platform: 'OpenAI Ads', status: 'active', campaign: 'Emergency garage door repairs - regional awareness campaign with a long descriptive name', budget: 25, budgetPeriod: 'daily', spend: 0, weeklySpend: [0, 0, 0, 0, 0] },
 ])
 const weekly = buildWeeklyReportTable(rows, clients, dateLabel)
 const monthly = buildMonthlyReportTable(clients.map((c, i) => ({ id: c.id, name: rows[i * 3].name, items: [
@@ -29,13 +29,15 @@ function pageText(doc: ReturnType<typeof renderBudgetTablePdf>) {
 }
 
 describe('Unified report PDF data', () => {
-  it('shares account stripes and the five requested weekly columns with the dashboard', () => {
+  it('shares actual weekly spend for all platforms with the dashboard and removes Spend and Remaining columns', () => {
     expect(weekly.headers).toEqual(WEEKLY_HEADERS)
     expect(weekly.groups).toHaveLength(18)
     expect(weekly.groups[0].rows.map(r => r.cells[2])).toEqual(['Google Ads', 'Google Guarantee', 'OpenAI Ads'])
     expect(weekly.groups[0].name).toBe(rows[0].name)
-    expect(weekly.groups[0].rows[0].cells).toEqual(['', 'ads-0', 'Google Ads', '$2,640.00', '$440.00'])
-    expect(weekly.groups[0].rows[1].cells).toEqual(['', 'lsa-0', 'Google Guarantee', '$300.00', '$400.00'])
+    expect(weekly.groups[0].rows[0].cells).toEqual(['', 'ads-0', 'Google Ads', '$2,640.00', '$100.00', '$150.00', '$90.00', '$100.00', '$0.00'])
+    expect(weekly.groups[0].rows[1].cells).toEqual(['', 'lsa-0', 'Google Guarantee', '$300.00', '$80.00', '$120.00', '$150.00', '$50.00', '$0.00'])
+    expect(weekly.headers).not.toContain('Spend')
+    expect(weekly.headers).not.toContain('Remaining')
     expect(weekly.totals).toEqual([])
     const html = renderToStaticMarkup(<WeeklyGroupedTable table={weekly} />)
     for (const row of [...weekly.groups.flatMap(g => g.rows), ...weekly.totals]) {
@@ -53,9 +55,9 @@ describe('Unified report PDF data', () => {
   })
   it('keeps unavailable spend explicit without adding a total row', () => {
     const table = buildWeeklyReportTable([
-      { ...rows[0], spend: null }, { ...rows[2], budgetPeriod: 'daily' }, { ...rows[2], campaign: 'Lifetime campaign', budgetPeriod: 'lifetime' },
+      { ...rows[0], spend: null, weeklySpend: undefined }, { ...rows[2], budgetPeriod: 'daily' }, { ...rows[2], campaign: 'Lifetime campaign', budgetPeriod: 'lifetime' },
     ], clients, dateLabel)
-    expect(table.groups[0].rows[0].cells[4]).toBe('—')
+    expect(table.groups[0].rows[0].cells[4]).toBe('Unavailable')
     expect(table.totals).toEqual([])
     expect(table.summary.find(s => s.label.startsWith('Period spend'))?.value).toBe('Unavailable')
   })
@@ -78,7 +80,9 @@ describe('Unified PDF pagination and exports', () => {
         expect(page).toContain('(Client)')
         expect(page).toContain('(ID)')
         expect(page).toContain('(Budget)')
-        expect(page).toContain('(Spend)')
+        expect(page).toContain('(Week 1)')
+        expect(page).toContain('(Week 2)')
+        expect(page).toContain('(Week 5)')
       }
       expect(page).toContain('2026')
       expect(page).toContain('Page ')

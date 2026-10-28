@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowUp, Loader2, Pin, RefreshCw, Sparkles, X } from 'lucide-react'
+import { isSemAnalysis, type SemAnalysis } from './semAnalysis'
+import { SemAnalysisPanel } from './SemAnalysisPanel'
 
 type Insights = Record<'short_term' | 'medium_term' | 'long_term', { action: string; impact: 'high' | 'medium' | 'low' }[]>
 type Message = { role: 'user' | 'assistant'; content: string }
@@ -14,12 +16,12 @@ interface Props {
 }
 const timeframes = [['short_term', 'Short-term', '7–14 days'], ['medium_term', 'Medium-term', '30–60 days'], ['long_term', 'Long-term', '3–6 months']] as const
 function validInsights(value: unknown): value is Insights {
-  return !!value && typeof value === 'object' && timeframes.every(([key]) => Array.isArray((value as Insights)[key]) && (value as Insights)[key].every(item => typeof item.action === 'string' && ['high', 'medium', 'low'].includes(item.impact)))
+  return !!value && typeof value === 'object' && timeframes.every(([key]) => Array.isArray((value as Insights)[key]) && (value as Insights)[key].every(item => !!item && typeof item.action === 'string' && ['high', 'medium', 'low'].includes(item.impact)))
 }
 
 export function PerformanceAssistant({ module, identity, name, dateRange, context, disabled }: Props) {
   const [open, setOpen] = useState(false)
-  const [insights, setInsights] = useState<Insights | null>(null)
+  const [insights, setInsights] = useState<Insights | SemAnalysis | null>(null)
   const [pinned, setPinned] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
@@ -29,15 +31,17 @@ export function PerformanceAssistant({ module, identity, name, dateRange, contex
   const launcher = useRef<HTMLButtonElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const end = useRef<HTMLDivElement>(null)
-  const cacheKey = `performance-assistant:${module}:${identity}:${dateRange.startDate}:${dateRange.endDate}`
+  const composer = useRef<HTMLTextAreaElement>(null)
+  const cacheKey = `performance-assistant:${module === 'sem' ? 'sem-v2' : module}:${identity}:${dateRange.startDate}:${dateRange.endDate}`
+  const semAnalysis = isSemAnalysis(insights) ? insights : null
 
   useEffect(() => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(cacheKey) || 'null')
-      if (validInsights(saved)) { setInsights(saved); setPinned(true) }
+      if (module === 'sem' ? isSemAnalysis(saved) : validInsights(saved)) { setInsights(saved as Insights | SemAnalysis); setPinned(true) }
     } catch { /* Storage is optional. */ }
     return () => controller.current?.abort()
-  }, [cacheKey])
+  }, [cacheKey, module])
   useEffect(() => {
     if (open) closeButton.current?.focus()
   }, [open])
@@ -56,14 +60,15 @@ export function PerformanceAssistant({ module, identity, name, dateRange, contex
     controller.current = abort
     setBusy(kind); setError('')
     try {
+      const analysisContext = module === 'sem' ? { ...context, conversation: messages.slice(-20) } : context
       const res = await fetch(kind === 'insights' ? `/api/ai/${module}-insights` : '/api/ai/performance-chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: abort.signal,
-        body: JSON.stringify(kind === 'insights' ? context : { module, context, insights, messages: nextMessages.slice(-20) }),
+        body: JSON.stringify(kind === 'insights' ? analysisContext : { module, context, insights, messages: nextMessages.slice(-20) }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(res.status === 503 ? 'AI is not configured. Contact your administrator.' : 'Unable to get a response. Please try again.')
       if (kind === 'insights') {
-        if (!validInsights(data)) throw new Error('Invalid analysis received. Please try again.')
+        if (!(module === 'sem' ? isSemAnalysis(data) : validInsights(data))) throw new Error('Invalid analysis received. Please try again.')
         setInsights(data); setPinned(false)
         try { localStorage.removeItem(cacheKey) } catch { /* Storage is optional. */ }
       } else {
@@ -97,11 +102,12 @@ export function PerformanceAssistant({ module, identity, name, dateRange, contex
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold">Performance Insights</h3>{insights && <button onClick={togglePin} className="flex items-center gap-1 text-xs text-violet-500"><Pin size={13} />{pinned ? 'Unpin analysis' : 'Pin analysis'}</button>}</div>
-        {!insights && <div className="mb-5 rounded-xl bg-violet-500/5 p-4"><p className="text-sm font-medium">Turn your data into next steps</p><p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">Generate an analysis of this overview, or ask a question about your performance below.</p></div>}
+        {!insights && <div className="mb-5 rounded-xl bg-violet-500/5 p-4"><p className="text-sm font-medium">{module === 'sem' ? 'What would you like to know about this account?' : 'Turn your data into next steps'}</p><p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">{module === 'sem' ? 'Get one analysis of the selected period, then choose what to explore. You can also start with your own question below.' : 'Generate an analysis of this overview, or ask a question about your performance below.'}</p></div>}
         <button onClick={() => request('insights')} disabled={disabled || !!busy} className="mb-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-40">
-          {busy === 'insights' ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}{busy === 'insights' ? 'Analyzing performance…' : insights ? 'Regenerate analysis' : 'Generate insights'}
+          {busy === 'insights' ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}{busy === 'insights' ? 'Analyzing performance…' : insights ? 'Regenerate analysis' : module === 'sem' ? 'Analyze account' : 'Generate insights'}
         </button>
-        {insights && <div className="space-y-3">{timeframes.map(([key, label, period]) => <section key={key} className="overflow-hidden rounded-xl border border-violet-500/15"><div className="flex items-center justify-between bg-violet-500/5 px-4 py-3"><h4 className="text-xs font-semibold">{label}</h4><span className="text-[10px] text-[var(--text-muted)]">{period}</span></div><ul className="space-y-4 p-4">{insights[key].map((item, index) => <li key={index} className="text-xs leading-relaxed text-[var(--text-secondary)]"><span className={`mb-1 block text-[9px] font-semibold uppercase tracking-wide ${item.impact === 'high' ? 'text-rose-500' : item.impact === 'medium' ? 'text-amber-500' : 'text-slate-500'}`}>{item.impact} impact</span>{item.action}</li>)}{!insights[key].length && <li className="text-xs text-[var(--text-muted)]">Insufficient data for this timeframe.</li>}</ul></section>)}</div>}
+        {semAnalysis && <SemAnalysisPanel analysis={semAnalysis} disabled={disabled || !!busy} onChooseTopic={question => { setDraft(question); composer.current?.focus() }} />}
+        {insights && 'short_term' in insights && <div className="space-y-3">{timeframes.map(([key, label, period]) => <section key={key} className="overflow-hidden rounded-xl border border-violet-500/15"><div className="flex items-center justify-between bg-violet-500/5 px-4 py-3"><h4 className="text-xs font-semibold">{label}</h4><span className="text-[10px] text-[var(--text-muted)]">{period}</span></div><ul className="space-y-4 p-4">{insights[key].map((item, index) => <li key={index} className="text-xs leading-relaxed text-[var(--text-secondary)]"><span className={`mb-1 block text-[9px] font-semibold uppercase tracking-wide ${item.impact === 'high' ? 'text-rose-500' : item.impact === 'medium' ? 'text-amber-500' : 'text-slate-500'}`}>{item.impact} impact</span>{item.action}</li>)}{!insights[key].length && <li className="text-xs text-[var(--text-muted)]">Insufficient data for this timeframe.</li>}</ul></section>)}</div>}
         <div role="log" aria-label="Conversation" aria-live="polite" className="mt-6 space-y-4">{messages.map((message, index) => <div key={index} className={`rounded-xl p-3 text-sm ${message.role === 'user' ? 'ml-6 bg-violet-500/10' : 'mr-3 bg-[var(--bg-subtle)]'}`}><p className="mb-1 text-[10px] font-semibold text-[var(--text-muted)]">{message.role === 'user' ? 'You' : 'Assistant'}</p><p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p></div>)}{busy === 'chat' && <p className="flex items-center gap-2 text-xs text-[var(--text-muted)]"><Loader2 size={14} className="animate-spin" />Thinking…</p>}</div>
         <div ref={end} />
       </div>
@@ -109,7 +115,7 @@ export function PerformanceAssistant({ module, identity, name, dateRange, contex
         {error && <p role="alert" className="mb-3 text-xs text-red-500">{error}</p>}
         {disabled && <p className="mb-3 text-xs text-[var(--text-muted)]">Select an account and wait for the overview to finish loading.</p>}
         <form onSubmit={event => { event.preventDefault(); void request('chat') }} className="rounded-2xl border border-violet-500/25 p-3 focus-within:ring-2 focus-within:ring-violet-500/30">
-          <textarea aria-label="Ask about your performance" placeholder="Ask about your performance…" value={draft} onChange={event => setDraft(event.target.value)} maxLength={4000} rows={2} disabled={disabled || !!busy} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void request('chat') } }} className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-[var(--text-muted)] disabled:opacity-50" />
+          <textarea ref={composer} aria-label="Ask about your performance" placeholder={module === 'sem' ? 'What would you like to know about this account?' : 'Ask about your performance…'} value={draft} onChange={event => setDraft(event.target.value)} maxLength={4000} rows={2} disabled={disabled || !!busy} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void request('chat') } }} className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-[var(--text-muted)] disabled:opacity-50" />
           <div className="flex items-center justify-between"><span className="text-[10px] text-[var(--text-muted)]">Based on this overview</span><button type="submit" aria-label="Send message" disabled={disabled || !!busy || !draft.trim()} className="rounded-full bg-violet-600 p-2 text-white disabled:opacity-30"><ArrowUp size={16} /></button></div>
         </form>
       </footer>

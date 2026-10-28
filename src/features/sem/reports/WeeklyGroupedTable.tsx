@@ -7,9 +7,7 @@ type Props = { table: BudgetReportTable } | { rows: WeeklyDisplayRow[]; clients:
 export function WeeklyGroupedTable(props: Props) {
   const table = 'table' in props ? props.table : buildWeeklyReportTable(props.rows, props.clients, props.dateLabel)
   return <div className="overflow-x-auto rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-    <table className="w-full min-w-[760px] table-fixed text-sm"><colgroup>
-      <col className="w-[38%]" /><col className="w-[14%]" /><col className="w-[20%]" /><col className="w-[14%]" /><col className="w-[14%]" />
-    </colgroup><thead><tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
+    <table className="w-full min-w-[1150px] text-sm"><thead><tr className="border-b border-stroke bg-gray-2 dark:border-strokedark dark:bg-meta-4">
       {table.headers.map(h => <th key={h} className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-body dark:text-bodydark">{h}</th>)}
     </tr></thead><tbody className="divide-y divide-stroke dark:divide-strokedark">
       {!table.groups.length && <tr><td colSpan={table.headers.length} className="px-5 py-10 text-center">No accounts found.</td></tr>}

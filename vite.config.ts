@@ -21,6 +21,7 @@ import {
 import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail, resolveMondayEmail } from "./server/mondayTasks.js"
 import { chatPerformanceAi, askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
 import { sanitizePdfFilename, exportPdfBuffer } from "./server/pdfExport.js"
+import { getGoogleBudgetReport } from './server/googleBudgetReport.js'
 
 const projectRoot = import.meta.dirname
 
@@ -489,7 +490,15 @@ function semDevPlugin() {
         let script: string
         let args: string[]
 
-        if (req.url.startsWith("/api/sem/accounts")) {
+        if (req.url.startsWith('/api/sem/budget-report')) {
+          try {
+            res.setHeader('Cache-Control', 'no-store')
+            sendJson(res, 200, await getGoogleBudgetReport({ accountId: searchParams.get('accountId') || '', platform: searchParams.get('platform') || '', startDate: searchParams.get('startDate') || '', endDate: searchParams.get('endDate') || '', refresh: searchParams.get('refresh') === '1' }))
+          } catch (error) {
+            sendJson(res, (error as { statusCode?: number }).statusCode || 502, { error: error instanceof Error ? error.message : 'Unable to load Google Ads spend' })
+          }
+          return
+        } else if (req.url.startsWith("/api/sem/accounts")) {
           script = path.join(toolsDir, "ads_list_accounts.py")
           args   = []
         } else if (req.url.startsWith("/api/sem/performance")) {

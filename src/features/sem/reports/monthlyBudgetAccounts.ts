@@ -14,9 +14,11 @@ export function selectMonthlyBudgetAccounts<T extends { id: string; status?: str
 ) {
   const disabled = new Set<string>()
   const adsMappings = new Set<string>()
+  const lsaMappings = new Set<string>()
   const dedicatedLsa = new Set<string>()
   for (const client of clients) {
     if (client.sem_account_id) adsMappings.add(client.sem_account_id)
+    if (client.lsa_account_id) lsaMappings.add(client.lsa_account_id)
     if (client.lsa_account_id && client.lsa_account_id !== client.sem_account_id) {
       dedicatedLsa.add(client.lsa_account_id)
     }
@@ -28,7 +30,7 @@ export function selectMonthlyBudgetAccounts<T extends { id: string; status?: str
   }
   return [...new Map(accounts.map(account => [account.id, account])).values()].filter(account => !disabled.has(account.id) && (account.status === undefined || account.status === 'ENABLED')).map(account => ({
     account,
-    googleAds: adsIds.has(account.id) && !(dedicatedLsa.has(account.id) && !adsMappings.has(account.id)),
-    googleGuarantee: guaranteeIds.has(account.id),
+    googleAds: (adsIds.has(account.id) || adsMappings.has(account.id)) && !(dedicatedLsa.has(account.id) && !adsMappings.has(account.id)),
+    googleGuarantee: guaranteeIds.has(account.id) || lsaMappings.has(account.id),
   })).filter(row => row.googleAds || row.googleGuarantee)
 }

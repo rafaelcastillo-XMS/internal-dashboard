@@ -30,6 +30,27 @@ describe('performance overview chat', () => {
     vi.stubEnv('OPENAI_API_KEY', '')
     await expect(chatPerformanceAi(input)).rejects.toMatchObject({ statusCode: 503 })
   })
+  it('uses the SEM audit standards and negative keyword resource for a Spanish search-term question', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'completed', output_text: 'Necesito los términos de búsqueda y los servicios ofrecidos.' }) })
+    vi.stubGlobal('fetch', fetch)
+    const result = await chatPerformanceAi({ ...input, module: 'sem', messages: [{ role: 'user', content: '¿Qué negativas pondrías en los términos de búsqueda?' }] })
+    expect(result.response).toContain('términos de búsqueda')
+    const prompt = JSON.parse(fetch.mock.calls[0][1].body).input[0].content
+    expect(prompt).toContain('Search terms & negatives')
+    expect(prompt).toContain('Starter negative keyword themes')
+    expect(prompt).toContain('Audit and propose only')
+    expect(prompt).toContain('respond in the user\'s language')
+    expect(prompt).not.toContain('### LP — Landing pages')
+  })
+  it('loads all five checklists when a complete audit is requested', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'completed', output_text: 'We need additional evidence.' }) })
+    vi.stubGlobal('fetch', fetch)
+    await chatPerformanceAi({ ...input, module: 'sem', messages: [{ role: 'user', content: 'Quiero una auditoría completa.' }] })
+    const prompt = JSON.parse(fetch.mock.calls[0][1].body).input[0].content
+    for (const area of ['TRK', 'ACC', 'STN', 'ADS', 'LP']) expect(prompt).toContain(`### ${area} —`)
+  })
   it.each([
     { ok: false, payload: { error: { message: 'provider error' } } },
     { ok: true, payload: { status: 'incomplete', output_text: 'Partial' } },

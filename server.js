@@ -13,6 +13,7 @@ import { handleNotionClientSyncRequest, queryRelatedNotionData, queryNotionClien
 import { buildMondayEmailMap, fetchMondayTasksForUser, fetchMondayTaskDetail, resolveMondayEmail } from "./server/mondayTasks.js"
 import { chatPerformanceAi, askDashboardAi, getTaskInsight, getSemInsights, getSeoInsights, getSocialInsights } from "./server/aiInsights.js"
 import { sanitizePdfFilename, exportPdfBuffer } from "./server/pdfExport.js"
+import { getGoogleBudgetReport } from './server/googleBudgetReport.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SEO_AUDIT_PROMPT_PATH = path.join(__dirname, 'prompts', 'seo-audit-history.md')
@@ -32,6 +33,15 @@ app.use((_req, res, next) => {
 
 const SUPABASE_URL      = "https://sjpvyxdyleebhqlmqscy.supabase.co"
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqcHZ5eGR5bGVlYmhxbG1xc2N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzgxODksImV4cCI6MjA4ODc1NDE4OX0.ZvzbBm-L8Jt3FzhmmX3qd7_inwrupjQrfh9JWIlX1ng"
+
+app.get('/api/sem/budget-report', async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store')
+    res.json(await getGoogleBudgetReport({ accountId: req.query.accountId, platform: req.query.platform, startDate: req.query.startDate, endDate: req.query.endDate, refresh: req.query.refresh === '1' }))
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ error: error.message || 'Unable to load Google Ads spend' })
+  }
+})
 
 // ─── POST /api/notion/clients/:clientId/sync ────────────────────────────────
 app.post("/api/notion/clients/:clientId/sync", async (req, res) => {

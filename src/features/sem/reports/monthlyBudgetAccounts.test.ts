@@ -27,10 +27,11 @@ describe('Monthly Budget account eligibility', () => {
     const rows = select([{ ...holt, sem_account_id: '4101522507' }, atlantic])
     expect(rows.find(row => row.account.id === '4101522507')).toMatchObject({ googleAds: true, googleGuarantee: true })
   })
-  it('includes Atlantic again only when activated and preserves year-specific membership', () => {
+  it('includes activated clients and their configured LSA accounts even before a yearly import exists', () => {
     expect(select([holt, { ...atlantic, sem_enabled: true }]).find(row => row.account.id === '4338698549')).toMatchObject({ googleAds: true, googleGuarantee: true })
     expect(selectMonthlyBudgetAccounts(accounts, [holt], new Set(['5028132994']), new Set())).toEqual([
       { account: accounts[0], googleAds: true, googleGuarantee: false },
+      { account: accounts[1], googleAds: false, googleGuarantee: true },
     ])
   })
 })

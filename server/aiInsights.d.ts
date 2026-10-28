@@ -7,8 +7,11 @@ export function getTaskInsight(input: {
 
 export function getSemInsights(input: {
   accountName: string
+  accountId?: string
+  dateRange?: { startDate: string; endDate: string }
   summary?: Record<string, number>
   campaigns?: Record<string, unknown>[]
+  [key: string]: unknown
 }): Promise<Record<string, unknown>>
 
 export function getSeoInsights(input: {

@@ -15,6 +15,8 @@ interface Props {
     cost_per_conversion: number
   }
   campaigns: {
+    id?: string
+    status?: string
     name: string
     impressions: number
     clicks: number
@@ -26,5 +28,5 @@ interface Props {
 }
 
 export function SEMAIInsights({ contextId, dateRange, disabled, ...data }: Props) {
-  return <PerformanceAssistant key={`${contextId}:${dateRange.startDate}:${dateRange.endDate}`} module="sem" identity={contextId} name={data.accountName} dateRange={dateRange} disabled={disabled || !data.accountName} context={{ ...data, campaigns: data.campaigns.slice(0, 8), dateRange }} />
+  return <PerformanceAssistant key={`${contextId}:${dateRange.startDate}:${dateRange.endDate}`} module="sem" identity={contextId} name={data.accountName} dateRange={dateRange} disabled={disabled || !data.accountName} context={{ ...data, accountId: contextId, dateRange, coverage: { source: 'Overview campaign snapshot', campaignCount: data.campaigns.length, accountCoverageVerified: false, historicalComparisonAvailable: false, conversionTrackingVerified: false } }} />
 }

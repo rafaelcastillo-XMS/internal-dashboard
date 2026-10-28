@@ -8,9 +8,9 @@ import { reportRequest } from './reportLoading'
 
 const clients = [{ id: 'client', status: 'active', sem_enabled: true, sem_account_id: 'ads', lsa_account_id: 'lsa' }]
 const rows: WeeklyDisplayRow[] = [
-  { accountId: 'ads', name: 'Client', platform: 'Google Ads', status: 'ENABLED', budget: 2640, spend: 0 },
+  { accountId: 'ads', name: 'Client', platform: 'Google Ads', status: 'ENABLED', budget: 2640, spend: 0, weeklySpend: [0, 0, 0, 0, 0] },
   { accountId: 'other', name: 'Other', platform: 'Google Ads', status: 'ENABLED', budget: 100, spend: null },
-  { accountId: 'lsa', name: 'Client LSA', platform: 'Google Guarantee', status: 'ENABLED', budget: 200, spend: 50, leads: 2 },
+  { accountId: 'lsa', name: 'Client LSA', platform: 'Google Guarantee', status: 'ENABLED', budget: 200, spend: 50, leads: 2, weeklySpend: [50, 0, 0, 0, 0] },
   { accountId: 'client', clientId: 'client', name: 'Client', platform: 'OpenAI Ads', campaign: 'Campaign', status: 'active', budget: 20, budgetPeriod: 'daily', spend: 0 },
 ]
 describe('Grouped budget reports', () => {
@@ -31,19 +31,21 @@ describe('Grouped budget reports', () => {
     expect(grouped[0]).toMatchObject({ id: 'holts-garage', name: "Holt's Reliable Garage Door Repair" })
     expect(grouped[0].items.map(row => row.platform)).toEqual(['Google Ads', 'Google Guarantee'])
   })
-  it('shows account-name stripes and only the five requested columns', () => {
+  it('shows account-name stripes and only actual week spend columns', () => {
     const html = renderToStaticMarkup(<WeeklyGroupedTable rows={rows} clients={clients} dateLabel="Selected week" />)
-    expect(WEEKLY_HEADERS).toEqual(['Client', 'ID', 'Platform', 'Budget', 'Spend'])
+    expect(WEEKLY_HEADERS).toEqual(['Client', 'ID', 'Platform', 'Budget', 'Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'])
     for (const value of ['Client', 'Other', 'ads', 'lsa', 'Google Ads', 'Google Guarantee', 'OpenAI Ads', '$20.00/day', '$50.00', '$0.00']) expect(html).toContain(value)
     expect(html).not.toContain('Campaign</th>')
     expect(html).not.toContain('Remaining</th>')
+    expect(html).not.toContain('>Spend</th>')
+    expect(html).toContain('Week 1</th>')
+    expect(html).toContain('Week 2</th>')
     expect(html).toContain('bg-[#eef5ff]')
-    expect(html).toContain('w-[38%]')
-    expect(html).toContain('w-[14%]')
+    expect(html).toContain('min-w-[1150px]')
     expect(html).not.toContain('>Total</td>')
   })
   it('does not invent missing LSA metrics', () => {
-    const html = renderToStaticMarkup(<WeeklyGroupedTable rows={[{ ...rows[2], spend: null, leads: undefined }]} clients={clients} dateLabel="Week" />)
+    const html = renderToStaticMarkup(<WeeklyGroupedTable rows={[{ ...rows[2], spend: null, weeklySpend: undefined, leads: undefined }]} clients={clients} dateLabel="Week" />)
     expect(html).not.toContain('>Total<')
     expect(html).not.toContain('$0.00')
     expect(html).not.toContain('0.0%')
