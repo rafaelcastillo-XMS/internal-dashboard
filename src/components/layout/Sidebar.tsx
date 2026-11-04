@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
     Home, Users, CheckSquare, Calendar,
     Search as SearchIcon,
-    BarChart2, Share2, Palette, FileText,
+    BarChart2, Share2, FileText,
     Bug, X
 } from "lucide-react"
 import { XMSLogo } from "@/components/ui/XMSLogo"
@@ -228,18 +228,7 @@ export function Sidebar() {
                         {collapsed && <Tooltip label="Social Media" />}
                     </div>
 
-                    <div className="relative group">
-                        <div className={`${navItemClass} opacity-50 cursor-not-allowed`}>
-                            <Palette className="w-4 h-4 shrink-0" />
-                            {!collapsed && (
-                                <span className="flex items-center gap-2 flex-1">
-                                    Design
-                                    <span className="text-[10px] font-semibold bg-yellow-400/20 text-yellow-500 px-1.5 py-0.5 rounded-full leading-none">Working</span>
-                                </span>
-                            )}
-                        </div>
-                        {collapsed && <Tooltip label="Design (Working)" />}
-                    </div>
+                    {/* ponytail: Design hidden until the module ships — restore the Palette NavLink here. */}
 
                 </nav>
 

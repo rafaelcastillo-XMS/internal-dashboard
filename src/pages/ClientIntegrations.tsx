@@ -244,7 +244,8 @@ export function ClientIntegrations() {
     }, [])
 
     useEffect(() => {
-        const accountId = record?.sem_account_id
+        // LSA-only clients (no Google Ads account) key budgets on their LSA account.
+        const accountId = record?.sem_account_id ?? record?.lsa_account_id
         if (!accountId) {
             setBudgets({})
             return
@@ -261,7 +262,7 @@ export function ClientIntegrations() {
                 setBudgets(next)
             })
         return () => { active = false }
-    }, [record?.sem_account_id])
+    }, [record?.sem_account_id, record?.lsa_account_id])
 
     // Whether an OpenAI Ads token exists (metadata only — the token itself is never read back)
     useEffect(() => {
@@ -349,12 +350,12 @@ export function ClientIntegrations() {
     }
 
     async function handleApplyBudgets() {
-        const accountId = record?.sem_account_id
+        const accountId = record?.sem_account_id ?? record?.lsa_account_id
         if (!accountId || savingBudgets) return
         setSavingBudgets(true)
         setBudgetsMessage(null)
         try {
-            const rows = BUDGET_TYPES.map(t => ({
+            const rows = BUDGET_TYPES.filter(t => record?.sem_account_id || t.key !== "ads_monthly").map(t => ({
                 account_id: accountId,
                 report_type: t.key,
                 budget: parseFloat((budgets[t.key] ?? "").replace(/[$,]/g, "")) || 0,
@@ -889,7 +890,7 @@ export function ClientIntegrations() {
                                                 onChange={e => void saveRecord({ sem_account_id: e.target.value || null })}
                                                 className={selectClass}
                                             >
-                                                <option value="">{loadingSemAccounts ? "Loading accounts..." : "Select Google Ads account"}</option>
+                                                <option value="">{loadingSemAccounts ? "Loading accounts..." : "None (LSA only)"}</option>
                                                 {semAccounts.map(account => (
                                                     <option key={account.id} value={account.id}>{account.name}</option>
                                                 ))}
@@ -908,7 +909,7 @@ export function ClientIntegrations() {
                                             onChange={e => void saveRecord({ lsa_account_id: e.target.value || null })}
                                             className={selectClass}
                                         >
-                                            <option value="">Same as the Google Ads account above</option>
+                                            <option value="">{record?.sem_account_id ? "Same as the Google Ads account above" : "None"}</option>
                                             {semAccounts.map(account => (
                                                 <option key={account.id} value={account.id}>{account.name}</option>
                                             ))}
@@ -926,7 +927,7 @@ export function ClientIntegrations() {
                                                         min="0"
                                                         step="0.01"
                                                         placeholder="0.00"
-                                                        disabled={!record?.sem_account_id || !semEnabled}
+                                                        disabled={!(type.key === "ads_monthly" ? record?.sem_account_id : record?.sem_account_id ?? record?.lsa_account_id) || !semEnabled}
                                                         value={budgets[type.key] ?? ""}
                                                         onChange={e => setBudgets(current => ({ ...current, [type.key]: e.target.value }))}
                                                         className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-8 pr-4 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
@@ -938,7 +939,7 @@ export function ClientIntegrations() {
 
                                     <div className="mt-4">
                                         <button
-                                            disabled={!record?.sem_account_id || savingBudgets || !semEnabled}
+                                            disabled={!(record?.sem_account_id ?? record?.lsa_account_id) || savingBudgets || !semEnabled}
                                             onClick={() => void handleApplyBudgets()}
                                             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#4285F4] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#3367d6] disabled:cursor-not-allowed disabled:opacity-60"
                                         >
@@ -950,7 +951,7 @@ export function ClientIntegrations() {
                                             </p>
                                         ) : (
                                             <p className="mt-2 text-center text-xs text-slate-400">
-                                                {record?.sem_account_id ? "Used by the Weekly and Monthly reports in SEM." : "Link a Google Ads account to set budgets."}
+                                                {record?.sem_account_id || record?.lsa_account_id ? "Used by the Weekly and Monthly reports in SEM." : "Link a Google Ads or LSA account to set budgets."}
                                             </p>
                                         )}
                                     </div>
