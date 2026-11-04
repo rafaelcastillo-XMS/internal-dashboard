@@ -87,28 +87,10 @@ export function SocialSidebar() {
         className={`fixed inset-y-0 left-0 z-50 flex flex-col h-screen border-r shrink-0 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 overflow-x-visible bg-[var(--sidebar-bg)] border-[var(--sidebar-border)] sidebar-shadow ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
         style={{ width: collapsed ? 64 : 232 }}
       >
-        {/* Back to Home — header slot */}
-        <div className={`h-16 flex items-center transition-all duration-200 ${collapsed ? 'justify-center px-3' : 'px-4'}`}>
-          <div className="relative group">
-            <Link
-              to="/"
-              onClick={closeMobile}
-              className={collapsed
-                ? "flex items-center justify-center w-10 h-10 rounded-lg transition-all text-[var(--sidebar-section-label)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
-                : "flex items-center gap-2 px-2 py-2 rounded-lg transition-all text-sm font-semibold text-[var(--sidebar-section-label)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)] w-full"
-              }
-            >
-              <ArrowLeft className="w-4 h-4 shrink-0" />
-              {!collapsed && 'Back to Home'}
-            </Link>
-            {collapsed && <Tooltip label="Back to Home" />}
-          </div>
-        </div>
-
         {/* Client selector (expanded only) */}
         {!collapsed && (
           <div className="border-b border-[var(--sidebar-border)] px-3 py-3">
-            <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-section-label)]">Active Account</p>
+            <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-section-label)]">Active Client</p>
             <ClientSelector
               clients={SOCIAL_CLIENTS}
               activeName="XMS Ai"
@@ -148,6 +130,24 @@ export function SocialSidebar() {
             </div>
           </div>
         )}
+        {/* Back to Home — bottom of sidebar */}
+        <div className={`mt-[2em] pb-3 flex items-center transition-all duration-200 ${collapsed ? 'justify-center px-3' : 'px-4'}`}>
+          <div className="relative group">
+            <Link
+              to="/"
+              onClick={closeMobile}
+              className={collapsed
+                ? "flex items-center justify-center w-10 h-10 rounded-lg transition-all text-[var(--sidebar-section-label)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
+                : "flex items-center gap-2 px-2 py-2 rounded-lg transition-all text-sm font-semibold text-[var(--sidebar-section-label)] hover:text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)] w-full"
+              }
+            >
+              <ArrowLeft className="w-4 h-4 shrink-0" />
+              {!collapsed && 'Back to Home'}
+            </Link>
+            {collapsed && <Tooltip label="Back to Home" />}
+          </div>
+        </div>
+
       </aside>
     </>
   )
