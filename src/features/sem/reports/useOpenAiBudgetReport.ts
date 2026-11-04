@@ -49,7 +49,7 @@ export function useOpenAiBudgetReport(from: string, to: string, weeks?: ReportWe
         if (secrets.error) throw secrets.error
         const ids = [...new Set((secrets.data ?? []).map(s => s.client_id))]
         if (!ids.length) return
-        const clients = await reportRequest(supabase.from('clients').select('id, name').in('id', ids).eq('status', 'active').abortSignal(controller.signal), 12000)
+        const clients = await reportRequest(supabase.from('clients').select('id, name').in('id', ids).eq('status', 'active').eq('openai_ads_enabled', true).abortSignal(controller.signal), 12000)
         if (clients.error) throw clients.error
         if (!cancelled) setResults((clients.data ?? []).map(client => ({ clientId: client.id, clientName: client.name, campaigns: [], pending: true })))
         await Promise.all((clients.data ?? []).map(async (client): Promise<void> => {

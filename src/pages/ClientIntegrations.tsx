@@ -375,8 +375,12 @@ export function ClientIntegrations() {
 
     async function handleSaveOpenAiToken() {
         const id = client?.id
-        const token = openaiToken.trim()
+        const token = openaiToken.replace(/[\s"'“”‘’]/g, "")
         if (!id || !token || savingToken) return
+        if (/[^\x21-\x7E]/.test(token)) {
+            setTokenMessage({ ok: false, text: "Token has invalid characters — copy it again from OpenAI Ads." })
+            return
+        }
         setSavingToken(true)
         setTokenMessage(null)
         try {
@@ -456,6 +460,7 @@ export function ClientIntegrations() {
     const gbpWrongAccount = !!gbpStatus?.connected && !gbpAuthorized
     const linkedSemAccount = semAccounts.find(a => a.id === record?.sem_account_id)
     const semEnabled = record?.sem_enabled !== false
+    const openaiEnabled = record?.openai_ads_enabled !== false
     useTrackPageLoading(loadingGoogle || loadingGbp || profileLoading, `client-integrations:${client.id}`)
 
     return (
@@ -953,6 +958,7 @@ export function ClientIntegrations() {
 
                                 {/* ── OpenAI Ads card (per-client API token, write-only) ── */}
                                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-950/70">
+                                    <div className="flex items-start justify-between gap-4">
                                     <div className="flex items-start gap-4">
                                         <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
                                             <img src={openaiIcon} alt="OpenAI logo" className="h-9 w-9 object-contain dark:invert" />
@@ -960,11 +966,26 @@ export function ClientIntegrations() {
                                         <div>
                                             <h3 className="text-lg font-semibold text-slate-900 dark:text-[#E2E5E9]">OpenAI Ads</h3>
                                             <p className={`mt-1 text-xs font-bold uppercase tracking-[0.18em] ${
-                                                openaiTokenSet ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                                                openaiEnabled && openaiTokenSet ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
                                             }`}>
-                                                {loadingOpenaiToken ? "Checking…" : openaiStatusError ? "Unable to check" : openaiTokenSet ? "Token saved" : "Not configured"}
+                                                {!openaiEnabled ? "Disabled" : loadingOpenaiToken ? "Checking…" : openaiStatusError ? "Unable to check" : openaiTokenSet ? "Token saved" : "Not configured"}
                                             </p>
                                         </div>
+                                    </div>
+
+                                    <label className="inline-flex cursor-pointer items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Enable</span>
+                                        <span className={`relative h-7 w-12 rounded-full transition ${openaiEnabled ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-700"}`}>
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only"
+                                                checked={openaiEnabled}
+                                                disabled={!record}
+                                                onChange={e => void saveRecord({ openai_ads_enabled: e.target.checked })}
+                                            />
+                                            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${openaiEnabled ? "left-6" : "left-1"}`} />
+                                        </span>
+                                    </label>
                                     </div>
 
                                     <div className="mt-5 space-y-3">
@@ -978,12 +999,13 @@ export function ClientIntegrations() {
                                             type="password"
                                             autoComplete="off"
                                             placeholder={openaiTokenSet ? "•••••••• — enter a new token to replace" : "Paste OpenAI Ads token"}
+                                            disabled={!openaiEnabled}
                                             value={openaiToken}
                                             onChange={e => setOpenaiToken(e.target.value)}
                                             className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                                         />
                                         <button
-                                            disabled={!openaiToken.trim() || savingToken}
+                                            disabled={!openaiEnabled || !openaiToken.trim() || savingToken}
                                             onClick={() => void handleSaveOpenAiToken()}
                                             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
                                         >

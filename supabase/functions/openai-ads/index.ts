@@ -14,7 +14,10 @@ async function getClientToken(clientId: string): Promise<string | null> {
   )
   if (!res.ok) throw new Error(`secret lookup failed: ${res.status}`)
   const rows = await res.json()
-  return rows?.[0]?.token ?? null
+  // Tokens pasted from docs/chat can carry smart quotes, which fail as HTTP header values.
+  const token = rows?.[0]?.token?.replace(/[\s"'“”‘’]/g, "")
+  if (token && /[^\x21-\x7E]/.test(token)) throw new Error("Saved OpenAI Ads token has invalid characters — paste it again in Client Integrations")
+  return token || null
 }
 
 serve(async (req) => {

@@ -81,6 +81,7 @@ export async function getGoogleBudgetReport(params) {
     const developerToken = process.env.ADS_DEVELOPER_TOKEN
     const mcc = (process.env.ADS_MCC_ID || '').replace(/-/g, '')
     if (!developerToken || !/^\d{10}$/.test(mcc)) throw new Error('Google Ads MCC connection is not configured')
+    if (!/^[\x21-\x7E]+$/.test(developerToken)) throw new Error(`ADS_DEVELOPER_TOKEN has invalid characters (length ${developerToken.length}, expected 22) — re-enter it in the server env without quotes`)
     const result = await fetchGoogleBudgetDaily(params, async (accountId, query, pageToken) => {
       const response = await fetch(`https://googleads.googleapis.com/v24/customers/${accountId}/googleAds:search`, {
         method: 'POST', signal: AbortSignal.timeout(12000),

@@ -5,7 +5,7 @@ import type { ClientRecord } from "@/features/clients/clientsTable"
 const base: ClientRecord = {
     id: "acme", name: "Acme", status: "active",
     gsc_property: null, ga4_property_id: null,
-    sem_account_id: null, lsa_account_id: null, sem_enabled: false,
+    sem_account_id: null, lsa_account_id: null, sem_enabled: false, openai_ads_enabled: true,
 }
 
 describe("clientServices", () => {

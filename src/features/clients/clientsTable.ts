@@ -9,9 +9,10 @@ export type ClientRecord = {
     sem_account_id: string | null
     lsa_account_id: string | null
     sem_enabled: boolean
+    openai_ads_enabled: boolean
 }
 
-const COLUMNS = "id, name, status, gsc_property, ga4_property_id, sem_account_id, lsa_account_id, sem_enabled"
+const COLUMNS = "id, name, status, gsc_property, ga4_property_id, sem_account_id, lsa_account_id, sem_enabled, openai_ads_enabled"
 
 type DatabaseError = { code?: string; message?: string; details?: string }
 
