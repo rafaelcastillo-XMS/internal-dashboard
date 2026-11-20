@@ -30,6 +30,7 @@ const ClicksIcon = () => (
 )
 
 const EMPTY: { totalClicks: number; totalImpressions: number; avgCTR: number; avgPosition: number; ctrDelta: number | null; clicksSparkline: number[]; queries: QueryRow[] } = { totalClicks: 0, totalImpressions: 0, avgCTR: 0, avgPosition: 0, ctrDelta: null, clicksSparkline: [], queries: [] }
+const KEYWORD_QUERY_LIMIT = 100
 
 export function SEOKeywords() {
   const state = useSEODashboardState()
@@ -37,10 +38,14 @@ export function SEOKeywords() {
 
   const fetchData = useCallback(async (force = false) => {
     if (!state.selectedGscSite) return
-    const cacheKey = `keywords:${state.selectedGscSite}:${state.dateRange.startDate}:${state.dateRange.endDate}`
+    const cacheKey = `keywords:v2:${state.selectedGscSite}:${state.dateRange.startDate}:${state.dateRange.endDate}`
     if (!force) {
-      const cached = cacheGet<{ data: typeof EMPTY; lastUpdated: string }>(cacheKey)
-      if (cached) { setGsc({ ...EMPTY, ...cached.data }); state.setLastUpdated(new Date(cached.lastUpdated)); return }
+      const cached = cacheGet<{ data: typeof EMPTY; lastUpdated: string; requestedLimit: number }>(cacheKey)
+      if (cached?.requestedLimit === KEYWORD_QUERY_LIMIT) {
+        setGsc({ ...EMPTY, ...cached.data })
+        state.setLastUpdated(new Date(cached.lastUpdated))
+        return
+      }
     }
     state.setLoading(true)
     try {
@@ -48,7 +53,7 @@ export function SEOKeywords() {
       const data = await edgeFetch(`${SEO_API}/gsc?${params}`).then((r) => r.json())
       const updated = new Date()
       setGsc({ ...EMPTY, ...data })
-      cacheSet(cacheKey, { data, lastUpdated: updated.toISOString() })
+      cacheSet(cacheKey, { data, lastUpdated: updated.toISOString(), requestedLimit: KEYWORD_QUERY_LIMIT })
       state.setLastUpdated(updated)
     } catch (err) { console.error('[Keywords]', err) } finally { state.setLoading(false) }
   }, [state.selectedGscSite, state.dateRange])
@@ -90,7 +95,7 @@ export function SEOKeywords() {
           icon={<ClicksIcon />} iconBg="bg-[#80CAEE]/10" source="GSC" />
       </section>
 
-      <QueryRankingsTable rows={gsc.queries} pageSize={25} />
+      <QueryRankingsTable rows={gsc.queries} pageSize={KEYWORD_QUERY_LIMIT} />
     </div>
   )
 }

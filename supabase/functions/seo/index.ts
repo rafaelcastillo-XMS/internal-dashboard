@@ -97,7 +97,7 @@ async function fetchGSC(token: string, params: URLSearchParams) {
     fetch(base, {
       method: "POST",
       headers: { Authorization: auth, "Content-Type": "application/json" },
-      body: JSON.stringify({ startDate, endDate, dimensions: ["query"], rowLimit: 50, dataState: "final" }),
+      body: JSON.stringify({ startDate, endDate, dimensions: ["query"], rowLimit: 100, dataState: "final" }),
     }),
   ])
 

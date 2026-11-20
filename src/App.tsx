@@ -34,6 +34,7 @@ const SEOCoreWebVitals = lazy(() => import("./pages/seo/SEOCoreWebVitals").then(
 const SEOMobile = lazy(() => import("./pages/seo/SEOMobile").then(module => ({ default: module.SEOMobile })))
 const SEOOnPageAudit = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOOnPageAudit })))
 const SEOInitialAnalysis = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOInitialAnalysis })))
+const SEOInitialAnalysisComparative = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOInitialAnalysisComparative })))
 const SEOAuditHistory = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOAuditHistory })))
 const SEOComparativeAudit = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOComparativeAudit })))
 const SEOReports = lazy(() => import("./pages/seo/SEOOnPageAudit").then(module => ({ default: module.SEOReports })))
@@ -146,8 +147,10 @@ function App() {
                                 <Route path="/seo/mobile" element={<SEOMobile />} />
                                 <Route path="/seo/onpage-audit" element={<SEOOnPageAudit />} />
                                 <Route path="/seo/audit/initial-analysis" element={<SEOInitialAnalysis />} />
+                                <Route path="/seo/audit/initial-analysis/comparative" element={<SEOInitialAnalysisComparative />} />
                                 <Route path="/seo/audit/history" element={<SEOAuditHistory />} />
-                                <Route path="/seo/audit/comparative" element={<SEOComparativeAudit />} />
+                                <Route path="/seo/audit/history/comparative" element={<SEOComparativeAudit />} />
+                                <Route path="/seo/audit/comparative" element={<Navigate to="/seo/audit/history/comparative" replace />} />
                                 <Route path="/seo/reports" element={<SEOReports />} />
                                 <Route path="/seo/client-reports" element={<SEOClientReports />} />
                             </Route>

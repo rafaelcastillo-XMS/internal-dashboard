@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { Search, Check, ChevronDown, Building2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { SEOClientOption } from '@/features/seo/hooks/useSEODashboardState'
@@ -13,6 +14,7 @@ function getInitials(name: string) {
 }
 
 export function SEOClientSelector() {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [clients, setClients] = useState<SEOClientOption[]>([])
@@ -91,6 +93,7 @@ export function SEOClientSelector() {
     }))
     setOpen(false)
     setSearch('')
+    navigate('/seo')
   }
 
   return (
@@ -120,15 +123,15 @@ export function SEOClientSelector() {
 
       {open && createPortal(
         <>
-          {/* Overlay — behind sidebar (z-45 < sidebar z-50) */}
+          {/* Keep the selector above the sticky header and its sidebar toggle. */}
           <div
-            className="fixed inset-0 z-[45] bg-black/40 backdrop-blur-[1px]"
+            className="fixed inset-0 z-[110] bg-black/40 backdrop-blur-[1px]"
             onClick={() => { setOpen(false); setSearch('') }}
           />
 
           {/* Floating panel */}
           <div
-            className="fixed z-50 w-96 bg-[var(--bg-raised)] border border-[var(--sidebar-border)] dark:border-white/[0.08] shadow-2xl rounded-xl overflow-hidden"
+            className="fixed z-[120] w-96 bg-[var(--bg-raised)] border border-[var(--sidebar-border)] dark:border-white/[0.08] shadow-2xl rounded-xl overflow-hidden"
             style={{ top: panelPos.top, left: panelPos.left }}
           >
             {/* Search */}

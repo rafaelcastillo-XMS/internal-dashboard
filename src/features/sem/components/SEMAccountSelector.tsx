@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { Search, Check, ChevronDown, Building2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { fetchClientProfiles } from '@/features/clients/profiles'
@@ -18,6 +19,7 @@ function getInitials(name: string) {
 }
 
 export function SEMAccountSelector() {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [accounts, setAccounts] = useState<AdsAccount[]>([])
@@ -98,6 +100,7 @@ export function SEMAccountSelector() {
     }))
     setOpen(false)
     setSearch('')
+    navigate('/sem')
   }
 
   return (

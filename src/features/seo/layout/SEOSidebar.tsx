@@ -24,6 +24,13 @@ const NAV_GROUPS = [
       {
         label: 'Initial Analysis',
         href: '/seo/audit/initial-analysis',
+        children: [
+          {
+            label: 'Comparative',
+            href: '/seo/audit/initial-analysis/comparative',
+            kind: 'comparative' as const,
+          },
+        ],
         icon: (
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round"
@@ -32,32 +39,24 @@ const NAV_GROUPS = [
         ),
       },
       {
-        label: 'Run Audit',
+        label: 'Audit',
         href: '/seo/onpage-audit',
+        children: [
+          {
+            label: 'Audit History',
+            href: '/seo/audit/history',
+            kind: 'history' as const,
+          },
+          {
+            label: 'Comparative',
+            href: '/seo/audit/history/comparative',
+            kind: 'comparative' as const,
+          },
+        ],
         icon: (
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round"
                   d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-          </svg>
-        ),
-      },
-      {
-        label: 'Audit History',
-        href: '/seo/audit/history',
-        icon: (
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        ),
-      },
-      {
-        label: 'Comparative',
-        href: '/seo/audit/comparative',
-        icon: (
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
           </svg>
         ),
       },
@@ -239,10 +238,10 @@ export function SEOSidebar() {
   const { collapsed, isMobileOpen, closeMobile } = useSidebar()
   const location = useLocation()
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(defaultOpenSections)
-
-  const navItemClass = collapsed
-    ? "relative group flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all text-sm font-semibold"
-    : "relative group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-semibold w-full"
+  const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>(() => ({
+    '/seo/audit/initial-analysis': location.pathname.startsWith('/seo/audit/initial-analysis/'),
+    '/seo/onpage-audit': location.pathname === '/seo/onpage-audit' || location.pathname.startsWith('/seo/audit/history'),
+  }))
 
   return (
     <>
@@ -314,28 +313,68 @@ export function SEOSidebar() {
                   const active = item.href.includes('#')
                     ? `${location.pathname}${location.hash}` === item.href
                     : location.pathname === item.href && !location.hash
+                  const children = 'children' in item ? item.children : undefined
+                  const submenuOpen = children ? !!openSubmenus[item.href] : false
                   return (
                     <li key={item.href}>
                       <div className="relative group">
-                        <Link
-                          to={item.href}
-                          onClick={closeMobile}
-                          className={`${navItemClass} ${active ? activeClass : inactiveClass}`}
-                        >
-                          <span className="shrink-0">{item.icon}</span>
-                          {!collapsed && (
-                            <>
-                              <span className="flex-1 truncate">{item.label}</span>
-                              {'badge' in item && item.badge && (
-                                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${item.badge.color}`}>
-                                  {item.badge.text}
-                                </span>
-                              )}
-                            </>
+                        <div className={`${active ? activeClass : inactiveClass} ${collapsed ? 'mx-auto flex h-10 w-10 items-center justify-center rounded-lg' : 'flex w-full items-center rounded-lg'}`}>
+                          {!collapsed && children && (
+                            <button
+                              type="button"
+                              onClick={() => setOpenSubmenus((current) => ({
+                                ...current,
+                                [item.href]: !current[item.href],
+                              }))}
+                              className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10"
+                              aria-label={`${submenuOpen ? 'Collapse' : 'Expand'} ${item.label}`}
+                              aria-expanded={submenuOpen}
+                            >
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${submenuOpen ? 'rotate-0' : '-rotate-90'}`} />
+                            </button>
                           )}
-                        </Link>
+                          <Link
+                            to={item.href}
+                            onClick={closeMobile}
+                            className={collapsed
+                              ? 'flex h-full w-full items-center justify-center'
+                              : `flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-3 text-sm font-semibold ${children ? 'pl-1' : 'pl-3'}`
+                            }
+                          >
+                            <span className="shrink-0">{item.icon}</span>
+                            {!collapsed && (
+                              <>
+                                <span className="flex-1 truncate">{item.label}</span>
+                                {'badge' in item && item.badge && (
+                                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${item.badge.color}`}>
+                                    {item.badge.text}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </Link>
+                        </div>
                         {collapsed && <Tooltip label={item.label} />}
                       </div>
+                      {!collapsed && children && submenuOpen && (
+                        <ul className="ml-5 mt-0.5 space-y-0.5 border-l border-[var(--sidebar-border)] pl-3">
+                          {children.map((child) => {
+                            const childActive = location.pathname === child.href && !location.hash
+                            return (
+                              <li key={child.href}>
+                                <Link
+                                  to={child.href}
+                                  onClick={closeMobile}
+                                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${childActive ? activeClass : inactiveClass}`}
+                                >
+                                  <SubmenuIcon kind={child.kind} />
+                                  <span>{child.label}</span>
+                                </Link>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
                     </li>
                   )
                 })}
@@ -374,5 +413,21 @@ export function SEOSidebar() {
 
       </aside>
     </>
+  )
+}
+
+function SubmenuIcon({ kind }: { kind: 'history' | 'comparative' }) {
+  if (kind === 'history') {
+    return (
+      <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+    </svg>
   )
 }

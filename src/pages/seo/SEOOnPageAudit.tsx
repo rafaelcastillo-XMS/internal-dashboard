@@ -32,7 +32,7 @@ import { AuditWorkflowHeader } from '../../features/seo/components/AuditWorkflow
 const STATUS = { idle: 'idle', loading: 'loading', ready: 'ready', error: 'error' } as const
 type StatusKey = typeof STATUS[keyof typeof STATUS]
 
-type TabKey = 'run-audit' | 'initial-status' | 'audit-history' | 'comparative' | 'download-reports'
+type TabKey = 'run-audit' | 'initial-status' | 'initial-comparative' | 'audit-history' | 'comparative' | 'download-reports'
 
 function daysBetween(from: string, to: string) {
   return Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000))
@@ -500,6 +500,28 @@ export function SEOOnPageAudit({ view }: SEOOnPageAuditProps = {}) {
       )}
 
       {/* Tab: Comparative */}
+      {activeTab === 'initial-comparative' && (
+        <>
+          <AuditWorkflowHeader
+            title={`Initial Analysis Comparison${seoState.clientName ? `: ${seoState.clientName}` : ''}`}
+            description="Compare Initial Analysis results across different review periods."
+            icon={<GitCompareArrows className="h-4 w-4" />}
+          />
+          <section className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-stroke bg-white px-6 text-center dark:border-strokedark dark:bg-boxdark">
+            <div className="max-w-md">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#1A72D9]/10 text-[#1A72D9]">
+                <GitCompareArrows className="h-6 w-6" />
+              </div>
+              <h2 className="mt-4 text-lg font-bold text-black dark:text-[#E2E5E9]">No comparisons yet</h2>
+              <p className="mt-2 text-sm text-body dark:text-bodydark">
+                This view is ready for the future Initial Analysis comparison workflow.
+              </p>
+            </div>
+          </section>
+        </>
+      )}
+
+      {/* Tab: Audit History Comparative */}
       {activeTab === 'comparative' && (
         <>
           <AuditWorkflowHeader
@@ -1258,6 +1280,10 @@ export function SEOInitialAnalysis() {
 
 export function SEOAuditHistory() {
   return <SEOOnPageAudit view="audit-history" />
+}
+
+export function SEOInitialAnalysisComparative() {
+  return <SEOOnPageAudit view="initial-comparative" />
 }
 
 export function SEOComparativeAudit() {

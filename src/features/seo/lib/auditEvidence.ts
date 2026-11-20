@@ -8,12 +8,12 @@ export function canDeleteAuditEvidence(access: Pick<DashboardAccess, 'role' | 'e
 export interface AuditEvidence { name: string; path: string }
 
 export async function removeAuditEvidence(
-  row: { client: string; section: string; item: string; evidence: AuditEvidence[] },
+  row: { client: string; analysis_version_id: number; section: string; item: string; evidence: AuditEvidence[] },
   file: AuditEvidence,
   updatedBy: string,
-  access: Pick<DashboardAccess, 'role' | 'email'>,
+  allowed: boolean, // section owner or superadmin; the DB enforces the same rule
 ) {
-  if (!canDeleteAuditEvidence(access)) throw new Error('Only the authorized superadmin can delete attachments.')
+  if (!allowed) throw new Error('Only the section owner or the superadmin can delete attachments.')
   if (!row.evidence.some(entry => entry.path === file.path)) throw new Error('Attachment not found in this evaluation.')
 
   // Keep the reference on failure so a denied deletion is visible and retryable.
@@ -23,7 +23,8 @@ export async function removeAuditEvidence(
   const evidence = row.evidence.filter(entry => entry.path !== file.path)
   const { data, error } = await supabase.from('seo_initial_audit_items')
     .update({ evidence, updated_by: updatedBy, updated_at: new Date().toISOString() })
-    .eq('client', row.client).eq('section', row.section).eq('item', row.item)
+    .eq('client', row.client).eq('analysis_version_id', row.analysis_version_id)
+    .eq('section', row.section).eq('item', row.item)
     // Do not overwrite files added by another user while deleting this one.
     .eq('evidence', JSON.stringify(row.evidence))
     .select('id').maybeSingle()

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export interface QueryRow {
   query: string
@@ -91,6 +91,10 @@ export function QueryRankingsTable({ rows = [], pageSize = 15 }: { rows?: QueryR
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize)
+
+  useEffect(() => {
+    setPage(current => Math.min(current, totalPages))
+  }, [totalPages])
 
   return (
     <div className="col-span-12 rounded-xl border border-stroke bg-white

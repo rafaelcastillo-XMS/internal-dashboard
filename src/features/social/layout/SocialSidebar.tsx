@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, LayoutDashboard, LayoutGrid, CalendarDays, FileText } from 'lucide-react'
 import { useSidebar } from '@/context/useSidebar'
@@ -62,6 +62,7 @@ const inactiveClass = "text-[var(--sidebar-item-text)] hover:bg-[var(--sidebar-i
 export function SocialSidebar() {
   const { collapsed, isMobileOpen, closeMobile } = useSidebar()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const navItemClass = collapsed
     ? "relative group flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all text-sm font-semibold"
@@ -95,7 +96,7 @@ export function SocialSidebar() {
               clients={SOCIAL_CLIENTS}
               activeName="XMS Ai"
               subtitle="Social Intelligence"
-              onSelect={() => {}}
+              onSelect={() => navigate('/social')}
             />
           </div>
         )}
